@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+.python-version
+.lock
+uv.lock
+
+# Build / Distribution
+dist/
+build/
+*.spec
+.temp_patch_gen/
+
+# GTA SA Specific (Source and Target directories for patch generation)
+SA_STEAM/
+SA_10US/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Project specific
+Patches/
+!Patches/manifest.json
+!Patches/**/*.xdelta
+!Patches/Patches.zip

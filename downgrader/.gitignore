@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+wheels/
+*.egg-info
+*.spec
+
+# Virtual environments
+.venv/
+.python-version
+.lock
+uv.lock
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Project specific
+Patches/

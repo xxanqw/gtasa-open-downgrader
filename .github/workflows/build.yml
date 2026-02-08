@@ -1,0 +1,68 @@
+name: Build OneFile Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyside6 requests
+          
+      - name: Build with PyInstaller
+        run: |
+          cd downgrader
+          pyinstaller --onefile --windowed \
+            --add-data "bin/xdelta3_linux:bin" \
+            --add-data "bin/LICENSE.txt:bin" \
+            --name "gta-sa-downgrader-linux" \
+            main.py
+            
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta-sa-downgrader-linux
+          path: downgrader/dist/gta-sa-downgrader-linux
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyside6 requests
+          
+      - name: Build with PyInstaller
+        run: |
+          cd downgrader
+          pyinstaller --onefile --windowed `
+            --add-data "bin/xdelta3.exe;bin" `
+            --add-data "bin/LICENSE.txt;bin" `
+            --name "gta-sa-downgrader-windows" `
+            main.py
+            
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gta-sa-downgrader-windows
+          path: downgrader/dist/gta-sa-downgrader-windows.exe

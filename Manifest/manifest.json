@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "generated": "2026-02-06T03:36:01+02:00",
+  "source_version": "steam",
+  "target_version": "1.0_us",
+  "statistics": {
+    "total_files": 405,
+    "identical": 389,
+    "different": 16
+  },
+  "files": [
+    {
+      "path": "anim/anim.img",
+      "source_hash": "93efd3c1dbedcf77fdb6cc34f8cb98f5",
+      "target_hash": "3359ba8cb820299161199ee7ef3f1c02"
+    }
+,
+    {
+      "path": "audio/CONFIG/TrakLkup.dat",
+      "source_hash": "3b2e4b5e2743e7c55da40bfa7761244c",
+      "target_hash": "528e75d663b8bae072a01351081a2145"
+    }
+,
+    {
+      "path": "audio/streams/BEATS",
+      "source_hash": "847311f823134257c25d5a084499fa3a",
+      "target_hash": "e26d86c7805d090d8210086876d6c35c"
+    }
+,
+    {
+      "path": "audio/streams/CH",
+      "source_hash": "148e813fd82489565ea39e1c7dcda785",
+      "target_hash": "fe31259226e0b4a8a963c70840e1fe8f"
+    }
+,
+    {
+      "path": "audio/streams/CR",
+      "source_hash": "918b2391da0537b97bee5decd4731c0a",
+      "target_hash": "900148b8141ea4c1e782c3a48dbfbf3b"
+    }
+,
+    {
+      "path": "audio/streams/CUTSCENE",
+      "source_hash": "ce68158764b34f4c8f62c348ea569728",
+      "target_hash": "c25fcaa329b3d48f197ff4ed2a1d2a4d"
+    }
+,
+    {
+      "path": "audio/streams/DS",
+      "source_hash": "48c2d839e7bb6a554c8a9e0a48a0acea",
+      "target_hash": "9b4c18e4f3e82f0fee41e30b2ea2246a"
+    }
+,
+    {
+      "path": "audio/streams/MH",
+      "source_hash": "7e10c9fdf260805792a6e9fdf44fd18d",
+      "target_hash": "909e7c4a7a29473e3885a96f987d7221"
+    }
+,
+    {
+      "path": "audio/streams/MR",
+      "source_hash": "f3b8ef0cad217550fc6901a8d7b512ec",
+      "target_hash": "a1ec1cbe16dbb9f73022c6f33658abe2"
+    }
+,
+    {
+      "path": "audio/streams/RE",
+      "source_hash": "5721f2b12041c7abd13e78b28d01042f",
+      "target_hash": "49b83551c684e17164f2047dcba3e5aa"
+    }
+,
+    {
+      "path": "audio/streams/RG",
+      "source_hash": "857488225212cf7b17c3c10d649a205c",
+      "target_hash": "7491dc5325854c7117af6e31900f38dd"
+    }
+,
+    {
+      "path": "data/script/main.scm",
+      "source_hash": "ed6544eb09d0c0680e96287e7ab08520",
+      "target_hash": "60ad23e272c3b0aa937053fe3006be93"
+    }
+,
+    {
+      "path": "data/script/script.img",
+      "source_hash": "548f945cc0ae8b23cc0603129042962b",
+      "target_hash": "9598b82cf1e5ae7a8558057a01f6f2ce"
+    }
+,
+    {
+      "path": "models/gta3.img",
+      "source_hash": "42a1224aa88741c4f6b40d3d5191b7f0",
+      "target_hash": "9282e0df8d7eee3c4a49b44758dd694d"
+    }
+,
+    {
+      "path": "models/gta_int.img",
+      "source_hash": "04791842f55aeb3d2c40cd82f98c82fe",
+      "target_hash": "dbe7e372d55914c39eb1d565e8707c8c"
+    }
+,
+    {
+      "path": "ReadMe/Readme.txt",
+      "source_hash": "241e6071e0fd9e11a310be29e735c466",
+      "target_hash": "809dcd55ee8b0c77292d65601a04aee6"
+    }
+  ]
+}
