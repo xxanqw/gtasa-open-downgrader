@@ -1,4 +1,10 @@
+<div align=center>
+
+<img height="512" alt="image" src="https://github.com/user-attachments/assets/166a2518-be0a-463b-ad2e-1dec1db89c63" />
+
 # GTA SA Open Downgrader
+
+</div>
 
 This project was initiated because the original RockstarNexus Downgrader was easy and intuitive to use, and we wanted to replicate that experience in an open-source format.
 
