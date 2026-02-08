@@ -66,3 +66,33 @@ jobs:
         with:
           name: gta-sa-downgrader-windows
           path: downgrader/dist/gta-sa-downgrader-windows.exe
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move artifacts to current directory
+        run: |
+          mv artifacts/gta-sa-downgrader-linux/gta-sa-downgrader-linux .
+          mv artifacts/gta-sa-downgrader-windows/gta-sa-downgrader-windows.exe .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            gta-sa-downgrader-linux
+            gta-sa-downgrader-windows.exe
+          body: |
+            GTA SA Open Downgrader v0.1.0
+            
+            Initial Release
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
