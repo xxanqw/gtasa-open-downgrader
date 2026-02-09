@@ -12,10 +12,11 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QStatusBar,
     QFileDialog, QGridLayout, QMessageBox, QDialog, QProgressBar
 )
-
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QThread, Signal
 import linux_tools
 import icloud_resolver
+import updater
 
 class DownloadThread(QThread):
     progress = Signal(int, int, float, float)
@@ -127,7 +128,7 @@ class ModInstallThread(QThread):
                     
                     installed.update(to_install)
                     with open(config_path, 'w') as f:
-                        json.dump({"installed_mods": list(installed), "version": "0.1.0"}, f)
+                        json.dump({"installed_mods": list(installed), "version": "0.1.1"}, f)
                 except Exception:
                     pass
 
@@ -411,9 +412,12 @@ class ToolsDialog(QDialog):
         
         path = self.parent.path_edit.text()
         has_path = bool(path and os.path.exists(path))
+        has_internet = updater.has_internet()
+        has_patches = os.path.exists("Patches/manifest.json")
 
         self.download_btn = QPushButton("Download/Update Patches")
         self.download_btn.clicked.connect(self.download_patches)
+        self.download_btn.setEnabled(has_internet)
         layout.addWidget(self.download_btn)
         
         self.revert_btn = QPushButton("Revert Downgrade (Restore Backups)")
@@ -446,6 +450,12 @@ class ToolsDialog(QDialog):
         self.cleanup_btn.clicked.connect(self.cleanup_backups)
         self.cleanup_btn.setEnabled(has_path)
         layout.addWidget(self.cleanup_btn)
+
+        if not has_internet and not has_patches:
+            for btn in [self.download_btn, self.revert_btn, self.reg_btn, self.laa_btn, self.shortcut_btn, self.clear_user_btn, self.cleanup_btn]:
+                if hasattr(self, 'shortcut_btn') or btn != self.shortcut_btn:
+                    btn.setEnabled(False)
+            layout.addWidget(QLabel("<font color='red'>Internet required for initial setup.</font>"))
         
         layout.addStretch()
         
@@ -549,10 +559,13 @@ class ToolsDialog(QDialog):
         
         try:
             import subprocess
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = subprocess.CREATE_NO_WINDOW
             desktop = os.path.join(os.environ["USERPROFILE"], "Desktop")
             sc_path = os.path.join(desktop, "GTA San Andreas.lnk")
             ps_cmd = f'$s=(New-Object -ComObject WScript.Shell).CreateShortcut("{sc_path}");$s.TargetPath="{exe_path}";$s.WorkingDirectory="{path}";$s.Save()'
-            subprocess.run(["powershell", "-Command", ps_cmd], check=True)
+            subprocess.run(["powershell", "-Command", ps_cmd], check=True, creationflags=creationflags)
                 
             QMessageBox.information(self, "Success", "Desktop shortcut created.")
         except Exception as e:
@@ -594,6 +607,10 @@ class ToolsDialog(QDialog):
             QMessageBox.information(self, "Info", "No user data found.")
 
     def download_patches(self):
+        if not updater.has_internet():
+            QMessageBox.critical(self, "Error", "Internet connection required to download patches.")
+            return
+
         self.accept()
         icloud_url = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
         target_dir = os.path.abspath("Patches")
@@ -687,7 +704,7 @@ def find_game_path():
             os.path.join(home, ".steam/steam/steamapps/common/Grand Theft Auto San Andreas"),
             os.path.join(home, ".steam/root/steamapps/common/Grand Theft Auto San Andreas"),
             os.path.join(home, ".var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/Grand Theft Auto San Andreas"),
-            "/run/media/mmcblk0p1/steamapps/common/Grand Theft Auto San Andreas", # Steam Deck SD Card
+            "/run/media/mmcblk0p1/steamapps/common/Grand Theft Auto San Andreas",
         ]
         for path in common_paths:
             if os.path.exists(path) and any(os.path.exists(os.path.join(path, e)) for e in ["gta_sa.exe", "gta-sa.exe"]):
@@ -695,7 +712,6 @@ def find_game_path():
                 
     return ""
 
-# Found by LLM and here for future support.
 VERSION_HASHES = {
     "170b3a9108687b26da2d8901c6948a18": "v1.0 US (Hoodlum)",
     "2b5066bd4097ac2944ce6a9cf8fe5677": "v1.0 US (Hoodlum + LAA Patch)",
@@ -810,6 +826,12 @@ class PatchThread(QThread):
     def run(self):
         import subprocess
         import shutil
+        import platform
+
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
         success_count = 0
         fail_count = 0
         
@@ -835,6 +857,13 @@ class PatchThread(QThread):
             
             if current_hash == target_hash or is_laa:
                 self.file_progress.emit(i, "Already Patched", "")
+                
+                if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
+                    alt_name = "gta-sa.exe" if target_file.endswith("gta_sa.exe") else "gta_sa.exe"
+                    alt_path = os.path.join(self.game_path, alt_name)
+                    if not os.path.exists(alt_path):
+                        shutil.copy2(target_file, alt_path)
+
                 success_count += 1
                 continue
 
@@ -850,9 +879,10 @@ class PatchThread(QThread):
                 if action == "copy":
                     source_patch = os.path.join(self.patches_dir, "gta_sa.exe")
                     shutil.copy2(source_patch, target_file)
-                    alt_name = "gta-sa.exe" if target_file.endswith("gta_sa.exe") else "gta_sa.exe"
-                    alt_path = os.path.join(self.game_path, alt_name)
-                    if os.path.exists(alt_path):
+                    
+                    if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
+                        alt_name = "gta-sa.exe" if target_file.endswith("gta_sa.exe") else "gta_sa.exe"
+                        alt_path = os.path.join(self.game_path, alt_name)
                         shutil.copy2(source_patch, alt_path)
                         
                     success_count += 1
@@ -866,10 +896,16 @@ class PatchThread(QThread):
                     
                     temp_output = target_file + ".tmp"
                     cmd = [self.xdelta_bin, "-d", "-s", target_file, patch_file, temp_output]
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    result = subprocess.run(cmd, capture_output=True, text=True, creationflags=creationflags)
                     
                     if result.returncode == 0:
                         os.replace(temp_output, target_file)
+                        
+                        if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
+                            alt_name = "gta-sa.exe" if target_file.endswith("gta_sa.exe") else "gta_sa.exe"
+                            alt_path = os.path.join(self.game_path, alt_name)
+                            shutil.copy2(target_file, alt_path)
+
                         success_count += 1
                         self.file_progress.emit(i, "Success", "")
                     else:
@@ -902,8 +938,70 @@ class DowngraderApp(QMainWindow):
             self.path_edit.setText(auto_path)
 
     def check_patches_and_start(self):
-        manifest_path = "Patches/manifest.json"
-        if not os.path.exists(manifest_path):
+        if updater.has_internet():
+            latest, assets = updater.check_for_updates()
+            if latest:
+                system = platform.system()
+                download_url = None
+                for asset in assets:
+                    if system == "Windows" and asset["name"].endswith(".exe"):
+                        if updater.is_offline():
+                            if "installer" in asset["name"].lower():
+                                download_url = asset["browser_download_url"]
+                                break
+                        else:
+                            if "installer" not in asset["name"].lower():
+                                download_url = asset["browser_download_url"]
+                                break
+                    elif system == "Linux" and asset["name"].lower().endswith(".appimage"):
+                        if updater.is_offline():
+                            if "offline" in asset["name"].lower():
+                                download_url = asset["browser_download_url"]
+                                break
+                        else:
+                            if "offline" not in asset["name"].lower():
+                                download_url = asset["browser_download_url"]
+                                break
+                
+                if not download_url and assets:
+                    for asset in assets:
+                        if system == "Windows" and asset["name"].endswith(".exe"):
+                            download_url = asset["browser_download_url"]
+                            break
+                        elif system == "Linux" and asset["name"].lower().endswith(".appimage"):
+                            download_url = asset["browser_download_url"]
+                            break
+
+                if download_url:
+                    if updater.is_offline():
+                        self.update_btn.setVisible(True)
+                        self.update_btn.clicked.connect(lambda: self.trigger_update(latest, download_url))
+                        self.status_bar.showMessage(f"Notification: New version {latest} available!")
+                    else:
+                        reply = QMessageBox.question(self, "Update Available", 
+                            f"A new version ({latest}) is available. Would you like to update now?",
+                            QMessageBox.Yes | QMessageBox.No)
+                        if reply == QMessageBox.Yes:
+                            self.status_bar.showMessage("Downloading update...")
+                            updater.run_update_script(download_url)
+                            return
+                else:
+                    QMessageBox.warning(self, "Update Error", "Could not find a matching download for your platform.")
+
+        self.resolved_manifest_path = "Patches/manifest.json"
+        if not os.path.exists(self.resolved_manifest_path):
+            self.resolved_manifest_path = get_resource_path("Patches/manifest.json")
+            
+        has_patches = os.path.exists(self.resolved_manifest_path)
+        has_internet = updater.has_internet()
+
+        if not has_patches:
+            if not has_internet:
+                QMessageBox.critical(self, "Fatal Error", 
+                    "Patches are missing and no internet connection was detected.\n\n"
+                    "The application cannot function without patch assets or internet to download them.")
+                sys.exit(1)
+
             reply = QMessageBox.question(self, "Patches Missing", 
                 "Patches folder not found. Would you like to download them from iCloud?",
                 QMessageBox.Yes | QMessageBox.No)
@@ -916,7 +1014,8 @@ class DowngraderApp(QMainWindow):
                 dlg.exec()
                 
                 if dlg.success:
-                    if os.path.exists(manifest_path):
+                    if os.path.exists("Patches/manifest.json"):
+                        self.resolved_manifest_path = "Patches/manifest.json"
                         self.show()
                         if self.path_edit.text():
                             self.scan_directory(self.path_edit.text())
@@ -936,6 +1035,13 @@ class DowngraderApp(QMainWindow):
             if self.path_edit.text():
                 self.scan_directory(self.path_edit.text())
 
+        if not has_internet:
+            self.status_bar.showMessage("Offline Mode: Mod installation and updates disabled.")
+            for cb in self.mods.values():
+                cb.setEnabled(False)
+                cb.setToolTip("Requires internet connection.")
+            self.install_mods_only_btn.setEnabled(False)
+
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -944,7 +1050,17 @@ class DowngraderApp(QMainWindow):
         main_layout.setSpacing(8)
 
         header_layout = QHBoxLayout()
-        version_label = QLabel("v0.1.0")
+        self.update_btn = QPushButton("UPDATE AVAILABLE")
+        self.update_btn.setVisible(False)
+        self.update_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: #f44336; color: white; font-weight: bold; 
+                font-size: 10px; border-radius: 4px; padding: 2px 6px;
+            }
+        """)
+        header_layout.addWidget(self.update_btn)
+        
+        version_label = QLabel(updater.CURRENT_VERSION)
         header_layout.addStretch()
         header_layout.addWidget(version_label, 0, Qt.AlignRight)
         main_layout.addLayout(header_layout)
@@ -1071,6 +1187,14 @@ class DowngraderApp(QMainWindow):
         self.mods["ASI Loader"].blockSignals(False)
         self.mods["ModLoader"].blockSignals(False)
 
+    def trigger_update(self, version, url):
+        reply = QMessageBox.question(self, "Confirm Update", 
+            f"Would you like to update to {version} now? The application will restart.",
+            QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.status_bar.showMessage("Downloading update...")
+            updater.run_update_script(url)
+
     def show_about(self):
         dlg = AboutDialog()
         dlg.exec()
@@ -1119,13 +1243,17 @@ class DowngraderApp(QMainWindow):
             self.scan_directory(dir_path)
 
     def scan_directory(self, path):
-        manifest_path = "Patches/manifest.json"
-        if not os.path.exists(manifest_path):
+        if not hasattr(self, 'resolved_manifest_path'):
+            self.resolved_manifest_path = "Patches/manifest.json"
+            if not os.path.exists(self.resolved_manifest_path):
+                self.resolved_manifest_path = get_resource_path("Patches/manifest.json")
+
+        if not os.path.exists(self.resolved_manifest_path):
             QMessageBox.warning(self, "Warning", "Patches missing. Please run Tools -> Download Patches or restart the app.")
             return
 
         self.status_bar.showMessage("Scanning files...")
-        self.scanner = ScannerThread(path, manifest_path)
+        self.scanner = ScannerThread(path, self.resolved_manifest_path)
         self.scanner.progress.connect(lambda cur, tot: self.status_bar.showMessage(f"Scanning: {cur}/{tot}"))
         self.scanner.finished.connect(self.update_table)
         self.scanner.start()
@@ -1181,11 +1309,11 @@ class DowngraderApp(QMainWindow):
             self.status_bar.showMessage("Scan complete. Game is already v1.0 US.")
 
         self.revert_btn.setEnabled(True)
-        self.install_mods_only_btn.setEnabled(True)
+        self.install_mods_only_btn.setEnabled(updater.has_internet())
 
         for name, cb in self.mods.items():
-            cb.setEnabled(True)
-            cb.setToolTip("")
+            cb.setEnabled(updater.has_internet())
+            cb.setToolTip("" if updater.has_internet() else "Requires internet connection.")
             if name in installed_mods:
                 cb.setChecked(True)
 
@@ -1195,18 +1323,18 @@ class DowngraderApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select game path first.")
             return
 
-        manifest_path = "Patches/manifest.json"
-        if not os.path.exists(manifest_path):
+        if not os.path.exists(self.resolved_manifest_path):
             QMessageBox.critical(self, "Error", "Manifest not found.")
             return
 
         try:
-            with open(manifest_path, 'r') as f:
+            with open(self.resolved_manifest_path, 'r') as f:
                 manifest = json.load(f)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load manifest: {str(e)}")
             return
 
+        patches_dir = os.path.dirname(self.resolved_manifest_path)
         self.status_bar.showMessage("Starting downgrade...")
         
         import platform
@@ -1220,7 +1348,10 @@ class DowngraderApp(QMainWindow):
             
         try:
             import subprocess
-            subprocess.run([xdelta_bin, "-V"], capture_output=True)
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = subprocess.CREATE_NO_WINDOW
+            subprocess.run([xdelta_bin, "-V"], capture_output=True, creationflags=creationflags)
         except FileNotFoundError:
             QMessageBox.critical(self, "Error", f"xdelta3 binary not found at {xdelta_bin} or in PATH.")
             return
@@ -1228,7 +1359,7 @@ class DowngraderApp(QMainWindow):
         self.downgrade_btn.setEnabled(False)
         self.browse_btn.setEnabled(False)
         
-        self.patch_thread = PatchThread(path, manifest, xdelta_bin, "Patches")
+        self.patch_thread = PatchThread(path, manifest, xdelta_bin, patches_dir)
         self.patch_thread.file_progress.connect(self.update_file_status)
         self.patch_thread.finished.connect(self.handle_patch_finished)
         self.patch_thread.start()
@@ -1269,6 +1400,10 @@ class DowngraderApp(QMainWindow):
         self.install_selected_mods(path, selected)
 
     def install_selected_mods(self, game_path, selected_mods):
+        if not updater.has_internet():
+            QMessageBox.critical(self, "Error", "Internet connection required to install mods.")
+            return
+
         dlg = ModInstallDialog(game_path, selected_mods)
         dlg.exec()
         
@@ -1284,6 +1419,11 @@ class DowngraderApp(QMainWindow):
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    icon_path = get_resource_path(os.path.join("assets", "icon.ico"))
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     window = DowngraderApp()
 

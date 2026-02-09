@@ -1,4 +1,3 @@
-# Prepared for future support for SAMP, MTA etc. (in question)
 import subprocess
 import os
 
