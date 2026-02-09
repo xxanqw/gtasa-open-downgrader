@@ -60,22 +60,19 @@ jobs:
             source .venv/bin/activate
             python3 -c "from PySide6.QtGui import QIcon; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); icon=QIcon('downgrader/assets/icon.ico'); pixmap=icon.pixmap(256,256); pixmap.save('$appdir/$output_name.png')"
             
-            cat <<EOF > $appdir/$output_name.desktop
-            [Desktop Entry]
-            Name=GTA SA Open Downgrader
-            Exec=$binary_name
-            Icon=$output_name
-            Type=Application
-            Categories=Game;
-EOF
+            echo "[Desktop Entry]" > $appdir/$output_name.desktop
+            echo "Name=GTA SA Open Downgrader" >> $appdir/$output_name.desktop
+            echo "Exec=$binary_name" >> $appdir/$output_name.desktop
+            echo "Icon=$output_name" >> $appdir/$output_name.desktop
+            echo "Type=Application" >> $appdir/$output_name.desktop
+            echo "Categories=Game;" >> $appdir/$output_name.desktop
             cp $appdir/$output_name.desktop $appdir/usr/share/applications/
             
-            cat <<EOF > $appdir/AppRun
-            #!/bin/bash
-            HERE="\$(dirname "\$(readlink -f "\${0}")")"
-            export PATH="\$HERE/usr/bin:\$PATH"
-            exec "$binary_name" "\$@"
-EOF
+            echo "#!/bin/bash" > $appdir/AppRun
+            echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> $appdir/AppRun
+            echo 'export PATH="$HERE/usr/bin:$PATH"' >> $appdir/AppRun
+            echo "exec \"$binary_name\" \"\$@\"" >> $appdir/AppRun
+            chmod +x $appdir/AppRun
             chmod +x $appdir/AppRun
             ln -s $output_name.png $appdir/.DirIcon
             
@@ -136,12 +133,7 @@ EOF
           $binaryName = "gtasa-open-downgrader-windows-offline"
           
           if (Test-Path $sfxModule) {
-            $config = @"
-          ;!@Install@!UTF-8!
-          Title="GTA SA Open Downgrader Offline"
-          RunProgram="gtasa-open-downgrader-windows-offline.exe"
-          ;!@InstallEnd@!
-"@
+            $config = ";!@Install@!UTF-8!`nTitle=`"GTA SA Open Downgrader Offline`"`nRunProgram=`"gtasa-open-downgrader-windows-offline.exe`"`n;!@InstallEnd@!"
             $config | Out-File -FilePath sfx_config.txt -Encoding utf8
             & $sevenZip a tmp_archive.7z .\downgrader\dist\$binaryName.exe
             cmd /c "copy /b `"$sfxModule`" + sfx_config.txt + tmp_archive.7z gtasa-open-downgrader-windows-offline-installer.exe"
