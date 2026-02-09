@@ -36,11 +36,30 @@ If someone wants to help with creating patches for other versions of the game, I
 - **Cross-Platform:** Full support for Windows and Linux (including Proton/Steam Deck specific optimizations).
 - **Safety First:** Detects read-only directories and provides necessary Steam launch options for Linux users.
 
-### Linux Execution
-On Linux, the application is distributed as a single executable. Simply grant it execution permissions and launch it:
+## Distribution Variants
+
+The downgrader is available in two main formats:
+
+### 1. Online Version
+- **Filenames:** `gtasa-open-downgrader-windows.exe`, `gtasa-open-downgrader-linux.AppImage`
+- **Behavior:** Lightweight binaries that download the necessary `Patches` assets from the cloud on the first run. 
+- **Requirement:** Internet connection is required for the initial setup and for installing mods.
+
+### 2. Offline Version (Standalone)
+- **Filenames:** `gtasa-open-downgrader-windows-offline.exe`, `gtasa-open-downgrader-linux-offline.AppImage`
+- **Behavior:** Fully self-contained packages (approx. 1GB) that bundle all required `Patches` assets into a single executable. 
+- **Usage:** Ideal for users with slow/no internet or for archiving. No initial download is required to perform the downgrade.
+
+## Execution
+
+### Windows
+Run the `.exe` file. The **Offline Version** is a standalone binary that works immediately without any external files.
+
+### Linux (AppImage)
+The application is distributed as a standard **AppImage**. Simply grant it execution permissions and launch it:
 ```bash
-chmod +x gta-sa-downgrader-linux
-./gta-sa-downgrader-linux
+chmod +x gtasa-open-downgrader-linux.AppImage
+./gtasa-open-downgrader-linux.AppImage
 ```
 
 ### Steam Deck Support
