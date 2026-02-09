@@ -46,7 +46,7 @@ jobs:
       - name: Package AppImages
         run: |
           sudo apt-get install -y libfuse2
-          wget https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           
           prepare_appdir() {
@@ -72,7 +72,6 @@ jobs:
             echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> $appdir/AppRun
             echo 'export PATH="$HERE/usr/bin:$PATH"' >> $appdir/AppRun
             echo "exec \"$binary_name\" \"\$@\"" >> $appdir/AppRun
-            chmod +x $appdir/AppRun
             chmod +x $appdir/AppRun
             ln -s $output_name.png $appdir/.DirIcon
             
