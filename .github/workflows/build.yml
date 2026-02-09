@@ -125,45 +125,11 @@ jobs:
             main.py
           cd ..
 
-      - name: Create SFX for Offline Version
-        shell: powershell
-        run: |
-          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
-          $sfxModule = "C:\Program Files\7-Zip\7zS.sfx"
-          $binaryName = "gtasa-open-downgrader-windows-offline"
-          
-          # Try to download SFX module if missing (GitHub runners often lack the Extra package)
-          if (-not (Test-Path $sfxModule)) {
-            Write-Host "SFX module not found at $sfxModule, attempting to download..."
-            try {
-              $url = "https://raw.githubusercontent.com/pbatard/rufus-resources/master/7z/7zS.sfx"
-              Invoke-WebRequest -Uri $url -OutFile "7zS.sfx"
-              $sfxModule = ".\7zS.sfx"
-            } catch {
-              Write-Host "Failed to download SFX module."
-            }
-          }
-          
-          if (Test-Path $sfxModule) {
-            $config = ";!@Install@!UTF-8!`nTitle=`"GTA SA Open Downgrader Offline`"`nRunProgram=`"gtasa-open-downgrader-windows-offline.exe`"`n;!@InstallEnd@!"
-            $config | Out-File -FilePath sfx_config.txt -Encoding utf8
-            & $sevenZip a tmp_archive.7z .\downgrader\dist\$binaryName.exe
-            cmd /c "copy /b `"$sfxModule`" + sfx_config.txt + tmp_archive.7z gtasa-open-downgrader-windows-offline-installer.exe"
-            Remove-Item tmp_archive.7z
-            Remove-Item sfx_config.txt
-          } else {
-            Write-Host "SFX module still not found, zipping instead."
-            & $sevenZip a gtasa-open-downgrader-windows-offline.zip .\downgrader\dist\$binaryName.exe
-          }
-
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gta-sa-downgrader-windows-builds
-          path: |
-            downgrader/dist/gtasa-open-downgrader-windows.exe
-            gtasa-open-downgrader-windows-offline-installer.exe
-            gtasa-open-downgrader-windows-offline.zip
+          name: gtasa-open-downgrader-windows-builds
+          path: downgrader/dist/*.exe
 
   release:
     needs: [build-linux, build-windows]
@@ -177,23 +143,19 @@ jobs:
 
       - name: Move artifacts to current directory
         run: |
-          mv artifacts/gta-sa-downgrader-linux-appimages/*.AppImage .
-          mv artifacts/gta-sa-downgrader-windows-builds/*.exe .
-          mv artifacts/gta-sa-downgrader-windows-builds/*.zip . || true
+          find artifacts -type f \( -name "*.AppImage" -o -name "*.exe" \) -exec mv -v -t . {} +
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             *.AppImage
-            gtasa-open-downgrader-windows.exe
-            gtasa-open-downgrader-windows-offline-installer.exe
-            gtasa-open-downgrader-windows-offline.zip
+            *.exe
           body: |
             GTA SA Open Downgrader v0.1.1
             
             - Added Linux AppImage support (Online & Offline)
-            - Added Windows SFX Offline Installer
+            - Added Windows Offline standalone executable
             - Improved Window Icons and UI theme
             - Added Application Updater (Online & Offline modes)
             - Fixed gta_sa.exe consistency across different versions
