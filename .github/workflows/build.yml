@@ -45,7 +45,8 @@ jobs:
 
       - name: Package AppImages
         run: |
-          sudo apt-get install -y libfuse2
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 libegl1 libgl1
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           
@@ -58,6 +59,7 @@ jobs:
             cp downgrader/dist/$binary_name $appdir/usr/bin/
             
             source .venv/bin/activate
+            export QT_QPA_PLATFORM=offscreen
             python3 -c "from PySide6.QtGui import QIcon; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); icon=QIcon('downgrader/assets/icon.ico'); pixmap=icon.pixmap(256,256); pixmap.save('$appdir/$output_name.png')"
             
             echo "[Desktop Entry]" > $appdir/$output_name.desktop
