@@ -16,18 +16,19 @@ If someone wants to help with creating patches for other versions of the game, I
 - **Source Version:** NewSteam R2 Global
 - **Target Version:** v1.0 US (Hoodlum)
 - **Download:** [Patches.zip (iCloud)](https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches)
+- **Resolver:** Downloads use the published [`icloud-resolver`](https://pypi.org/project/icloud-resolver/) package; archives are validated and safely installed only after the download completes.
 
 ## Features
 - **Automated Game Detection:** Automatically locates your GTA San Andreas installation on Windows (Registry) and Linux (common Steam library paths).
 - **One-Click Downgrade:** Automated downgrading to v1.0 US (Hoodlum) with `xdelta3` technology.
-- **Essential Modifications:** Integrated downloader and installer for several mods. Note: Some mods are hosted on my own fileserver (`fs.xserv.pp.ua`) because they required specific structural changes or presets to be properly installed by the downgrader.
+- **Essential Modifications:** Integrated downloader and installer that fetches each mod from its official upstream release and normalizes the package layout automatically.
     - ASI Loader & ModLoader
     - SilentPatch & GInput
     - Widescreen Fixes & Project 2DFX
     - SkyGFX (with multiple presets)
     - Framerate Vigilante (60fps fix)
     - Frontend Mods
-- **Mod Tracking:** Automatically detects already installed mods using a persistent configuration file.
+- **Mod Tracking:** Saves installed mod versions, checks upstream releases in the background, marks available updates in the UI, and can force reinstall selected mods when an update is available or local files are missing. Legacy tracking files trigger a configuration-backup warning and a one-time full reinstall of every recorded mod so version tracking can be migrated safely.
 - **Downgrader Tools:**
     - **4GB Patch (LAA):** Optimize your executable to use more memory and prevent crashes.
     - **Registry Fix:** Repair game installation paths in the Windows Registry.
@@ -82,7 +83,7 @@ If you want to create patches for a different version of the game, follow these 
 #### Linux
 Run the shell script:
 ```bash
-./generate_pathces.sh
+./generate_patches.sh
 ```
 
 #### Windows

@@ -4,9 +4,17 @@ import platform
 import requests
 import subprocess
 import time
+from packaging.version import InvalidVersion, Version
 
-CURRENT_VERSION = "v0.1.1"
+CURRENT_VERSION = "v0.2.0"
 REPO_URL = "https://api.github.com/repos/xxanqw/gtasa-open-downgrader/releases/latest"
+
+
+def is_newer_version(candidate, current=CURRENT_VERSION):
+    try:
+        return Version(candidate.lstrip("v")) > Version(current.lstrip("v"))
+    except (AttributeError, InvalidVersion):
+        return False
 
 def has_internet():
     try:
@@ -25,7 +33,7 @@ def check_for_updates():
         data = response.json()
         latest_version = data.get("tag_name")
         
-        if latest_version and latest_version != CURRENT_VERSION:
+        if latest_version and is_newer_version(latest_version):
             return latest_version, data.get("assets", [])
     except Exception:
         pass

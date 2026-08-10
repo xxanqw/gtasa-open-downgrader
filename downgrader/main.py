@@ -2,9 +2,6 @@ import sys
 import os
 import json
 import hashlib
-import requests
-import zipfile
-import io
 import time
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -15,12 +12,13 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QThread, Signal
 import linux_tools
-import icloud_resolver
+import mod_manager
+import patch_manager
 import updater
 
 class DownloadThread(QThread):
     progress = Signal(int, int, float, float)
-    finished = Signal(bool)
+    finished = Signal(bool, str)
 
     def __init__(self, url, target_dir):
         super().__init__()
@@ -37,8 +35,11 @@ class DownloadThread(QThread):
             time_left = (total - downloaded) / speed if speed > 0 else 0
             self.progress.emit(downloaded, total, speed, time_left)
 
-        success = icloud_resolver.download_and_extract_patches(self.url, self.target_dir, callback)
-        self.finished.emit(success)
+        try:
+            patch_manager.download_and_extract_patches(self.url, self.target_dir, callback)
+            self.finished.emit(True, "")
+        except Exception as error:
+            self.finished.emit(False, str(error))
 
 class DownloadDialog(QDialog):
     def __init__(self, url, target_dir):
@@ -58,13 +59,13 @@ class DownloadDialog(QDialog):
         self.details_label = QLabel("0 MB / 0 MB (0 KB/s) - --:-- left")
         self.details_label.setStyleSheet("font-size: 10px; color: #666;")
         layout.addWidget(self.details_label)
-        
+
+        self.success = False
+        self.error_message = ""
         self.thread = DownloadThread(url, target_dir)
         self.thread.progress.connect(self.update_progress)
         self.thread.finished.connect(self.on_finished)
         self.thread.start()
-        
-        self.success = False
 
     def update_progress(self, downloaded, total, speed, time_left):
         if total > 0:
@@ -81,199 +82,83 @@ class DownloadDialog(QDialog):
             self.label.setText("Downloading patch assets...")
             self.details_label.setText(f"{d_mb:.1f} MB / {t_mb:.1f} MB ({s_kb:.1f} KB/s) - {time_str} left")
 
-    def on_finished(self, success):
+    def on_finished(self, success, error_message):
         self.success = success
+        self.error_message = error_message
         self.accept()
 
 class ModInstallThread(QThread):
     progress = Signal(int, str)
     finished = Signal(bool, str)
 
-    def __init__(self, game_path, selected_mods):
+    def __init__(self, game_path, selected_mods, force_reinstall=False):
         super().__init__()
         self.game_path = game_path
         self.selected_mods = selected_mods
+        self.force_reinstall = force_reinstall
 
     def run(self):
         try:
-            priority_mods = ["ASI Loader", "ModLoader"]
-            to_install = [m for m in priority_mods if m in self.selected_mods]
-            to_install += [m for m in self.selected_mods if m not in priority_mods]
+            installed_already, _, tracker_data = mod_manager.load_mod_tracker(self.game_path)
+            legacy_tracker = mod_manager.is_legacy_tracker(tracker_data)
+            requested_mods = mod_manager.expand_legacy_mod_selection(
+                self.selected_mods,
+                installed_already,
+                tracker_data,
+            )
 
-            installed_already = set()
-            modloader_path = os.path.join(self.game_path, "modloader")
-            config_path = os.path.join(modloader_path, ".downgrader")
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r') as f:
-                        data = json.load(f)
-                        installed_already = set(data.get("installed_mods", []))
-                except Exception:
-                    pass
+            priority_mods = ["ASI Loader", "ModLoader"]
+            to_install = [m for m in priority_mods if m in requested_mods]
+            to_install += [m for m in requested_mods if m not in priority_mods]
+
+            installed_releases = {}
 
             for i, mod_name in enumerate(to_install):
                 self.progress.emit(i + 1, mod_name)
-                if mod_name in installed_already:
+                if mod_name in installed_already and not (self.force_reinstall or legacy_tracker):
                     continue
-                
-                self.apply_mod(mod_name)
-            
-            if os.path.exists(modloader_path):
-                try:
-                    installed = set()
-                    if os.path.exists(config_path):
-                        with open(config_path, 'r') as f:
-                            data = json.load(f)
-                            installed.update(data.get("installed_mods", []))
-                    
-                    installed.update(to_install)
-                    with open(config_path, 'w') as f:
-                        json.dump({"installed_mods": list(installed), "version": "0.1.1"}, f)
-                except Exception:
-                    pass
+
+                installed_releases[mod_name] = self.apply_mod(mod_name)
+
+            mod_manager.update_mod_tracker(
+                self.game_path,
+                to_install,
+                installed_releases,
+                updater.CURRENT_VERSION,
+            )
 
             self.finished.emit(True, "")
         except Exception as e:
             self.finished.emit(False, str(e))
 
     def apply_mod(self, mod_name):
-        def safe_get(url, **kwargs):
+        return mod_manager.install_mod(self.game_path, mod_name)
+
+
+class ModVersionCheckThread(QThread):
+    checked = Signal(str, dict)
+
+    def __init__(self, game_path, installed_mods):
+        super().__init__()
+        self.game_path = game_path
+        self.installed_mods = installed_mods
+
+    def run(self):
+        results = {}
+        cache = {}
+        for mod_name in self.installed_mods:
+            if self.isInterruptionRequested():
+                return
             try:
-                return requests.get(url, verify=True, **kwargs)
-            except requests.exceptions.SSLError:
-                import urllib3
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                return requests.get(url, verify=False, **kwargs)
-
-        if mod_name == "ASI Loader":
-            url = "https://silent.rockstarvision.com/uploads/silents_asi_loader_13.zip"
-            response = safe_get(url, timeout=30)
-            response.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                to_extract = ["vorbisFile.dll", "vorbisHooked.dll"]
-                for file_name in to_extract:
-                    if file_name in z.namelist():
-                        with open(os.path.join(self.game_path, file_name), "wb") as f:
-                            f.write(z.read(file_name))
-                for member in z.namelist():
-                    if member.startswith("scripts/"):
-                        z.extract(member, self.game_path)
-        
-        elif mod_name == "ModLoader":
-            url = "https://fs.xserv.pp.ua/files/modloader.zip"
-            response = safe_get(url, timeout=30)
-            response.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                z.extractall(self.game_path)
-
-        elif mod_name == "SilentPatch":
-            api_url = "https://api.github.com/repos/CookiePLMonster/SilentPatch/releases/latest"
-            response = safe_get(api_url, timeout=15)
-            response.raise_for_status()
-            assets = response.json().get("assets", [])
-            download_url = next((a["browser_download_url"] for a in assets if a["name"] == "SilentPatchSA.zip"), None)
-            
-            if download_url:
-                response = safe_get(download_url, timeout=30)
-                response.raise_for_status()
-                target_dir = os.path.join(self.game_path, "modloader", "SilentPatch")
-                os.makedirs(target_dir, exist_ok=True)
-                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                    for member in z.namelist():
-                        if member.lower().endswith((".asi", ".ini")):
-                            filename = os.path.basename(member)
-                            if filename:
-                                with open(os.path.join(target_dir, filename), "wb") as f:
-                                    f.write(z.read(member))
-            else:
-                raise Exception("Could not find SilentPatchSA.zip in latest GitHub release.")
-
-        elif mod_name == "Widescreen Fixes":
-            fixes = [
-                ("https://github.com/ThirteenAG/WidescreenFixesPack/releases/download/gtasa/GTASA.WidescreenFix.zip", "WidescreenFix"),
-                ("https://github.com/ThirteenAG/WidescreenFixesPack/releases/download/gtasa/GTASA.WidescreenFrontend.zip", "WidescreenFrontend")
-            ]
-            for url, folder_name in fixes:
-                response = safe_get(url, timeout=60)
-                response.raise_for_status()
-                target_dir = os.path.join(self.game_path, "modloader", folder_name)
-                os.makedirs(target_dir, exist_ok=True)
-                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                    z.extractall(target_dir)
-
-        elif mod_name == "SkyGFX":
-            api_url = "https://api.github.com/repos/aap/skygfx/releases/latest"
-            response = safe_get(api_url, timeout=15)
-            response.raise_for_status()
-            assets = response.json().get("assets", [])
-            download_url = next((a["browser_download_url"] for a in assets if "sa" in a["name"].lower() and a["name"].endswith(".zip")), None)
-            
-            if not download_url and assets:
-                download_url = next((a["browser_download_url"] for a in assets if a["name"].endswith(".zip")), None)
-
-            if download_url:
-                response = safe_get(download_url, timeout=60)
-                response.raise_for_status()
-                target_dir = os.path.join(self.game_path, "modloader", "SkyGFX")
-                os.makedirs(target_dir, exist_ok=True)
-                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                    z.extractall(target_dir)
-            else:
-                raise Exception("Could not find SkyGFX zip in latest GitHub release.")
-
-        elif mod_name == "Frontend Mods":
-            url = "https://fs.xserv.pp.ua/files/Frontend%20Mods.zip"
-            response = safe_get(url, timeout=60)
-            response.raise_for_status()
-            target_dir = os.path.join(self.game_path, "modloader", "FrontendMods")
-            os.makedirs(target_dir, exist_ok=True)
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                z.extractall(target_dir)
-
-        elif mod_name == "Framerate Vigilante (60fps fix)":
-            url = "https://fs.xserv.pp.ua/files/Framerate%20Vigilante.zip"
-            response = safe_get(url, timeout=60)
-            response.raise_for_status()
-            target_dir = os.path.join(self.game_path, "modloader", "FramerateVigilante")
-            os.makedirs(target_dir, exist_ok=True)
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                z.extractall(target_dir)
-
-        elif mod_name == "GInput":
-            url = "https://silent.rockstarvision.com/uploads/GInputSA.zip"
-            response = safe_get(url, timeout=30)
-            response.raise_for_status()
-            target_dir = os.path.join(self.game_path, "modloader", "GInput")
-            os.makedirs(target_dir, exist_ok=True)
-            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                for member in z.namelist():
-                    if "GInputAPI (for modders)" not in member:
-                        z.extract(member, target_dir)
-
-        elif mod_name == "Project 2DFX":
-            api_url = "https://api.github.com/repos/ThirteenAG/III.VC.SA.IV.Project2DFX/releases/tags/gtasa"
-            response = safe_get(api_url, timeout=15)
-            response.raise_for_status()
-            assets = response.json().get("assets", [])
-            download_url = next((a["browser_download_url"] for a in assets if "gtasa" in a["name"].lower() and a["name"].endswith(".zip")), None)
-            
-            if not download_url and assets:
-                download_url = next((a["browser_download_url"] for a in assets if a["name"].endswith(".zip")), None)
-
-            if download_url:
-                response = safe_get(download_url, timeout=60)
-                response.raise_for_status()
-                target_dir = os.path.join(self.game_path, "modloader", "Project2DFX")
-                os.makedirs(target_dir, exist_ok=True)
-                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                    z.extractall(target_dir)
-            else:
-                raise Exception("Could not find Project 2DFX zip for GTA SA in latest GitHub release.")
+                results[mod_name] = mod_manager.get_mod_release(mod_name, cache)
+            except Exception as error:
+                results[mod_name] = {"error": str(error)}
+        self.checked.emit(self.game_path, results)
 
 class ModInstallDialog(QDialog):
-    def __init__(self, game_path, selected_mods):
+    def __init__(self, game_path, selected_mods, force_reinstall=False):
         super().__init__()
-        self.setWindowTitle("Installing Mods")
+        self.setWindowTitle("Reinstalling Mods" if force_reinstall else "Installing Mods")
         self.setFixedSize(400, 120)
         self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
         
@@ -285,7 +170,7 @@ class ModInstallDialog(QDialog):
         self.progress_bar.setMaximum(len(selected_mods))
         layout.addWidget(self.progress_bar)
         
-        self.thread = ModInstallThread(game_path, selected_mods)
+        self.thread = ModInstallThread(game_path, selected_mods, force_reinstall)
         self.thread.progress.connect(self.update_progress)
         self.thread.finished.connect(self.on_finished)
         self.thread.start()
@@ -620,6 +505,8 @@ class ToolsDialog(QDialog):
             QMessageBox.information(self, "Success", "Patches downloaded successfully.")
             if self.parent.path_edit.text():
                 self.parent.scan_directory(self.parent.path_edit.text())
+        else:
+            QMessageBox.critical(self, "Error", f"Failed to download patches:\n{dlg.error_message}")
 
     def revert_downgrade(self):
         self.accept()
@@ -930,6 +817,10 @@ class DowngraderApp(QMainWindow):
         self.manifest_data = None
         self.detected_appid = None
         self.is_v10_us = False
+        self.mod_install_available = False
+        self.mod_version_threads = []
+        self.installed_mod_versions = {}
+        self.warned_legacy_tracker_paths = set()
 
         self.init_ui()
         
@@ -1023,7 +914,7 @@ class DowngraderApp(QMainWindow):
                         QMessageBox.critical(self, "Error", "Download finished but manifest.json is still missing.")
                         sys.exit(1)
                 else:
-                    QMessageBox.critical(self, "Error", "Failed to download patches.")
+                    QMessageBox.critical(self, "Error", f"Failed to download patches:\n{dlg.error_message}")
                     sys.exit(1)
             else:
                 self.status_bar.showMessage("Warning: Patches missing. Downgrade will be disabled.")
@@ -1041,6 +932,7 @@ class DowngraderApp(QMainWindow):
                 cb.setEnabled(False)
                 cb.setToolTip("Requires internet connection.")
             self.install_mods_only_btn.setEnabled(False)
+            self.force_reinstall_mods_btn.setEnabled(False)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -1115,6 +1007,18 @@ class DowngraderApp(QMainWindow):
         self.install_mods_only_btn.setStyleSheet("font-size: 10px;")
         self.install_mods_only_btn.clicked.connect(self.install_only_mods_clicked)
         mod_grid.addWidget(self.install_mods_only_btn, row, col, 1, 5 - col)
+
+        row += 1
+        self.force_reinstall_mods_btn = QPushButton("Force Reinstall Selected Mods")
+        self.force_reinstall_mods_btn.setFixedHeight(24)
+        self.force_reinstall_mods_btn.setStyleSheet("font-size: 10px;")
+        self.force_reinstall_mods_btn.clicked.connect(self.force_reinstall_mods_clicked)
+        mod_grid.addWidget(self.force_reinstall_mods_btn, row, 0, 1, 5)
+
+        row += 1
+        self.mod_update_status = QLabel("Mod versions will be checked after scanning a game directory.")
+        self.mod_update_status.setStyleSheet("font-size: 10px; color: #666;")
+        mod_grid.addWidget(self.mod_update_status, row, 0, 1, 5)
         
         mod_group.setLayout(mod_grid)
         main_layout.addWidget(mod_group)
@@ -1155,6 +1059,7 @@ class DowngraderApp(QMainWindow):
         self.revert_btn.setEnabled(False)
         self.downgrade_btn.setEnabled(False)
         self.install_mods_only_btn.setEnabled(False)
+        self.force_reinstall_mods_btn.setEnabled(False)
 
         self.status_bar = QStatusBar()
         self.status_bar.setStyleSheet("font-size: 10px;")
@@ -1174,15 +1079,13 @@ class DowngraderApp(QMainWindow):
             self.mods["ModLoader"].setChecked(True)
             self.mods["ModLoader"].setEnabled(False)
         else:
-            self.mods["ModLoader"].setEnabled(True)
+            self.mods["ModLoader"].setEnabled(self.mod_install_available)
             
             if self.mods["ModLoader"].isChecked():
                 self.mods["ASI Loader"].setChecked(True)
                 self.mods["ASI Loader"].setEnabled(False)
             else:
-                self.mods["ASI Loader"].setEnabled(True)
-                self.mods["ASI Loader"].setChecked(False)
-                self.mods["ModLoader"].setChecked(False)
+                self.mods["ASI Loader"].setEnabled(self.mod_install_available)
 
         self.mods["ASI Loader"].blockSignals(False)
         self.mods["ModLoader"].blockSignals(False)
@@ -1280,16 +1183,27 @@ class DowngraderApp(QMainWindow):
             self.downgrade_btn.setEnabled(True)
             self.downgrade_btn.setToolTip("")
 
-        installed_mods = []
         game_path = self.path_edit.text()
-        config_path = os.path.join(game_path, "modloader", ".downgrader")
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, 'r') as f:
-                    data = json.load(f)
-                    installed_mods = data.get("installed_mods", [])
-            except Exception:
-                pass
+        installed_mods, installed_versions, tracker_data = mod_manager.load_mod_tracker(game_path)
+        self.installed_mod_versions = installed_versions
+
+        normalized_game_path = os.path.normcase(os.path.abspath(game_path))
+        if (
+            installed_mods
+            and mod_manager.is_legacy_tracker(tracker_data)
+            and normalized_game_path not in self.warned_legacy_tracker_paths
+        ):
+            self.warned_legacy_tracker_paths.add(normalized_game_path)
+            QMessageBox.warning(
+                self,
+                "Old Mod Tracking Format Detected",
+                "This game uses an older .downgrader tracking format.\n\n"
+                "During the next mod installation, every mod recorded in that file will be fully "
+                "reinstalled so the downgrader can save its installed version, even if the mod is "
+                "not currently selected.\n\n"
+                "Reinstallation can overwrite customized mod configuration files. Back up any "
+                "configurations you want to keep before installing mods.",
+            )
 
         for row, data in enumerate(results):
             self.table.insertRow(row)
@@ -1309,13 +1223,111 @@ class DowngraderApp(QMainWindow):
             self.status_bar.showMessage("Scan complete. Game is already v1.0 US.")
 
         self.revert_btn.setEnabled(True)
-        self.install_mods_only_btn.setEnabled(updater.has_internet())
+        has_internet = updater.has_internet()
+        self.mod_install_available = has_internet
+        self.install_mods_only_btn.setEnabled(has_internet)
+        self.force_reinstall_mods_btn.setEnabled(has_internet and bool(installed_mods))
+        if not has_internet:
+            self.force_reinstall_mods_btn.setToolTip("Requires internet connection.")
+        elif not installed_mods:
+            self.force_reinstall_mods_btn.setToolTip("No previously installed mods detected.")
+        else:
+            self.force_reinstall_mods_btn.setToolTip(
+                "Download and reinstall the selected mods even if they are already tracked as installed."
+            )
 
         for name, cb in self.mods.items():
-            cb.setEnabled(updater.has_internet())
-            cb.setToolTip("" if updater.has_internet() else "Requires internet connection.")
-            if name in installed_mods:
-                cb.setChecked(True)
+            cb.blockSignals(True)
+            cb.setChecked(name in installed_mods)
+            cb.setText(name)
+            cb.setStyleSheet("font-size: 11px;")
+            cb.setEnabled(has_internet)
+
+            installed_release = installed_versions.get(name, {})
+            installed_version = installed_release.get("version") if isinstance(installed_release, dict) else None
+            if name in installed_mods and installed_version:
+                cb.setText(f"{name} ({installed_version})")
+                cb.setToolTip(f"Installed version: {installed_version}. Checking for updates...")
+            elif name in installed_mods:
+                cb.setText(f"{name} (version unknown)")
+                cb.setToolTip("Installed by an older downgrader version. Reinstall to record its version.")
+            else:
+                cb.setToolTip("" if has_internet else "Requires internet connection.")
+            cb.blockSignals(False)
+
+        self.handle_mod_dependencies(None)
+        if installed_mods and has_internet:
+            self.mod_update_status.setText("Checking installed mod versions...")
+            self.mod_update_status.setStyleSheet("font-size: 10px; color: #666;")
+            self.start_mod_version_check(game_path, installed_mods)
+        elif installed_mods:
+            self.mod_update_status.setText("Connect to the internet to check installed mod versions.")
+        else:
+            self.mod_update_status.setText("No downgrader-installed mods detected.")
+
+    def start_mod_version_check(self, game_path, installed_mods):
+        thread = ModVersionCheckThread(game_path, sorted(installed_mods))
+        self.mod_version_threads.append(thread)
+        thread.checked.connect(self.handle_mod_version_results)
+        thread.finished.connect(lambda: self.mod_version_threads.remove(thread) if thread in self.mod_version_threads else None)
+        thread.start()
+
+    def handle_mod_version_results(self, game_path, results):
+        if os.path.abspath(game_path) != os.path.abspath(self.path_edit.text()):
+            return
+
+        updates = 0
+        unknown = 0
+        errors = 0
+        for name, latest_release in results.items():
+            if name not in self.mods:
+                continue
+            cb = self.mods[name]
+            installed_release = self.installed_mod_versions.get(name, {})
+            installed_version = installed_release.get("version") if isinstance(installed_release, dict) else None
+            installed_fingerprint = installed_release.get("fingerprint") if isinstance(installed_release, dict) else None
+
+            if latest_release.get("error"):
+                errors += 1
+                cb.setToolTip(
+                    f"Installed version: {installed_version or 'unknown'}. "
+                    f"Update check failed: {latest_release['error']}"
+                )
+                continue
+
+            latest_version = latest_release.get("version", "unknown")
+            if not installed_fingerprint:
+                unknown += 1
+                cb.setText(f"{name} (version unknown)")
+                cb.setToolTip(
+                    f"Latest version: {latest_version}. Reinstall this mod once to record its installed version."
+                )
+            elif installed_fingerprint != latest_release.get("fingerprint"):
+                updates += 1
+                cb.setText(f"{name} (update available)")
+                cb.setStyleSheet("font-size: 11px; color: #e65100; font-weight: bold;")
+                cb.setToolTip(
+                    f"Installed: {installed_version or 'unknown'} | Latest: {latest_version}. "
+                    "Select this mod and use Force Reinstall Selected Mods to update it."
+                )
+            else:
+                cb.setText(f"{name} ({installed_version or latest_version})")
+                cb.setToolTip(f"Up to date: {installed_version or latest_version}")
+
+        if updates:
+            self.mod_update_status.setText(f"{updates} mod update{'s' if updates != 1 else ''} available.")
+            self.mod_update_status.setStyleSheet("font-size: 10px; color: #e65100; font-weight: bold;")
+        elif unknown:
+            self.mod_update_status.setText(
+                f"{unknown} installed mod{'s have' if unknown != 1 else ' has'} no saved version; reinstall once to track updates."
+            )
+            self.mod_update_status.setStyleSheet("font-size: 10px; color: #9a6700;")
+        elif errors:
+            self.mod_update_status.setText("Some mod versions could not be checked. Hover over installed mods for details.")
+            self.mod_update_status.setStyleSheet("font-size: 10px; color: #9a6700;")
+        else:
+            self.mod_update_status.setText("All tracked mods are up to date.")
+            self.mod_update_status.setStyleSheet("font-size: 10px; color: #2e7d32;")
 
     def start_downgrade(self):
         path = self.path_edit.text()
@@ -1397,24 +1409,47 @@ class DowngraderApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No mods selected.")
             return
 
-        self.install_selected_mods(path, selected)
+        if self.install_selected_mods(path, selected):
+            self.scan_directory(path)
 
-    def install_selected_mods(self, game_path, selected_mods):
-        if not updater.has_internet():
-            QMessageBox.critical(self, "Error", "Internet connection required to install mods.")
+    def force_reinstall_mods_clicked(self):
+        path = self.path_edit.text()
+        if not path:
+            QMessageBox.warning(self, "Warning", "Please select game path first.")
             return
 
-        dlg = ModInstallDialog(game_path, selected_mods)
+        selected = [name for name, cb in self.mods.items() if cb.isChecked()]
+        if not selected:
+            QMessageBox.warning(self, "Warning", "No mods selected.")
+            return
+
+        if self.install_selected_mods(path, selected, force_reinstall=True):
+            self.scan_directory(path)
+
+    def install_selected_mods(self, game_path, selected_mods, force_reinstall=False):
+        if not updater.has_internet():
+            QMessageBox.critical(self, "Error", "Internet connection required to install mods.")
+            return False
+
+        installed_mods, _, tracker_data = mod_manager.load_mod_tracker(game_path)
+        effective_mods = mod_manager.expand_legacy_mod_selection(
+            selected_mods,
+            installed_mods,
+            tracker_data,
+        )
+        dlg = ModInstallDialog(game_path, effective_mods, force_reinstall)
         dlg.exec()
         
         if dlg.success:
-            if linux_tools.is_linux() and "ASI Loader" in selected_mods:
+            if linux_tools.is_linux() and "ASI Loader" in effective_mods:
                 linux_dlg = LinuxLaunchOptionsDialog()
                 linux_dlg.exec()
             
             QMessageBox.information(self, "Complete", "Mod installation complete.")
+            return True
         else:
             QMessageBox.critical(self, "Error", f"Failed to install mods:\n{dlg.error_message}")
+            return False
 
 if __name__ == "__main__":
 

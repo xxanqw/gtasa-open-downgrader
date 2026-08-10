@@ -20,21 +20,18 @@ jobs:
           
       - name: Install dependencies and build
         run: |
-          uv venv
-          source .venv/bin/activate
-          uv pip install pyinstaller pyside6 requests
-          
+          uv sync --project downgrader --group build
           cd downgrader
-          python3 -c "import sys; sys.path.append('.'); import icloud_resolver; icloud_resolver.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
+          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
           
-          pyinstaller --onefile --windowed \
+          uv run pyinstaller --onefile --windowed \
             --add-data "bin/xdelta3_linux:bin" \
             --add-data "bin/LICENSE.txt:bin" \
             --add-data "assets:assets" \
             --name "gtasa-open-downgrader-linux" \
             main.py
             
-          pyinstaller --onefile --windowed \
+          uv run pyinstaller --onefile --windowed \
             --add-data "bin/xdelta3_linux:bin" \
             --add-data "bin/LICENSE.txt:bin" \
             --add-data "assets:assets" \
@@ -58,9 +55,8 @@ jobs:
             mkdir -p $appdir/usr/share/applications
             cp downgrader/dist/$binary_name $appdir/usr/bin/
             
-            source .venv/bin/activate
             export QT_QPA_PLATFORM=offscreen
-            python3 -c "from PySide6.QtGui import QIcon; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); icon=QIcon('downgrader/assets/icon.ico'); pixmap=icon.pixmap(256,256); pixmap.save('$appdir/$output_name.png')"
+            uv run --project downgrader python -c "from PySide6.QtGui import QIcon; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); icon=QIcon('downgrader/assets/icon.ico'); pixmap=icon.pixmap(256,256); pixmap.save('$appdir/$output_name.png')"
             
             echo "[Desktop Entry]" > $appdir/$output_name.desktop
             echo "Name=GTA SA Open Downgrader" >> $appdir/$output_name.desktop
@@ -100,14 +96,11 @@ jobs:
       - name: Install dependencies and build
         shell: powershell
         run: |
-          uv venv
-          .venv\Scripts\activate.ps1
-          uv pip install pyinstaller pyside6 requests
-          
+          uv sync --project downgrader --group build
           cd downgrader
-          python -c "import sys; sys.path.append('.'); import icloud_resolver; icloud_resolver.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
+          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
           
-          pyinstaller --onefile --windowed `
+          uv run pyinstaller --onefile --windowed `
             --add-data "bin/xdelta3.exe;bin" `
             --add-data "bin/LICENSE.txt;bin" `
             --add-data "assets;assets" `
@@ -115,7 +108,7 @@ jobs:
             --name "gtasa-open-downgrader-windows" `
             main.py
             
-          pyinstaller --onefile --windowed `
+          uv run pyinstaller --onefile --windowed `
             --add-data "bin/xdelta3.exe;bin" `
             --add-data "bin/LICENSE.txt;bin" `
             --add-data "assets;assets" `
@@ -152,14 +145,28 @@ jobs:
             *.AppImage
             *.exe
           body: |
-            GTA SA Open Downgrader v0.1.1
-            
-            - Added Linux AppImage support (Online & Offline)
-            - Added Windows Offline standalone executable
-            - Improved Window Icons and UI theme
-            - Added Application Updater (Online & Offline modes)
+            GTA SA Open Downgrader v0.2.0
+
+            ## Mod management
+            - Added persistent installed-mod versions, package fingerprints, source URLs, and installation timestamps
+            - Added background update checks with installed, up-to-date, unknown, and update-available states in the UI
+            - Added **Force Reinstall Selected Mods** for updates, missing files, and configuration recovery
+            - Added legacy `.downgrader` detection with a configuration-backup warning
+            - Legacy trackers now fully reinstall every recorded mod once, then migrate to the versioned tracker format
+
+            ## Downloads and packaging
+            - Replaced private fileserver downloads with official upstream mod packages
+            - Added package-layout normalization, including GTA SA-only extraction from multi-game archives
+            - Added ZIP and 7z path validation to prevent unsafe archive extraction
+            - Switched iCloud patch downloads to the published `icloud-resolver` package
+            - Patch downloads are now validated and replace existing patch assets only after successful extraction
+            - Simplified Linux and Windows builds around `uv sync` and reproducible project dependencies
+
+            ## Fixes and maintenance
             - Fixed gta_sa.exe consistency across different versions
-            - Various stability and UX improvements
+            - Fixed the misspelled `generate_pathces.sh` filename and README reference
+            - Fixed update checks so older releases are not offered as updates
+            - Improved download error reporting, stability, and mod-installation progress handling
           draft: false
           prerelease: false
         env:
