@@ -6,93 +6,128 @@
 
 </div>
 
-This project was initiated because the original RockstarNexus Downgrader was easy and intuitive to use, and we wanted to replicate that experience in an open-source format.
+GTA SA Open Downgrader is an open-source tool inspired by the original RockstarNexus Downgrader. It converts a supported GTA San Andreas installation to v1.0 US and can install a curated set of community fixes and enhancements.
 
-The original Hoodlum release was used to create the patches. Currently, it supports the NewSteam R2 global version only.
+The current patch set converts the **NewSteam R2 Global** release to **v1.0 US (Hoodlum)**. The app can identify several other executable versions, but identification does not mean that a downgrade patch is available for them.
 
-If someone wants to help with creating patches for other versions of the game, I am open to this! You can contact me via the email in my profile or via GitHub issues (please provide a URL to your patches for the other game versions).
+> [!WARNING]
+> I am looking for someone who has the **German NewSteam R2 release** of GTA San Andreas and can help add and verify support for it.
+>
+> If you can help, please contact me at **[private@xxanqw.pp.ua](mailto:private@xxanqw.pp.ua)**.
+
+Contributions for other source versions are welcome through GitHub issues.
 
 ## Patches
+
 - **Source Version:** NewSteam R2 Global
 - **Target Version:** v1.0 US (Hoodlum)
 - **Download:** [Patches.zip (iCloud)](https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches)
-- **Resolver:** Downloads use the published [`icloud-resolver`](https://pypi.org/project/icloud-resolver/) package; archives are validated and safely installed only after the download completes.
+- **Resolver:** Downloads use the published [`icloud-resolver`](https://pypi.org/project/icloud-resolver/) package. The archive is validated and replaces existing patch assets only after successful extraction.
 
 ## Features
-- **Automated Game Detection:** Automatically locates your GTA San Andreas installation on Windows (Registry) and Linux (common Steam library paths).
-- **One-Click Downgrade:** Automated downgrading to v1.0 US (Hoodlum) with `xdelta3` technology.
-- **Essential Modifications:** Integrated downloader and installer that fetches each mod from its official upstream release and normalizes the package layout automatically.
+
+- **Game Detection:** Checks the Windows Registry and common Steam locations on Linux. A game directory can always be selected manually.
+- **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.
+- **One-Click Downgrade:** Converts supported files to v1.0 US with `xdelta3`, backing up original files before replacing them.
+- **Official Mod Packages:** Downloads mods from their official upstream sources and normalizes their archive layouts automatically.
     - ASI Loader & ModLoader
     - SilentPatch & GInput
     - Widescreen Fixes & Project 2DFX
-    - SkyGFX (with multiple presets)
+    - SkyGFX
     - Framerate Vigilante (60fps fix)
     - Frontend Mods
-- **Mod Tracking:** Saves installed mod versions, checks upstream releases in the background, marks available updates in the UI, and can force reinstall selected mods when an update is available or local files are missing. Legacy tracking files trigger a configuration-backup warning and a one-time full reinstall of every recorded mod so version tracking can be migrated safely.
+- **Mod Updates:** Records installed package versions and checks upstream releases in the background. The UI marks available updates and can force reinstall selected mods.
+- **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.
 - **Downgrader Tools:**
-    - **4GB Patch (LAA):** Optimize your executable to use more memory and prevent crashes.
-    - **Registry Fix:** Repair game installation paths in the Windows Registry.
-    - **Revert System:** Automatic backups before patching allow for a full restoration of original files.
-    - **User Data Management:** Quickly clear saves and settings to troubleshoot game issues.
-- **Cross-Platform:** Full support for Windows and Linux (including Proton/Steam Deck specific optimizations).
-- **Safety First:** Detects read-only directories and provides necessary Steam launch options for Linux users.
+    - Apply the 4GB/Large Address Aware flag.
+    - Repair the Windows installation path in the Registry.
+    - Restore files from downgrade backups and remove old backups.
+    - Clear GTA San Andreas user data after confirmation.
+    - Create a desktop shortcut on Windows.
+- **Windows and Linux Builds:** Includes AppImage builds, common Steam/Flatpak path detection, read-only directory checks, and Proton launch-option guidance for ASI Loader.
 
 ## Distribution Variants
 
-The downgrader is available in two main formats:
+Release builds are provided in online and offline variants.
 
-### 1. Online Version
-- **Filenames:** `gtasa-open-downgrader-windows.exe`, `gtasa-open-downgrader-linux.AppImage`
-- **Behavior:** Lightweight binaries that download the necessary `Patches` assets from the cloud on the first run. 
-- **Requirement:** Internet connection is required for the initial setup and for installing mods.
+### Online
 
-### 2. Offline Version (Standalone)
-- **Filenames:** `gtasa-open-downgrader-windows-offline.exe`, `gtasa-open-downgrader-linux-offline.AppImage`
-- **Behavior:** Fully self-contained packages (approx. 1GB) that bundle all required `Patches` assets into a single executable. 
-- **Usage:** Ideal for users with slow/no internet or for archiving. No initial download is required to perform the downgrade.
+- `gtasa-open-downgrader-windows.exe`
+- `gtasa-open-downgrader-linux.AppImage`
 
-## Execution
+When patch assets are missing, the app asks whether it should download them from iCloud. Internet access is also required for mod installation, mod update checks, and application updates.
+
+### Offline
+
+- `gtasa-open-downgrader-windows-offline.exe`
+- `gtasa-open-downgrader-linux-offline.AppImage`
+
+Offline builds bundle the downgrade patch assets, so the supported game can be downgraded without an initial patch download. Installing or updating mods still requires internet access.
+
+## Running
 
 ### Windows
-Run the `.exe` file. The **Offline Version** is a standalone binary that works immediately without any external files.
+
+Download and run the appropriate `.exe` from the GitHub release.
 
 ### Linux (AppImage)
-The application is distributed as a standard **AppImage**. Simply grant it execution permissions and launch it:
+
+Make the AppImage executable, then launch it:
+
 ```bash
 chmod +x gtasa-open-downgrader-linux.AppImage
 ./gtasa-open-downgrader-linux.AppImage
 ```
 
-### Steam Deck Support
-The application is fully compatible with the Steam Deck. It automatically detects game installations on both internal storage and SD cards. Since Steam games are stored in the writable `/home` partition (or on SD cards), the SteamOS read-only filesystem does not interfere with the downgrading process.
+### Steam Deck and Proton
+
+The app checks common native Steam and Flatpak Steam locations plus one common SD-card mount path. If the game is stored elsewhere, select its directory manually. After installing ASI Loader, copy the launch option shown by the app into the game's Steam properties.
+
+## Development
+
+Python 3.11 or newer and [`uv`](https://docs.astral.sh/uv/) are required.
+
+```bash
+uv sync --project downgrader --group build
+uv run --project downgrader python -m unittest discover -s downgrader/tests -v
+uv run --project downgrader python downgrader/main.py
+```
 
 ## License
-This project is licensed under the MIT License - see the Info dialog in-app for details. Bundled `xdelta3` is licensed under the Apache License 2.0.
+
+This project is licensed under the [MIT License](LICENSE). Bundled `xdelta3` is licensed under the Apache License 2.0; its license is included alongside the binary.
 
 ## How to Generate Patches
 
 If you want to create patches for a different version of the game, follow these steps:
 
 ### Prerequisites
-1.  **Source Directory (`SA_STEAM`):** Place the files of the version you want to patch from in a folder named `SA_STEAM`.
-2.  **Target Directory (`SA_10US`):** Place the clean v1.0 US (Hoodlum) files in a folder named `SA_10US`.
-3.  **xdelta3:** Ensure `xdelta3` is installed on your system.
+
+1. **Source Directory (`SA_STEAM`):** Place the files of the version you want to patch from in a folder named `SA_STEAM`.
+2. **Target Directory (`SA_10US`):** Place the clean v1.0 US (Hoodlum) files in a folder named `SA_10US`.
+3. **xdelta3:** The scripts use the bundled platform binary when available and otherwise expect `xdelta3` on `PATH`.
 
 ### Execution
 
 #### Linux
+
 Run the shell script:
+
 ```bash
 ./generate_patches.sh
 ```
 
 #### Windows
+
 Run the PowerShell script. If you encounter an execution policy error, use the following command to allow script execution for the current session:
+
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 .\generate_patches.ps1
 ```
+
 Alternatively, you can run it directly with the bypass parameter:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\generate_patches.ps1
 ```
