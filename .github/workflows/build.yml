@@ -98,7 +98,9 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: gta-sa-downgrader-linux-appimages
-          path: "*.AppImage"
+          path: |
+            gtasa-open-downgrader-linux.AppImage
+            gtasa-open-downgrader-linux-offline.AppImage
 
   build-windows:
     runs-on: windows-latest
@@ -166,8 +168,10 @@ jobs:
         uses: softprops/action-gh-release@v3.0.2
         with:
           files: |
-            *.AppImage
-            *.exe
+            gtasa-open-downgrader-linux.AppImage
+            gtasa-open-downgrader-linux-offline.AppImage
+            gtasa-open-downgrader-windows.exe
+            gtasa-open-downgrader-windows-offline.exe
           body: |
             GTA SA Open Downgrader v0.2.1
 
