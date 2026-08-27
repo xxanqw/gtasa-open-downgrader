@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import zipfile
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 import cloudscraper
 import py7zr
@@ -64,10 +65,11 @@ STATIC_RELEASES = {
         "source_url": "https://silentsblog.com/mods/gta-sa/#asiloader",
     },
     "Framerate Vigilante (60fps fix)": {
-        "fallback_version": "2024-11-09",
-        "fallback_url": "https://sharemods.com/ufivf6gzycz6/FramerateVigilante.7z.html",
-        "fallback_file_id": "ufivf6gzycz6",
-        "archive_type": "7z",
+        "fallback_version": "2026-08-16",
+        "fallback_url": "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html",
+        "fallback_file_id": "0cxm88ppiv38",
+        "archive_type": "zip",
+        "sharemods": True,
         "source_url": "https://www.mixmods.com.br/2022/08/iii-vc-sa-framerate-vigilante/",
     },
     "GInput": {
@@ -78,6 +80,14 @@ STATIC_RELEASES = {
 }
 
 SUPPORTED_MODS = frozenset(GITHUB_RELEASES) | frozenset(STATIC_RELEASES)
+
+
+def _sharemods_scraper():
+    # ShareMods currently challenges cloudscraper's default Chrome/Opera
+    # profiles, while its Firefox profile is accepted on both Windows and Linux.
+    return cloudscraper.create_scraper(
+        browser={"browser": "firefox", "platform": "windows", "desktop": True}
+    )
 
 
 def safe_request(method, url, **kwargs):
@@ -133,28 +143,39 @@ def _github_release(mod_name, cache):
 
 def _static_release(mod_name):
     source = STATIC_RELEASES[mod_name]
-    if source.get("archive_type") == "7z":
-        scraper = cloudscraper.create_scraper()
+    if source.get("sharemods"):
+        scraper = _sharemods_scraper()
         landing_url = source["fallback_url"]
         file_id = source["fallback_file_id"]
+        archive_type = source["archive_type"]
         try:
             article_response = scraper.get(source["source_url"], timeout=20)
             article_response.raise_for_status()
             sharemods_match = re.search(
-                r'https?://(?:www\.)?sharemods\.com/([^/"\'<>\s]+)/([^"\'<>\s]+\.7z\.html)',
+                r'https?://(?:www\.)?sharemods\.com/(?P<file_id>[^/"\'<>\s]+)/'
+                r'(?P<filename>[^"\'<>\s]+\.(?P<archive_type>zip|7z)\.html)',
                 article_response.text,
                 re.IGNORECASE,
             )
             if sharemods_match:
-                file_id = sharemods_match.group(1)
+                file_id = sharemods_match.group("file_id")
                 landing_url = html.unescape(sharemods_match.group(0))
+                archive_type = sharemods_match.group("archive_type").lower()
         except requests.RequestException:
             pass
 
-        response = scraper.get(landing_url, timeout=20)
-        response.raise_for_status()
-        uploaded_match = re.search(r"Uploaded on:\s*<strong>([^<]+)", response.text, re.IGNORECASE)
-        size_match = re.search(r"Size:\s*<strong>([^<]+)", response.text, re.IGNORECASE)
+        landing_html = ""
+        try:
+            response = scraper.get(landing_url, timeout=20)
+            response.raise_for_status()
+            landing_html = response.text
+        except requests.RequestException:
+            # ShareMods may challenge automated metadata requests. The package
+            # URL found on the official article is still the authoritative one.
+            pass
+
+        uploaded_match = re.search(r"Uploaded on:\s*<strong>([^<]+)", landing_html, re.IGNORECASE)
+        size_match = re.search(r"Size:\s*<strong>([^<]+)", landing_html, re.IGNORECASE)
         uploaded = uploaded_match.group(1).strip() if uploaded_match else "unknown"
         size = size_match.group(1).strip() if size_match else "unknown"
         return {
@@ -163,7 +184,7 @@ def _static_release(mod_name):
             "download_url": landing_url,
             "source_url": source["source_url"],
             "file_id": file_id,
-            "archive_type": source["archive_type"],
+            "archive_type": archive_type,
         }
 
     fingerprint_parts = ["static", source["url"], source["version"]]
@@ -281,11 +302,13 @@ def _strip_first_directory(name):
 
 
 def _framerate_member(name):
-    parts = name.split("/")
-    if len(parts) < 2 or parts[0:2] != ["GTA SA", "FramerateVigilante"]:
+    path_parts = name.split("/")
+    if "gta sa" not in (part.lower() for part in path_parts[:-1]):
         return None
-    relative_parts = parts[2:]
-    return "/".join(relative_parts) if relative_parts else None
+    filename = posixpath.basename(name)
+    if filename.lower() in ("frameratevigilante.sa.asi", "frameratevigilante.ini"):
+        return filename
+    return None
 
 
 def _ginput_member(name):
@@ -332,7 +355,7 @@ def extract_mod_archive(game_path, mod_name, archive_data, archive_type="zip"):
 
 
 def _sharemods_download_url(landing_url, file_id):
-    scraper = cloudscraper.create_scraper()
+    scraper = _sharemods_scraper()
     landing_response = scraper.get(landing_url, timeout=20)
     landing_response.raise_for_status()
     download_response = scraper.post(
@@ -348,14 +371,22 @@ def _sharemods_download_url(landing_url, file_id):
         timeout=20,
     )
     download_response.raise_for_status()
-    download_match = re.search(
-        r'href=["\'](https://[^"\']+r2\.cloudflarestorage\.com/[^"\']+)["\']',
-        download_response.text,
-        re.IGNORECASE,
-    )
-    if not download_match:
-        raise RuntimeError("Could not create the official Framerate Vigilante download link.")
-    return html.unescape(download_match.group(1))
+    for raw_url in re.findall(r'href=["\'](https://[^"\']+)["\']', download_response.text):
+        candidate = html.unescape(raw_url)
+        parsed = urlsplit(candidate)
+        hostname = (parsed.hostname or "").lower()
+        is_r2_download = hostname == "r2.cloudflarestorage.com" or hostname.endswith(
+            ".r2.cloudflarestorage.com"
+        )
+        is_ovh_download = (
+            hostname == "sharem.s3.de.io.cloud.ovh.net"
+            and parsed.path.startswith("/uploads/")
+            and parsed.path.rstrip("/").endswith(f"/{file_id}")
+        )
+        if parsed.scheme == "https" and (is_r2_download or is_ovh_download):
+            return candidate
+
+    raise RuntimeError("Could not create the official Framerate Vigilante download link.")
 
 
 def install_mod(game_path, mod_name):

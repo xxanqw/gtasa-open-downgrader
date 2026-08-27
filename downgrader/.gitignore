@@ -12,7 +12,6 @@ wheels/
 .venv/
 .python-version
 .lock
-uv.lock
 
 # OS specific
 .DS_Store

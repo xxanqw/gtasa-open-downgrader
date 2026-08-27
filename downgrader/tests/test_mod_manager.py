@@ -75,7 +75,7 @@ class ReleaseResolutionTests(unittest.TestCase):
     def test_framerate_release_follows_current_official_package_link(self):
         article_response = Mock(
             text=(
-                '<a href="https://sharemods.com/newfile123/FramerateVigilante.7z.html">'
+                '<a href="https://sharemods.com/newfile123/Framerate_Vigilante.zip.html">'
                 "Download</a>"
             )
         )
@@ -92,9 +92,56 @@ class ReleaseResolutionTests(unittest.TestCase):
         self.assertEqual(release["file_id"], "newfile123")
         self.assertEqual(
             release["download_url"],
-            "https://sharemods.com/newfile123/FramerateVigilante.7z.html",
+            "https://sharemods.com/newfile123/Framerate_Vigilante.zip.html",
         )
+        self.assertEqual(release["archive_type"], "zip")
         self.assertEqual(release["fingerprint"], "sharemods:newfile123:2026-09-01:250 KB")
+
+    def test_sharemods_resolver_accepts_current_ovh_object_storage(self):
+        scraper = Mock()
+        scraper.get.return_value = Mock()
+        scraper.post.return_value = Mock(
+            text=(
+                '<a href="https://wingsmob.com/advertisement">Ad</a>'
+                '<a href="https://sharem.s3.de.io.cloud.ovh.net/uploads/08721/newfile123?'
+                'response-content-disposition=attachment&amp;X-Amz-Signature=signature">Download</a>'
+            )
+        )
+
+        with patch.object(mod_manager.cloudscraper, "create_scraper", return_value=scraper):
+            download_url = mod_manager._sharemods_download_url(
+                "https://sharemods.com/newfile123/Framerate_Vigilante.zip.html",
+                "newfile123",
+            )
+
+        self.assertEqual(
+            download_url,
+            "https://sharem.s3.de.io.cloud.ovh.net/uploads/08721/newfile123?"
+            "response-content-disposition=attachment&X-Amz-Signature=signature",
+        )
+
+    def test_framerate_release_keeps_current_fallback_when_sharemods_blocks_metadata(self):
+        article_response = Mock(
+            text=(
+                '<a href="https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html">'
+                "Download</a>"
+            )
+        )
+        blocked_response = Mock()
+        blocked_response.raise_for_status.side_effect = mod_manager.requests.HTTPError("403 Forbidden")
+        scraper = Mock()
+        scraper.get.side_effect = [article_response, blocked_response]
+
+        with patch.object(mod_manager.cloudscraper, "create_scraper", return_value=scraper):
+            release = mod_manager.get_mod_release("Framerate Vigilante (60fps fix)")
+
+        self.assertEqual(release["version"], "2026-08-16")
+        self.assertEqual(release["file_id"], "0cxm88ppiv38")
+        self.assertEqual(
+            release["download_url"],
+            "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html",
+        )
+        self.assertEqual(release["archive_type"], "zip")
 
 
 class ArchiveExtractionTests(unittest.TestCase):
@@ -135,12 +182,14 @@ class ArchiveExtractionTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(installed_file))
 
     def test_framerate_archive_installs_only_san_andreas_files(self):
-        archive = seven_zip_archive(
+        archive = zip_archive(
             {
                 "GTA III/FramerateVigilante/FramerateVigilante.III.asi": b"iii",
+                "GTA III/FramerateVigilante/FramerateVigilante.ini": b"iii settings",
                 "GTA SA/FramerateVigilante/FramerateVigilante.SA.asi": b"sa",
-                "GTA SA/FramerateVigilante/FramerateVigilante.ini": b"settings",
+                "GTA SA/FramerateVigilante/FramerateVigilante.ini": b"sa settings",
                 "GTA VC/FramerateVigilante/FramerateVigilante.VC.asi": b"vc",
+                "GTA VC/FramerateVigilante/FramerateVigilante.ini": b"vc settings",
             }
         )
 
@@ -148,12 +197,14 @@ class ArchiveExtractionTests(unittest.TestCase):
             self.game_dir.name,
             "Framerate Vigilante (60fps fix)",
             archive,
-            archive_type="7z",
+            archive_type="zip",
         )
 
         target = os.path.join(self.game_dir.name, "modloader", "FramerateVigilante")
         self.assertTrue(os.path.isfile(os.path.join(target, "FramerateVigilante.SA.asi")))
         self.assertTrue(os.path.isfile(os.path.join(target, "FramerateVigilante.ini")))
+        with open(os.path.join(target, "FramerateVigilante.ini"), "rb") as ini_file:
+            self.assertEqual(ini_file.read(), b"sa settings")
         self.assertFalse(os.path.exists(os.path.join(target, "FramerateVigilante.III.asi")))
         self.assertFalse(os.path.exists(os.path.join(target, "FramerateVigilante.VC.asi")))
 

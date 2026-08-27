@@ -1,8 +1,10 @@
 <div align=center>
 
-<img height="512" alt="image" src="https://github.com/user-attachments/assets/166a2518-be0a-463b-ad2e-1dec1db89c63" />
+<img height="512" alt="GTA SA Open Downgrader logo" src="https://github.com/user-attachments/assets/166a2518-be0a-463b-ad2e-1dec1db89c63" />
 
 # GTA SA Open Downgrader
+
+[![Latest release](https://img.shields.io/github/v/release/xxanqw/gtasa-open-downgrader)](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest)
 
 </div>
 
@@ -27,6 +29,7 @@ Contributions for other source versions are welcome through GitHub issues.
 ## Features
 
 - **Game Detection:** Checks the Windows Registry and common Steam locations on Linux. A game directory can always be selected manually.
+- **Responsive Startup:** Packaged builds show a preparation splash immediately while the one-file application is unpacked and initialized.
 - **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.
 - **One-Click Downgrade:** Converts supported files to v1.0 US with `xdelta3`, backing up original files before replacing them.
 - **Official Mod Packages:** Downloads mods from their official upstream sources and normalizes their archive layouts automatically.
@@ -34,7 +37,7 @@ Contributions for other source versions are welcome through GitHub issues.
     - SilentPatch & GInput
     - Widescreen Fixes & Project 2DFX
     - SkyGFX
-    - Framerate Vigilante (60fps fix)
+    - Framerate Vigilante (60fps fix, using the current official ZIP package)
     - Frontend Mods
 - **Mod Updates:** Records installed package versions and checks upstream releases in the background. The UI marks available updates and can force reinstall selected mods.
 - **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.
@@ -68,7 +71,7 @@ Offline builds bundle the downgrade patch assets, so the supported game can be d
 
 ### Windows
 
-Download and run the appropriate `.exe` from the GitHub release.
+Download and run the appropriate `.exe` from the [latest GitHub release](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest). No Python or Tkinter installation is required.
 
 ### Linux (AppImage)
 
@@ -79,19 +82,28 @@ chmod +x gtasa-open-downgrader-linux.AppImage
 ./gtasa-open-downgrader-linux.AppImage
 ```
 
+Current AppImage builds bundle a statically linked runtime and do not require `libfuse2`, Python, or Tkinter.
+On systems where FUSE is unavailable entirely, use the runtime's extraction fallback:
+
+```bash
+./gtasa-open-downgrader-linux.AppImage --appimage-extract-and-run
+```
+
 ### Steam Deck and Proton
 
 The app checks common native Steam and Flatpak Steam locations plus one common SD-card mount path. If the game is stored elsewhere, select its directory manually. After installing ASI Loader, copy the launch option shown by the app into the game's Steam properties.
 
 ## Development
 
-Python 3.11 or newer and [`uv`](https://docs.astral.sh/uv/) are required.
+Python 3.11 or newer and [`uv`](https://docs.astral.sh/uv/) are required. Release builds use Python 3.12, so it is the recommended development version.
 
 ```bash
-uv sync --project downgrader --group build
+uv sync --frozen --project downgrader --python 3.12 --group build
 uv run --project downgrader python -m unittest discover -s downgrader/tests -v
 uv run --project downgrader python downgrader/main.py
 ```
+
+Running from source uses the Qt splash and does not require Tkinter. Creating a PyInstaller build with `--splash` requires Tcl/Tk on the build machine; PyInstaller embeds those libraries in the resulting executable, so users of release builds do not need to install them.
 
 ## License
 

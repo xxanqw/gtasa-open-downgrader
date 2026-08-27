@@ -9,6 +9,7 @@ ENV/
 .python-version
 .lock
 uv.lock
+!downgrader/uv.lock
 
 # Build / Distribution
 dist/

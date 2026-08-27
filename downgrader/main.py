@@ -7,9 +7,10 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QGroupBox, QCheckBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QStatusBar,
-    QFileDialog, QGridLayout, QMessageBox, QDialog, QProgressBar
+    QFileDialog, QGridLayout, QMessageBox, QDialog, QProgressBar,
+    QSplashScreen
 )
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt, QThread, Signal
 import linux_tools
 import mod_manager
@@ -551,6 +552,49 @@ def get_resource_path(relative_path):
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
+
+class StartupSplash:
+    """Keep startup feedback visible in packaged and source builds."""
+
+    def __init__(self, application):
+        self.application = application
+        self.pyinstaller_splash = None
+        self.qt_splash = None
+
+        try:
+            import pyi_splash
+
+            if pyi_splash.is_alive():
+                self.pyinstaller_splash = pyi_splash
+                return
+        except (ImportError, OSError, RuntimeError):
+            pass
+
+        pixmap = QPixmap(get_resource_path(os.path.join("assets", "splash.png")))
+        if pixmap.isNull():
+            return
+
+        self.qt_splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
+        self.qt_splash.show()
+        self.application.processEvents()
+
+    def close(self, main_window=None):
+        if self.pyinstaller_splash is not None:
+            try:
+                if self.pyinstaller_splash.is_alive():
+                    self.pyinstaller_splash.close()
+            except (OSError, RuntimeError):
+                pass
+            self.pyinstaller_splash = None
+
+        if self.qt_splash is not None:
+            if main_window is not None and main_window.isVisible():
+                self.qt_splash.finish(main_window)
+            else:
+                self.qt_splash.close()
+            self.qt_splash = None
+
+
 def find_game_path():
     import platform
     system = platform.system()
@@ -809,8 +853,9 @@ class PatchThread(QThread):
         pass
 
 class DowngraderApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, startup_splash=None):
         super().__init__()
+        self.startup_splash = startup_splash
         self.setWindowTitle("GTA SA Open Downgrader")
         self.resize(850, 600)
         
@@ -827,6 +872,16 @@ class DowngraderApp(QMainWindow):
         auto_path = find_game_path()
         if auto_path:
             self.path_edit.setText(auto_path)
+
+    def close_startup_splash(self):
+        if self.startup_splash is not None:
+            self.startup_splash.close(self if self.isVisible() else None)
+            self.startup_splash = None
+
+    def show_main_window(self):
+        self.show()
+        QApplication.processEvents()
+        self.close_startup_splash()
 
     def check_patches_and_start(self):
         if updater.has_internet():
@@ -869,6 +924,7 @@ class DowngraderApp(QMainWindow):
                         self.update_btn.clicked.connect(lambda: self.trigger_update(latest, download_url))
                         self.status_bar.showMessage(f"Notification: New version {latest} available!")
                     else:
+                        self.close_startup_splash()
                         reply = QMessageBox.question(self, "Update Available", 
                             f"A new version ({latest}) is available. Would you like to update now?",
                             QMessageBox.Yes | QMessageBox.No)
@@ -877,6 +933,7 @@ class DowngraderApp(QMainWindow):
                             updater.run_update_script(download_url)
                             return
                 else:
+                    self.close_startup_splash()
                     QMessageBox.warning(self, "Update Error", "Could not find a matching download for your platform.")
 
         self.resolved_manifest_path = "Patches/manifest.json"
@@ -888,11 +945,13 @@ class DowngraderApp(QMainWindow):
 
         if not has_patches:
             if not has_internet:
+                self.close_startup_splash()
                 QMessageBox.critical(self, "Fatal Error", 
                     "Patches are missing and no internet connection was detected.\n\n"
                     "The application cannot function without patch assets or internet to download them.")
                 sys.exit(1)
 
+            self.close_startup_splash()
             reply = QMessageBox.question(self, "Patches Missing", 
                 "Patches folder not found. Would you like to download them from iCloud?",
                 QMessageBox.Yes | QMessageBox.No)
@@ -907,7 +966,7 @@ class DowngraderApp(QMainWindow):
                 if dlg.success:
                     if os.path.exists("Patches/manifest.json"):
                         self.resolved_manifest_path = "Patches/manifest.json"
-                        self.show()
+                        self.show_main_window()
                         if self.path_edit.text():
                             self.scan_directory(self.path_edit.text())
                     else:
@@ -918,11 +977,11 @@ class DowngraderApp(QMainWindow):
                     sys.exit(1)
             else:
                 self.status_bar.showMessage("Warning: Patches missing. Downgrade will be disabled.")
-                self.show()
+                self.show_main_window()
                 if self.path_edit.text():
                     self.scan_directory(self.path_edit.text())
         else:
-            self.show()
+            self.show_main_window()
             if self.path_edit.text():
                 self.scan_directory(self.path_edit.text())
 
@@ -1460,7 +1519,8 @@ if __name__ == "__main__":
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    window = DowngraderApp()
+    startup_splash = StartupSplash(app)
+    window = DowngraderApp(startup_splash)
 
     window.check_patches_and_start()
 
