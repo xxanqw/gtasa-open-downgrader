@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import hashlib
+import platform
 import time
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -19,10 +20,10 @@ import updater
 
 class DownloadThread(QThread):
     progress = Signal(int, int, float, float)
-    finished = Signal(bool, str)
+    completed = Signal(bool, str)
 
-    def __init__(self, url, target_dir):
-        super().__init__()
+    def __init__(self, url, target_dir, parent=None):
+        super().__init__(parent)
         self.url = url
         self.target_dir = target_dir
         self.start_time = 0
@@ -31,6 +32,8 @@ class DownloadThread(QThread):
         self.start_time = time.time()
         
         def callback(downloaded, total):
+            if self.isInterruptionRequested():
+                raise InterruptedError("Patch download cancelled.")
             elapsed = time.time() - self.start_time
             speed = downloaded / elapsed if elapsed > 0 else 0
             time_left = (total - downloaded) / speed if speed > 0 else 0
@@ -38,13 +41,13 @@ class DownloadThread(QThread):
 
         try:
             patch_manager.download_and_extract_patches(self.url, self.target_dir, callback)
-            self.finished.emit(True, "")
+            self.completed.emit(True, "")
         except Exception as error:
-            self.finished.emit(False, str(error))
+            self.completed.emit(False, str(error))
 
 class DownloadDialog(QDialog):
-    def __init__(self, url, target_dir):
-        super().__init__()
+    def __init__(self, url, target_dir, parent=None):
+        super().__init__(parent)
         self.setWindowTitle("Downloading Patches")
         self.setFixedSize(400, 150)
         self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
@@ -63,9 +66,10 @@ class DownloadDialog(QDialog):
 
         self.success = False
         self.error_message = ""
-        self.thread = DownloadThread(url, target_dir)
+        self.thread = DownloadThread(url, target_dir, self)
         self.thread.progress.connect(self.update_progress)
-        self.thread.finished.connect(self.on_finished)
+        self.thread.completed.connect(self.on_completed)
+        self.thread.finished.connect(self.on_thread_finished)
         self.thread.start()
 
     def update_progress(self, downloaded, total, speed, time_left):
@@ -83,17 +87,29 @@ class DownloadDialog(QDialog):
             self.label.setText("Downloading patch assets...")
             self.details_label.setText(f"{d_mb:.1f} MB / {t_mb:.1f} MB ({s_kb:.1f} KB/s) - {time_str} left")
 
-    def on_finished(self, success, error_message):
+    def on_completed(self, success, error_message):
         self.success = success
         self.error_message = error_message
+
+    def on_thread_finished(self):
         self.accept()
+
+    def reject(self):
+        if self.thread.isRunning():
+            self.label.setText("Stopping safely after the current download step...")
+            self.label.repaint()
+            self.thread.requestInterruption()
+            self.thread.wait()
+            self.success = False
+            self.error_message = "Patch download cancelled."
+        super().reject()
 
 class ModInstallThread(QThread):
     progress = Signal(int, str)
-    finished = Signal(bool, str)
+    completed = Signal(bool, str)
 
-    def __init__(self, game_path, selected_mods, force_reinstall=False):
-        super().__init__()
+    def __init__(self, game_path, selected_mods, force_reinstall=False, parent=None):
+        super().__init__(parent)
         self.game_path = game_path
         self.selected_mods = selected_mods
         self.force_reinstall = force_reinstall
@@ -115,6 +131,16 @@ class ModInstallThread(QThread):
             installed_releases = {}
 
             for i, mod_name in enumerate(to_install):
+                if self.isInterruptionRequested():
+                    if installed_releases:
+                        mod_manager.update_mod_tracker(
+                            self.game_path,
+                            installed_releases.keys(),
+                            installed_releases,
+                            updater.CURRENT_VERSION,
+                        )
+                    self.completed.emit(False, "Mod installation cancelled.")
+                    return
                 self.progress.emit(i + 1, mod_name)
                 if mod_name in installed_already and not (self.force_reinstall or legacy_tracker):
                     continue
@@ -128,9 +154,9 @@ class ModInstallThread(QThread):
                 updater.CURRENT_VERSION,
             )
 
-            self.finished.emit(True, "")
+            self.completed.emit(True, "")
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.completed.emit(False, str(e))
 
     def apply_mod(self, mod_name):
         return mod_manager.install_mod(self.game_path, mod_name)
@@ -139,8 +165,8 @@ class ModInstallThread(QThread):
 class ModVersionCheckThread(QThread):
     checked = Signal(str, dict)
 
-    def __init__(self, game_path, installed_mods):
-        super().__init__()
+    def __init__(self, game_path, installed_mods, parent=None):
+        super().__init__(parent)
         self.game_path = game_path
         self.installed_mods = installed_mods
 
@@ -157,8 +183,8 @@ class ModVersionCheckThread(QThread):
         self.checked.emit(self.game_path, results)
 
 class ModInstallDialog(QDialog):
-    def __init__(self, game_path, selected_mods, force_reinstall=False):
-        super().__init__()
+    def __init__(self, game_path, selected_mods, force_reinstall=False, parent=None):
+        super().__init__(parent)
         self.setWindowTitle("Reinstalling Mods" if force_reinstall else "Installing Mods")
         self.setFixedSize(400, 120)
         self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.CustomizeWindowHint)
@@ -170,23 +196,35 @@ class ModInstallDialog(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximum(len(selected_mods))
         layout.addWidget(self.progress_bar)
-        
-        self.thread = ModInstallThread(game_path, selected_mods, force_reinstall)
-        self.thread.progress.connect(self.update_progress)
-        self.thread.finished.connect(self.on_finished)
-        self.thread.start()
-        
+
         self.success = False
         self.error_message = ""
+        self.thread = ModInstallThread(game_path, selected_mods, force_reinstall, self)
+        self.thread.progress.connect(self.update_progress)
+        self.thread.completed.connect(self.on_completed)
+        self.thread.finished.connect(self.on_thread_finished)
+        self.thread.start()
 
     def update_progress(self, current, mod_name):
         self.progress_bar.setValue(current)
         self.label.setText(f"Installing {mod_name}...")
 
-    def on_finished(self, success, error_message):
+    def on_completed(self, success, error_message):
         self.success = success
         self.error_message = error_message
+
+    def on_thread_finished(self):
         self.accept()
+
+    def reject(self):
+        if self.thread.isRunning():
+            self.label.setText("Stopping safely after the current mod...")
+            self.label.repaint()
+            self.thread.requestInterruption()
+            self.thread.wait()
+            self.success = False
+            self.error_message = "Mod installation cancelled."
+        super().reject()
 
 class LinuxLaunchOptionsDialog(QDialog):
     def __init__(self):
@@ -500,7 +538,7 @@ class ToolsDialog(QDialog):
         self.accept()
         icloud_url = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
         target_dir = os.path.abspath("Patches")
-        dlg = DownloadDialog(icloud_url, target_dir)
+        dlg = DownloadDialog(icloud_url, target_dir, self.parent)
         dlg.exec()
         if dlg.success:
             QMessageBox.information(self, "Success", "Patches downloaded successfully.")
@@ -535,11 +573,13 @@ class ToolsDialog(QDialog):
         else:
             QMessageBox.information(self, "Info", "No backups found.")
 
-def calculate_md5(file_path):
+def calculate_md5(file_path, should_cancel=None):
     hash_md5 = hashlib.md5()
     try:
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
+                if should_cancel is not None and should_cancel():
+                    return None
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except Exception:
@@ -657,16 +697,19 @@ VERSION_HASHES = {
 
 class ScannerThread(QThread):
     progress = Signal(int, int)
-    finished = Signal(list, str, bool)
+    completed = Signal(list, str, bool)
 
-    def __init__(self, path, manifest_path):
-        super().__init__()
+    def __init__(self, path, manifest_path, parent=None):
+        super().__init__(parent)
         self.path = path
         self.manifest_path = manifest_path
 
     def run(self):
         detected_version = "Unknown"
         is_readonly = False
+
+        if self.isInterruptionRequested():
+            return
         
         try:
             test_file = os.path.join(self.path, ".downgrader_test")
@@ -677,9 +720,15 @@ class ScannerThread(QThread):
             is_readonly = True
 
         for exe_name in ["gta_sa.exe", "gta-sa.exe"]:
+            if self.isInterruptionRequested():
+                return
             exe_path = os.path.join(self.path, exe_name)
             if os.path.exists(exe_path):
-                h = calculate_md5(exe_path)
+                h = calculate_md5(exe_path, self.isInterruptionRequested)
+                if self.isInterruptionRequested():
+                    return
+                if h is None:
+                    continue
                 if h in VERSION_HASHES:
                     detected_version = VERSION_HASHES[h]
                     break
@@ -690,7 +739,7 @@ class ScannerThread(QThread):
             with open(self.manifest_path, 'r') as f:
                 manifest = json.load(f)
         except Exception:
-            self.finished.emit([], detected_version, is_readonly)
+            self.completed.emit([], detected_version, is_readonly)
             return
 
         files_to_check = manifest.get("files", [])
@@ -698,6 +747,8 @@ class ScannerThread(QThread):
         results = []
 
         for i, file_info in enumerate(files_to_check):
+            if self.isInterruptionRequested():
+                return
             rel_path = file_info["path"]
             full_path = os.path.join(self.path, rel_path)
             
@@ -707,7 +758,9 @@ class ScannerThread(QThread):
                 if os.path.exists(alt_path):
                     full_path = alt_path
 
-            current_hash = calculate_md5(full_path)
+            current_hash = calculate_md5(full_path, self.isInterruptionRequested)
+            if self.isInterruptionRequested():
+                return
             target_hash = file_info["target_hash"]
             source_hash = file_info["source_hash"]
 
@@ -741,14 +794,14 @@ class ScannerThread(QThread):
             })
             self.progress.emit(i + 1, total)
 
-        self.finished.emit(results, detected_version, is_readonly)
+        self.completed.emit(results, detected_version, is_readonly)
 
 class PatchThread(QThread):
     file_progress = Signal(int, str, str)
-    finished = Signal(int, int)
+    completed = Signal(int, int)
 
-    def __init__(self, game_path, manifest, xdelta_bin, patches_dir):
-        super().__init__()
+    def __init__(self, game_path, manifest, xdelta_bin, patches_dir, parent=None):
+        super().__init__(parent)
         self.game_path = game_path
         self.manifest = manifest
         self.xdelta_bin = xdelta_bin
@@ -771,6 +824,8 @@ class PatchThread(QThread):
 
         files = self.manifest.get("files", [])
         for i, file_info in enumerate(files):
+            if self.isInterruptionRequested():
+                break
             rel_path = file_info["path"]
             action = file_info.get("action", "patch")
             
@@ -847,7 +902,7 @@ class PatchThread(QThread):
                 self.file_progress.emit(i, "Error", str(e))
                 fail_count += 1
 
-        self.finished.emit(success_count, fail_count)
+        self.completed.emit(success_count, fail_count)
 
     def status_bar_msg(self, msg):
         pass
@@ -864,8 +919,11 @@ class DowngraderApp(QMainWindow):
         self.is_v10_us = False
         self.mod_install_available = False
         self.mod_version_threads = []
+        self.scanner_threads = []
+        self.patch_thread = None
         self.installed_mod_versions = {}
         self.warned_legacy_tracker_paths = set()
+        self.shutdown_requested = False
 
         self.init_ui()
         
@@ -882,6 +940,27 @@ class DowngraderApp(QMainWindow):
         self.show()
         QApplication.processEvents()
         self.close_startup_splash()
+
+    def active_worker_threads(self):
+        return [thread for thread in self.findChildren(QThread) if thread.isRunning()]
+
+    def shutdown_workers(self):
+        """Cooperatively stop every worker before Qt destroys its QThread wrapper."""
+        self.shutdown_requested = True
+        workers = self.active_worker_threads()
+        for thread in workers:
+            thread.requestInterruption()
+        for thread in workers:
+            thread.wait()
+
+    def closeEvent(self, event):
+        self.close_startup_splash()
+        if self.active_worker_threads():
+            self.status_bar.showMessage("Finishing current work before closing...")
+            self.setEnabled(False)
+            self.status_bar.repaint()
+            self.shutdown_workers()
+        event.accept()
 
     def check_patches_and_start(self):
         if updater.has_internet():
@@ -960,7 +1039,7 @@ class DowngraderApp(QMainWindow):
                 icloud_url = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
                 target_dir = os.path.abspath("Patches")
                 
-                dlg = DownloadDialog(icloud_url, target_dir)
+                dlg = DownloadDialog(icloud_url, target_dir, self)
                 dlg.exec()
                 
                 if dlg.success:
@@ -1215,10 +1294,16 @@ class DowngraderApp(QMainWindow):
             return
 
         self.status_bar.showMessage("Scanning files...")
-        self.scanner = ScannerThread(path, self.resolved_manifest_path)
-        self.scanner.progress.connect(lambda cur, tot: self.status_bar.showMessage(f"Scanning: {cur}/{tot}"))
-        self.scanner.finished.connect(self.update_table)
-        self.scanner.start()
+        scanner = ScannerThread(path, self.resolved_manifest_path, self)
+        self.scanner = scanner
+        self.scanner_threads.append(scanner)
+        scanner.progress.connect(lambda cur, tot: self.status_bar.showMessage(f"Scanning: {cur}/{tot}"))
+        scanner.completed.connect(self.update_table)
+        scanner.finished.connect(
+            lambda scanner=scanner: self.scanner_threads.remove(scanner)
+            if scanner in self.scanner_threads else None
+        )
+        scanner.start()
 
         if linux_tools.is_linux():
             apps = linux_tools.get_steam_apps()
@@ -1325,7 +1410,7 @@ class DowngraderApp(QMainWindow):
             self.mod_update_status.setText("No downgrader-installed mods detected.")
 
     def start_mod_version_check(self, game_path, installed_mods):
-        thread = ModVersionCheckThread(game_path, sorted(installed_mods))
+        thread = ModVersionCheckThread(game_path, sorted(installed_mods), self)
         self.mod_version_threads.append(thread)
         thread.checked.connect(self.handle_mod_version_results)
         thread.finished.connect(lambda: self.mod_version_threads.remove(thread) if thread in self.mod_version_threads else None)
@@ -1430,9 +1515,9 @@ class DowngraderApp(QMainWindow):
         self.downgrade_btn.setEnabled(False)
         self.browse_btn.setEnabled(False)
         
-        self.patch_thread = PatchThread(path, manifest, xdelta_bin, patches_dir)
+        self.patch_thread = PatchThread(path, manifest, xdelta_bin, patches_dir, self)
         self.patch_thread.file_progress.connect(self.update_file_status)
-        self.patch_thread.finished.connect(self.handle_patch_finished)
+        self.patch_thread.completed.connect(self.handle_patch_finished)
         self.patch_thread.start()
 
     def update_file_status(self, row, status, message):
@@ -1496,7 +1581,7 @@ class DowngraderApp(QMainWindow):
             installed_mods,
             tracker_data,
         )
-        dlg = ModInstallDialog(game_path, effective_mods, force_reinstall)
+        dlg = ModInstallDialog(game_path, effective_mods, force_reinstall, self)
         dlg.exec()
         
         if dlg.success:
@@ -1521,6 +1606,7 @@ if __name__ == "__main__":
 
     startup_splash = StartupSplash(app)
     window = DowngraderApp(startup_splash)
+    app.aboutToQuit.connect(window.shutdown_workers)
 
     window.check_patches_and_start()
 

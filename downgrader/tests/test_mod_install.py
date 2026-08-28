@@ -38,7 +38,7 @@ class ModInstallThreadTests(unittest.TestCase):
         thread = ModInstallThread(game_dir.name, ["SilentPatch"])
         thread.apply_mod = Mock()
         results = []
-        thread.finished.connect(lambda success, error: results.append((success, error)))
+        thread.completed.connect(lambda success, error: results.append((success, error)))
 
         thread.run()
 
@@ -61,7 +61,7 @@ class ModInstallThreadTests(unittest.TestCase):
         }
         thread.apply_mod = Mock(return_value=installed_release)
         results = []
-        thread.finished.connect(lambda success, error: results.append((success, error)))
+        thread.completed.connect(lambda success, error: results.append((success, error)))
 
         thread.run()
 
@@ -80,7 +80,7 @@ class ModInstallThreadTests(unittest.TestCase):
         }
         thread.apply_mod = Mock(return_value=installed_release)
         results = []
-        thread.finished.connect(lambda success, error: results.append((success, error)))
+        thread.completed.connect(lambda success, error: results.append((success, error)))
 
         thread.run()
 

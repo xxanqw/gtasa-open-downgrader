@@ -173,28 +173,13 @@ jobs:
             gtasa-open-downgrader-windows.exe
             gtasa-open-downgrader-windows-offline.exe
           body: |
-            GTA SA Open Downgrader v0.2.1
+            GTA SA Open Downgrader v0.2.2
 
-            ## Startup experience
-            - Added a preparation splash window so one-file builds provide immediate feedback while starting
-            - Bundled the splash runtime and Tk libraries in packaged builds; end users do not need to install Tkinter
-            - Added a Qt fallback when the packaged splash IPC socket is unavailable
-            - Standardized Linux and Windows builds on Python 3.12
-
-            ## Linux packaging
-            - Migrated AppImage packaging to the maintained `appimagetool` 1.9.1 builder
-            - Added a pinned, checksum-verified static AppImage runtime
-            - Removed the end-user `libfuse2` dependency and documented the extraction fallback for systems without FUSE
-
-            ## Mod downloads
-            - Updated Framerate Vigilante to the current official ZIP package
-            - Added support for ShareMods' current OVH object-storage download links
-            - Avoided intermittent ShareMods 403 responses with a compatible request profile
-            - Ensured only the GTA San Andreas ASI and configuration are extracted from the multi-game archive
-
-            ## Dependencies and maintenance
-            - Updated and locked all Python dependencies to their latest compatible releases
-            - Updated GitHub Actions dependencies to their latest stable releases
+            ## Bug fixes
+            - Fixed the application aborting with `QThread: Destroyed while thread is still running` when closing during background work
+            - Added cooperative cancellation and graceful waiting for scans, downloads, mod checks, mod installations, and patching
+            - Kept download and mod-install dialogs alive until their native worker threads have fully stopped
+            - Preserved tracking data for mods installed before a cancellation
           draft: false
           prerelease: false
         env:

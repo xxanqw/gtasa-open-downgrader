@@ -6,7 +6,7 @@ import subprocess
 import time
 from packaging.version import InvalidVersion, Version
 
-CURRENT_VERSION = "v0.2.1"
+CURRENT_VERSION = "v0.2.2"
 REPO_URL = "https://api.github.com/repos/xxanqw/gtasa-open-downgrader/releases/latest"
 
 
