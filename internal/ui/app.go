@@ -55,6 +55,11 @@ type Window struct {
 	transferStart                         time.Time
 	transferBase                          int64
 	updateButton                          *widget.Button
+	summary                               *widget.Label
+	modLabels                             map[string]*widget.Label
+	tabs                                  *container.AppTabs
+	modsButton, detailsButton             *widget.Button
+	selectedRow                           int
 }
 
 func Run(gamePath, patchPath string) {
@@ -80,21 +85,33 @@ func Run(gamePath, patchPath string) {
 	a.Run()
 }
 func New(a fyne.App) *Window {
+	a.Settings().SetTheme(compactTheme{theme.DefaultTheme()})
 	cache, e := os.UserCacheDir()
 	if e != nil {
 		cache = os.TempDir()
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
-	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, warned: map[string]bool{}}
+	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedRow: -1, warned: map[string]bool{}}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
-	w.window.Resize(fyne.NewSize(1100, 760))
+	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
 	w.path = widget.NewEntry()
 	w.path.SetPlaceHolder("Select your GTA San Andreas directory")
 	w.path.SetText(a.Preferences().String("game-path"))
-	w.path.OnChanged = func(string) { w.scanPath = ""; w.generation++; w.refreshEnabled() }
+	w.path.OnChanged = func(string) {
+		w.scanPath = ""
+		w.generation++
+		w.rows = nil
+		if w.table != nil {
+			w.table.UnselectAll()
+			w.table.Refresh()
+			w.refreshSummary()
+			w.version.SetText("Scan this folder to detect the game version.")
+		}
+		w.refreshEnabled()
+	}
 	w.path.OnSubmitted = func(string) { w.scan() }
-	browse := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+	browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
 		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, e error) {
 			if e != nil {
 				w.error(e)
@@ -108,42 +125,68 @@ func New(a fyne.App) *Window {
 		d.Show()
 	})
 	scan := widget.NewButtonWithIcon("Scan", theme.SearchIcon(), w.scan)
-	w.version = widget.NewLabel("Version: waiting for scan")
-	w.status = widget.NewLabel("Ready")
-	w.status.Wrapping = fyne.TextWrapWord
+	w.version = compactLabel("Select a game folder to get started.")
+	w.version.TextStyle = fyne.TextStyle{Bold: true}
+	w.summary = compactLabel("Scan a game folder to check its files.")
+	w.status = compactLabel("Ready")
 	w.progress = widget.NewProgressBar()
-	w.modStatus = widget.NewLabel("Select fixes to install after downgrading, or install them separately.")
+	w.modStatus = widget.NewLabel("Select mods to install with the downgrade, or install them separately.")
 	w.modStatus.Wrapping = fyne.TextWrapWord
-	w.table = widget.NewTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject { return widget.NewLabel("") }, func(id widget.TableCellID, o fyne.CanvasObject) {
+	w.table = widget.NewTable(func() (int, int) { return len(w.rows) + 1, 2 }, func() fyne.CanvasObject { return compactLabel("") }, func(id widget.TableCellID, o fyne.CanvasObject) {
+		label := o.(*widget.Label)
 		value := ""
+		label.TextStyle = fyne.TextStyle{Bold: id.Row == 0}
+		label.Importance = widget.MediumImportance
 		if id.Row == 0 {
-			value = []string{"File", "Needs patch", "Status", "Current MD5", "Target MD5"}[id.Col]
+			value = []string{"File", "Status"}[id.Col]
 		} else if id.Row <= len(w.rows) {
 			r := w.rows[id.Row-1]
-			value = []string{r.Path, r.NeedsPatch, r.Status, r.CurrentHash, r.TargetHash}[id.Col]
+			value = []string{r.Path, fileStatus(r)}[id.Col]
+			if id.Col == 1 {
+				switch {
+				case strings.HasPrefix(r.Status, "Failed") || strings.HasPrefix(r.Status, "Error"):
+					label.Importance = widget.DangerImportance
+				case r.Status == "Missing" || r.Status == "Modified":
+					label.Importance = widget.WarningImportance
+				case strings.HasPrefix(r.Status, "Already") || r.Status == "Success":
+					label.Importance = widget.SuccessImportance
+				}
+			}
 		}
-		o.(*widget.Label).SetText(value)
+		label.SetText(value)
 	})
-	for col, width := range []float32{230, 115, 235, 310, 310} {
-		w.table.SetColumnWidth(col, width)
+	w.detailsButton = widget.NewButtonWithIcon("Details", theme.InfoIcon(), w.showFileDetails)
+	w.detailsButton.Disable()
+	w.table.OnSelected = func(id widget.TableCellID) {
+		w.selectedRow = id.Row - 1
+		if w.selectedRow >= 0 && w.selectedRow < len(w.rows) {
+			w.detailsButton.Enable()
+		} else {
+			w.detailsButton.Disable()
+		}
 	}
+	w.table.OnUnselected = func(widget.TableCellID) { w.selectedRow = -1; w.detailsButton.Disable() }
 	var checkObjects []fyne.CanvasObject
 	for _, source := range mods.Catalog {
 		name := source.Name
-		c := widget.NewCheck(name, func(bool) { w.selectDependencies() })
+		c := widget.NewCheck(strings.TrimSuffix(name, " (60fps fix)"), func(bool) { w.selectDependencies() })
 		w.checks[name] = c
-		checkObjects = append(checkObjects, c)
+		state := compactLabel("Not installed")
+		w.modLabels[name] = state
+		checkObjects = append(checkObjects, container.NewBorder(nil, nil, container.NewGridWrap(fyne.NewSize(210, 28), c), nil, state))
 	}
-	w.downgrade = widget.NewButtonWithIcon("Downgrade & install selected mods", theme.DownloadIcon(), w.apply)
+	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.DownloadIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
-	w.install = widget.NewButton("Install selected mods", func() { w.installMods(false) })
-	w.reinstall = widget.NewButton("Force reinstall / update selected", func() { w.installMods(true) })
+	w.install = widget.NewButton("Install selected", func() { w.installMods(false) })
+	w.reinstall = widget.NewButton("Reinstall / update selected", func() { w.installMods(true) })
 	tools := widget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
-	about := widget.NewButton("About", func() {
-		dialog.ShowCustom("About GTA SA Open Downgrader", "Close", container.NewVBox(widget.NewLabel("Go / Fyne rewrite · "+updater.Version), widget.NewLabel("Inspired by the RockstarNexus Downgrader. MIT licensed."), widget.NewHyperlink("Source and releases", mustURL("https://github.com/xxanqw/gtasa-open-downgrader")), widget.NewLabel("Bundled xdelta3: Apache License 2.0"), container.NewVScroll(widget.NewLabel(assets.XdeltaLicense))), w.window)
+	var more *widget.Button
+	more = widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {
+		menu := fyne.NewMenu("", fyne.NewMenuItem("Check app updates", func() { w.checkUpdates(true) }), fyne.NewMenuItem("About", w.showAbout))
+		pos := a.Driver().AbsolutePositionForObject(more).Add(fyne.NewPos(0, more.Size().Height))
+		widget.ShowPopUpMenuAtPosition(menu, w.window.Canvas(), pos)
 	})
-	updates := widget.NewButton("Check app updates", func() { w.checkUpdates(true) })
-	w.updateButton = updates
+	w.updateButton = more
 	w.cancelButton = widget.NewButton("Cancel", func() {
 		if w.cancel != nil {
 			w.cancel()
@@ -152,10 +195,19 @@ func New(a fyne.App) *Window {
 		}
 	})
 	w.cancelButton.Disable()
-	w.controls = []fyne.Disableable{w.path, browse, scan, tools, updates}
-	top := container.NewVBox(container.NewBorder(nil, nil, widget.NewLabel("Game folder"), container.NewHBox(browse, scan), w.path), container.NewBorder(nil, nil, w.version, container.NewHBox(tools, updates, about)))
-	bottom := container.NewVBox(widget.NewSeparator(), widget.NewLabelWithStyle("Community fixes & enhancements", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), container.NewGridWithColumns(3, checkObjects...), w.modStatus, container.NewHBox(w.downgrade, w.install, w.reinstall), w.progress, container.NewBorder(nil, nil, nil, w.cancelButton, w.status))
-	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.table))
+	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
+	w.modsButton = widget.NewButton("Choose mods", func() { w.tabs.SelectIndex(1) })
+	table := container.New(&fileTableLayout{table: w.table}, w.table)
+	fileActions := container.NewBorder(nil, nil, container.NewHBox(w.downgrade, w.modsButton), w.detailsButton, nil)
+	files := container.NewBorder(w.summary, fileActions, nil, nil, table)
+	modActions := container.NewHBox(w.install, w.reinstall)
+	modContent := container.NewBorder(w.modStatus, modActions, nil, nil, container.NewVScroll(container.NewVBox(checkObjects...)))
+	w.tabs = container.NewAppTabs(container.NewTabItem("Game files", files), container.NewTabItem("Mods", modContent))
+	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
+	progress := container.NewGridWrap(fyne.NewSize(128, 28), w.progress)
+	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), func() { dialog.ShowInformation("Operation status", w.status.Text, w.window) })
+	bottom := container.NewBorder(nil, nil, nil, container.NewHBox(statusDetails, progress, w.cancelButton), w.status)
+	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.tabs))
 	w.refreshEnabled()
 	return w
 }
@@ -218,7 +270,7 @@ func (w *Window) selectDependencies() {
 		return
 	}
 	w.dependencies = true
-	defer func() { w.dependencies = false }()
+	defer func() { w.dependencies = false; w.refreshModSelection() }()
 	dependent := false
 	for name, c := range w.checks {
 		if name != "ASI Loader" && name != "ModLoader" && c.Checked {
@@ -384,23 +436,30 @@ func (w *Window) scan() {
 		w.scanPath = root
 		w.readonly = result.ReadOnly
 		w.rows = result.Rows
+		w.table.UnselectAll()
+		w.refreshSummary()
 		w.table.Refresh()
-		w.version.SetText(fmt.Sprintf("Version: %s · Read-only: %t", result.Version, result.ReadOnly))
+		access := "Writable"
+		if result.ReadOnly {
+			access = "Read-only — changes disabled"
+		}
+		w.version.SetText(result.Version + "  ·  " + access)
 		w.app.Preferences().SetString("game-path", root)
 		w.dependencies = true
 		for name, c := range w.checks {
 			c.SetChecked(tracker.Has(name))
-			label := name
+			label := "Not installed"
 			if tracker.Has(name) {
 				version := tracker.Versions[name].Version
 				if version == "" {
 					version = "version unknown"
 				}
-				label += " (" + version + ")"
+				label = "Installed · " + version
 			}
-			c.SetText(label)
+			w.modLabels[name].SetText(label)
 		}
 		w.dependencies = false
+		w.refreshModSelection()
 		w.refreshEnabled()
 		if tracker.Legacy() && !w.warned[root] {
 			w.warned[root] = true
@@ -451,7 +510,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 				return
 			}
 			for name, label := range labels {
-				w.checks[name].SetText(label)
+				w.modLabels[name].SetText(strings.TrimSuffix(strings.TrimPrefix(label, name+" ("), ")"))
 			}
 			w.modStatus.SetText(fmt.Sprintf("Mod checks: %d updates · %d unknown versions · %d unavailable. Reinstall selected mods to update.", updates, unknown, failed))
 		})
@@ -533,6 +592,7 @@ func (w *Window) apply() {
 								w.rows[i].Status += " · " + message
 							}
 							w.table.Refresh()
+							w.refreshSummary()
 						}
 						w.progress.SetValue(float64(i+1) / float64(len(m.Files)))
 						w.status.SetText(m.Files[i].Path + " · " + status)
@@ -588,7 +648,7 @@ func (w *Window) checkUpdates(manual bool) {
 				}
 				return
 			}
-			w.updateButton.SetText("Update to " + r.Tag)
+			w.updateButton.SetText("Update available")
 			if w.busy {
 				return
 			}

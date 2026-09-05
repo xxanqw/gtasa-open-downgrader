@@ -208,6 +208,7 @@ func (w *Window) tools() {
 		}))
 	}
 	d = dialog.NewCustom("Downgrader tools", "Close", container.NewVBox(objects...), w.window)
-	d.Resize(fyne.NewSize(540, 600))
+	size := w.window.Canvas().Size()
+	d.Resize(fyne.NewSize(min(float32(540), size.Width-40), min(float32(600), size.Height-40)))
 	d.Show()
 }
