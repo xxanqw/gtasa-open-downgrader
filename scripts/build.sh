@@ -20,5 +20,9 @@ if [[ "$system" == windows ]]; then
   "${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/downgrader/resources_windows_amd64.syso
   trap 'rm -f cmd/downgrader/resources_windows_amd64.syso' EXIT
 fi
-mkdir -p dist
+mkdir -p dist build/tmp
+# Offline CGO linking may need several GiB; avoid a small RAM-backed /tmp.
+if [[ $(go env GOHOSTOS) == linux ]]; then
+  export TMPDIR="$PWD/build/tmp" GOTMPDIR="$PWD/build/tmp"
+fi
 CGO_ENABLED=1 go build -trimpath -tags "$tags" -ldflags "$flags" -o "dist/$name" ./cmd/downgrader

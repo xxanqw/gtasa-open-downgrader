@@ -87,7 +87,7 @@ func Extract(ctx context.Context, root, mod, archive, kind string) error {
 				return e
 			}
 			rel = filepath.ToSlash(rel)
-			if rel == TrackerPath || strings.HasPrefix(strings.ToLower(rel), "backups/") || strings.HasPrefix(strings.ToLower(rel), ".downgrader") {
+			if strings.EqualFold(rel, TrackerPath) || strings.HasPrefix(strings.ToLower(rel), "backups/") || strings.HasPrefix(strings.ToLower(rel), ".downgrader") {
 				return fmt.Errorf("mod package uses reserved path: %s", rel)
 			}
 			files = append(files, rel)

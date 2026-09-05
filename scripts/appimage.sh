@@ -5,7 +5,8 @@ variant=${1:-online}
 case "$variant" in online) name=gtasa-open-downgrader-linux;; offline) name=gtasa-open-downgrader-linux-offline;; *) echo 'Use online or offline' >&2; exit 2;; esac
 : "${APPIMAGETOOL:?Set APPIMAGETOOL to appimagetool executable}"
 : "${APPIMAGE_RUNTIME:?Set APPIMAGE_RUNTIME to the static type2 runtime}"
-appdir=$(mktemp -d)
+mkdir -p build
+appdir=$(mktemp -d "$PWD/build/AppDir.XXXXXX")
 trap 'rm -rf "$appdir"' EXIT
 mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/share/licenses/gtasa-open-downgrader"
 cp "dist/$name" "$appdir/usr/bin/$name"
@@ -22,7 +23,7 @@ Type=Application
 Name=GTA SA Open Downgrader
 Exec=$name
 Icon=gtasa-open-downgrader
-Categories=Game;Utility;
+Categories=Game;
 DESKTOP
 cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/sh

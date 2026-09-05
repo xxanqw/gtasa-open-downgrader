@@ -34,3 +34,20 @@ Baseline: Python v0.2.2, commit `cee6363`. All 21 existing unittest cases passed
 Automated checks cover the original tests' archive/tracker/version/shutdown contracts plus real xdelta round trips, backups/aliases, cancellation, PE validation, HTTP fixtures, path/link rejection, Fyne dependencies/read-only controls and release-asset selection.
 
 A real licensed game installation is still required for a complete downgrade-and-launch acceptance test. Windows Registry/shortcut behavior and update replacement/restart require a Windows runtime check. Steam Deck, openSUSE and GPU/driver compatibility need representative machines. Upstream mod hosting, especially ShareMods, can change independently of this application.
+
+## Migration verification on this branch
+
+- Baseline Python: 21 tests passed before removal.
+- Go unit/integration fixtures: `go test ./...`, `go test -race ./...` and `go vet ./...` passed.
+- Native Linux Fyne window rendered under an isolated Xvfb display, scanned disposable files and exited cleanly after cancellation/shutdown. The actual offline binary also extracted its embedded patch set successfully.
+- The official iCloud archive downloaded and validated: 17 manifest files (one executable copy, 16 xdelta patches), approximately 847 MiB extracted.
+- All nine official mod packages resolved, downloaded and installed into disposable directories successfully, including ShareMods, using the opt-in live test below.
+- Windows amd64 online/offline GUI cross-builds succeeded with icon/manifest resources. Both online/offline AppImages packaged successfully; the online AppImage extraction launcher also ran successfully. Runtime Windows acceptance is still pending; cross-compilation does not validate Registry access, shortcuts, drivers or restart behavior.
+
+To repeat the live upstream check (downloads official packages into test temporary directories):
+
+```bash
+go test -tags integration ./internal/mods -run TestOfficialPackages -v
+```
+
+Linux build and AppImage scripts stage large temporary files on the project disk; offline CGO linking needs several GiB of scratch space. The build downloads and generated assets remain ignored by Git.

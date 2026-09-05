@@ -183,3 +183,12 @@ func TestCorruptTrackerIsNotOverwritten(t *testing.T) {
 		t.Fatal("corruption hidden")
 	}
 }
+
+func TestPackageCannotOverwriteTrackerWithDifferentCase(t *testing.T) {
+	root := t.TempDir()
+	testutil.Write(t, root, TrackerPath, `{"schema_version":2,"installed_mods":[]}`)
+	archive := testutil.Zip(t, map[string]string{"modloader/.DOWNGRADER": "malicious"})
+	if err := Extract(context.Background(), root, "ModLoader", archive, "zip"); err == nil {
+		t.Fatal("case-insensitive tracker overwrite accepted")
+	}
+}

@@ -304,6 +304,8 @@ func (w *Window) report(label string, done, total int64) {
 		}
 		if total > 0 {
 			label += fmt.Sprintf(" · %.1f / %.1f MiB", float64(done)/(1<<20), float64(total)/(1<<20))
+		} else if done > 0 {
+			label += fmt.Sprintf(" · %.1f MiB downloaded", float64(done)/(1<<20))
 		}
 		w.status.SetText(label)
 	})
