@@ -1,41 +1,22 @@
-# Python
+# Local caches and build products
+.venv/
 __pycache__/
 *.py[cod]
-*$py.class
-.venv/
-venv/
-ENV/
 .env
-.python-version
-.lock
 uv.lock
-!downgrader/uv.lock
-
-# Build / Distribution
 dist/
 build/
-*.spec
-.temp_patch_gen/
-offline_build_linux/
-offline_build_win/
+*.syso
 *.AppImage
-*-installer.exe
-*-offline.zip
-update.ps1
-update.sh
-sfx_config.txt
-tmp_archive.7z
-
-# GTA SA Specific (Source and Target directories for patch generation)
+*.test
+*.test.exe
+coverage.out
+# Never commit copyrighted game files, generated patches or local backups.
+Patches/
 SA_STEAM/
 SA_10US/
-
-# OS specific
+.temp_patch_gen/
+.patch-download-*/
+.patch-import-*/
 .DS_Store
 Thumbs.db
-
-# Project specific
-Patches/
-!Patches/manifest.json
-!Patches/**/*.xdelta
-!Patches/Patches.zip

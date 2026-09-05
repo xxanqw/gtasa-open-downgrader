@@ -4,7 +4,7 @@ $SteamDir = "SA_STEAM"
 $V10Dir = "SA_10US"
 $PatchesDir = "Patches"
 $TempDir = ".temp_patch_gen"
-$XdeltaBin = "downgrader\bin\xdelta3.exe"
+$XdeltaBin = "internal\assets\xdelta3.exe"
 
 if (-not (Test-Path $XdeltaBin)) {
     $XdeltaBin = "xdelta3.exe"

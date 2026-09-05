@@ -6,7 +6,7 @@ STEAM_DIR="SA_STEAM"
 V10_DIR="SA_10US"
 PATCHES_DIR="Patches"
 TEMP_DIR=".temp_patch_gen"
-XDELTA_BIN="downgrader/bin/xdelta3_linux"
+XDELTA_BIN="internal/assets/xdelta3_linux"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

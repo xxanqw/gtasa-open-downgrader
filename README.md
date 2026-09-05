@@ -24,12 +24,12 @@ Contributions for other source versions are welcome through GitHub issues.
 - **Source Version:** NewSteam R2 Global
 - **Target Version:** v1.0 US (Hoodlum)
 - **Download:** [Patches.zip (iCloud)](https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches)
-- **Resolver:** Downloads use the published [`icloud-resolver`](https://pypi.org/project/icloud-resolver/) package. The archive is validated and replaces existing patch assets only after successful extraction.
+- **Resolver:** A Go HTTP client resolves the public iCloud file link. Downloads are cancellable; manifests and archive paths are validated before replacing existing patch assets. Local ZIP archives can be imported from Tools.
 
 ## Features
 
 - **Game Detection:** Checks the Windows Registry and common Steam locations on Linux. A game directory can always be selected manually.
-- **Responsive Startup:** Packaged builds show a preparation splash immediately while the one-file application is unpacked and initialized.
+- **Responsive Startup:** A native Fyne window opens immediately while background preparation runs. No PyInstaller, Qt, Tcl/Tk or splash IPC.
 - **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.
 - **One-Click Downgrade:** Converts supported files to v1.0 US with `xdelta3`, backing up original files before replacing them.
 - **Official Mod Packages:** Downloads mods from their official upstream sources and normalizes their archive layouts automatically.
@@ -71,7 +71,7 @@ Offline builds bundle the downgrade patch assets, so the supported game can be d
 
 ### Windows
 
-Download and run the appropriate `.exe` from the [latest GitHub release](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest). No Python or Tkinter installation is required.
+Download and run the appropriate `.exe` from the [latest GitHub release](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest). No Python, Qt, Tcl/Tk or WebView installation is required.
 
 ### Linux (AppImage)
 
@@ -82,7 +82,7 @@ chmod +x gtasa-open-downgrader-linux.AppImage
 ./gtasa-open-downgrader-linux.AppImage
 ```
 
-Current AppImage builds bundle a statically linked runtime and do not require `libfuse2`, Python, or Tkinter.
+AppImages use a statically linked AppImage runtime and do not require `libfuse2`, Python, Qt or Tcl/Tk. Fyne still requires working OpenGL and system X11/Wayland libraries. Release CI builds on Ubuntu 22.04 (glibc 2.35 baseline).
 On systems where FUSE is unavailable entirely, use the runtime's extraction fallback:
 
 ```bash
@@ -95,19 +95,76 @@ The app checks common native Steam and Flatpak Steam locations plus one common S
 
 ## Development
 
-Python 3.11 or newer and [`uv`](https://docs.astral.sh/uv/) are required. Release builds use Python 3.12, so it is the recommended development version.
+The app is written in Go with [Fyne](https://docs.fyne.io/started/), without HTML or a WebView. Go 1.25 or newer, a C compiler and platform graphics headers are required. Dependencies are pinned in `go.mod` and `go.sum`.
+
+On Ubuntu/Debian:
 
 ```bash
-uv sync --frozen --project downgrader --python 3.12 --group build
-uv run --project downgrader python -m unittest discover -s downgrader/tests -v
-uv run --project downgrader python downgrader/main.py
+sudo apt-get install gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 ```
 
-Running from source uses the Qt splash and does not require Tkinter. Creating a PyInstaller build with `--splash` requires Tcl/Tk on the build machine; PyInstaller embeds those libraries in the resulting executable, so users of release builds do not need to install them.
+```bash
+go run ./cmd/downgrader
+go test ./...
+go test -race ./...
+go vet ./...
+./scripts/build.sh online
+```
+
+Outputs are in `dist/`. You can provide paths explicitly:
+
+```bash
+go run ./cmd/downgrader --game "/path/to/Grand Theft Auto San Andreas" --patches "/path/to/Patches"
+```
+
+The app stores downloaded patches in the user's cache directory (`gtasa-open-downgrader/Patches`). It also accepts `Patches` in the working directory or beside the executable. Game backups and the mod tracker remain inside the selected game directory, compatible with earlier releases.
+
+### Windows builds
+
+Install Go and an MSYS2 MinGW-w64 GCC toolchain. Put its `bin` directory on `PATH`, then run from PowerShell:
+
+```powershell
+go test ./...
+.\scripts\build.ps1 online
+```
+
+From Linux with MinGW-w64 installed:
+
+```bash
+GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc ./scripts/build.sh online
+```
+
+Fyne uses CGO: cross-compilation requires a C compiler for the target, as explained in [Fyne's cross-compilation documentation](https://docs.fyne.io/started/cross-compiling/). Bundled xdelta3 supports Linux/Windows **amd64** only.
+
+### Offline builds and AppImages
+
+Prepare the official patch set once (approximately 880 MB downloaded):
+
+```bash
+go run ./cmd/patch-assets
+# Or import an archive already downloaded:
+go run ./cmd/patch-assets -archive /path/to/Patches.zip
+./scripts/build.sh offline
+# Windows: .\scripts\build.ps1 offline
+```
+
+The offline build embeds the validated patch directory with `go:embed`; a build without `manifest.json` fails. The first run copies embedded patches to a writable cache. Mods and updates still need internet access. Do not commit patch/game assets.
+
+`./scripts/appimage.sh online` and `offline` package built Linux binaries. Set `APPIMAGETOOL` and `APPIMAGE_RUNTIME` to downloaded tools; the release workflow supplies checksum-pinned versions. AppImages bundle liblzma for xdelta3, while graphics libraries/drivers come from the host. The workflow creates online/offline Linux binaries, AppImages, Windows executables and `SHA256SUMS`.
+
+### Package layout and parity
+
+- `cmd/downgrader`: application and update-helper entry point.
+- `cmd/patch-assets`: patch download/import/validation for offline builds.
+- `internal/game`, `patch`, `mods`, `download`: cancellable domain operations.
+- `internal/platform`, `updater`, `jobs`: OS integration, updates and worker lifecycle.
+- `internal/ui`, `assets`: Fyne widgets and embedded artwork/binaries.
+
+See [migration parity and compatibility notes](docs/parity.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE). Bundled `xdelta3` is licensed under the Apache License 2.0; its license is included alongside the binary.
+This project is licensed under the [MIT License](LICENSE). Bundled `xdelta3` is licensed under the Apache License 2.0; its license is included in `internal/assets/LICENSE.txt` and in the application About dialog.
 
 ## How to Generate Patches
 
