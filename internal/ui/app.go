@@ -58,8 +58,8 @@ type Window struct {
 	summary                               *widget.Label
 	modLabels                             map[string]*widget.Label
 	tabs                                  *container.AppTabs
-	modsButton, detailsButton             *widget.Button
-	selectedRow                           int
+	modsButton, copyButton                *widget.Button
+	selectedCell                          widget.TableCellID
 }
 
 func Run(gamePath, patchPath string) {
@@ -91,7 +91,7 @@ func New(a fyne.App) *Window {
 		cache = os.TempDir()
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
-	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedRow: -1, warned: map[string]bool{}}
+	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedCell: widget.TableCellID{Row: -1}, warned: map[string]bool{}}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
@@ -132,17 +132,17 @@ func New(a fyne.App) *Window {
 	w.progress = widget.NewProgressBar()
 	w.modStatus = widget.NewLabel("Select mods to install with the downgrade, or install them separately.")
 	w.modStatus.Wrapping = fyne.TextWrapWord
-	w.table = widget.NewTable(func() (int, int) { return len(w.rows) + 1, 2 }, func() fyne.CanvasObject { return compactLabel("") }, func(id widget.TableCellID, o fyne.CanvasObject) {
+	w.table = widget.NewTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject { return compactLabel("") }, func(id widget.TableCellID, o fyne.CanvasObject) {
 		label := o.(*widget.Label)
 		value := ""
 		label.TextStyle = fyne.TextStyle{Bold: id.Row == 0}
 		label.Importance = widget.MediumImportance
 		if id.Row == 0 {
-			value = []string{"File", "Status"}[id.Col]
+			value = fileColumns[id.Col]
 		} else if id.Row <= len(w.rows) {
 			r := w.rows[id.Row-1]
-			value = []string{r.Path, fileStatus(r)}[id.Col]
-			if id.Col == 1 {
+			value = fileValues(r)[id.Col]
+			if id.Col == 2 {
 				switch {
 				case strings.HasPrefix(r.Status, "Failed") || strings.HasPrefix(r.Status, "Error"):
 					label.Importance = widget.DangerImportance
@@ -155,17 +155,26 @@ func New(a fyne.App) *Window {
 		}
 		label.SetText(value)
 	})
-	w.detailsButton = widget.NewButtonWithIcon("Details", theme.InfoIcon(), w.showFileDetails)
-	w.detailsButton.Disable()
+	w.table.StickyRowCount = 1
+	w.copyButton = widget.NewButtonWithIcon("Copy value", theme.ContentCopyIcon(), func() {
+		id := w.selectedCell
+		if id.Row > 0 && id.Row <= len(w.rows) {
+			w.app.Clipboard().SetContent(fileValues(w.rows[id.Row-1])[id.Col])
+		}
+	})
+	w.copyButton.Disable()
 	w.table.OnSelected = func(id widget.TableCellID) {
-		w.selectedRow = id.Row - 1
-		if w.selectedRow >= 0 && w.selectedRow < len(w.rows) {
-			w.detailsButton.Enable()
+		w.selectedCell = id
+		if id.Row > 0 && id.Row <= len(w.rows) {
+			w.copyButton.Enable()
 		} else {
-			w.detailsButton.Disable()
+			w.copyButton.Disable()
 		}
 	}
-	w.table.OnUnselected = func(widget.TableCellID) { w.selectedRow = -1; w.detailsButton.Disable() }
+	w.table.OnUnselected = func(widget.TableCellID) {
+		w.selectedCell = widget.TableCellID{Row: -1}
+		w.copyButton.Disable()
+	}
 	var checkObjects []fyne.CanvasObject
 	for _, source := range mods.Catalog {
 		name := source.Name
@@ -197,8 +206,8 @@ func New(a fyne.App) *Window {
 	w.cancelButton.Disable()
 	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
 	w.modsButton = widget.NewButton("Choose mods", func() { w.tabs.SelectIndex(1) })
-	table := container.New(&fileTableLayout{table: w.table}, w.table)
-	fileActions := container.NewBorder(nil, nil, container.NewHBox(w.downgrade, w.modsButton), w.detailsButton, nil)
+	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
+	fileActions := container.NewBorder(nil, nil, container.NewHBox(w.downgrade, w.modsButton), w.copyButton, nil)
 	files := container.NewBorder(w.summary, fileActions, nil, nil, table)
 	modActions := container.NewHBox(w.install, w.reinstall)
 	modContent := container.NewBorder(w.modStatus, modActions, nil, nil, container.NewVScroll(container.NewVBox(checkObjects...)))

@@ -37,8 +37,28 @@ func compactLabel(text string) *widget.Label {
 	return l
 }
 
-// Table column widths follow the viewport; long paths and statuses can be read
-// in Details instead of forcing the primary information off the right edge.
+// The file grid uses tighter typography and padding than the surrounding controls.
+// Leave Fyne's scale setting intact for high-DPI displays.
+type fileTableTheme struct{ fyne.Theme }
+
+func (t fileTableTheme) Size(name fyne.ThemeSizeName) float32 {
+	switch name {
+	case theme.SizeNameText:
+		return 11
+	case theme.SizeNameInnerPadding:
+		return 2
+	}
+	return t.Theme.Size(name)
+}
+
+var fileColumns = [5]string{"File", "Patch", "Status", "Current MD5", "Target MD5"}
+
+func fileValues(row game.Row) [5]string {
+	return [5]string{row.Path, row.NeedsPatch, row.Status, row.CurrentHash, row.TargetHash}
+}
+
+// Keep all five columns in the viewport. Long values elide like the original
+// Qt table; selecting a cell allows copying its complete value.
 type fileTableLayout struct {
 	table *widget.Table
 	width float32
@@ -49,43 +69,14 @@ func (l *fileTableLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	if l.width != size.Width {
 		l.width = size.Width
 		usable := max(float32(0), size.Width-24)
-		l.table.SetColumnWidth(0, usable*0.57)
-		l.table.SetColumnWidth(1, usable*0.43)
+		for col, fraction := range []float32{0.25, 0.07, 0.24, 0.22, 0.22} {
+			l.table.SetColumnWidth(col, usable*fraction)
+		}
 	}
 	l.table.Move(fyne.NewPos(0, 0))
 	l.table.Resize(size)
 }
 
-func fileStatus(row game.Row) string {
-	switch row.Status {
-	case "Original (Needs Patch)":
-		return "Needs downgrade"
-	case "Already Downgraded":
-		return "Downgraded"
-	case "Already Downgraded (LAA)":
-		return "Downgraded · 4GB enabled"
-	case "Modified":
-		return "Modified · verification required"
-	default:
-		return row.Status
-	}
-}
-func fileDetails(row game.Row) string {
-	return fmt.Sprintf("File: %s\nStatus: %s\nNeeds patch: %s\n\nCurrent MD5: %s\nTarget MD5: %s", row.Path, row.Status, row.NeedsPatch, row.CurrentHash, row.TargetHash)
-}
-func (w *Window) showFileDetails() {
-	if w.selectedRow < 0 || w.selectedRow >= len(w.rows) {
-		return
-	}
-	text := fileDetails(w.rows[w.selectedRow])
-	entry := widget.NewLabel(text)
-	entry.Selectable = true
-	entry.Wrapping = fyne.TextWrapBreak
-	d := dialog.NewCustom("File details", "Close", container.NewBorder(nil, widget.NewButtonWithIcon("Copy details", theme.ContentCopyIcon(), func() { w.window.Clipboard().SetContent(text) }), nil, nil, container.NewVScroll(entry)), w.window)
-	size := w.window.Canvas().Size()
-	d.Resize(fyne.NewSize(min(float32(560), size.Width-40), min(float32(320), size.Height-60)))
-	d.Show()
-}
 func (w *Window) refreshSummary() {
 	if w.summary == nil {
 		return

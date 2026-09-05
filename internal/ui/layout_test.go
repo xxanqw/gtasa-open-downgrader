@@ -34,7 +34,7 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.checks["SilentPatch"].SetChecked(true)
 	w.modLabels["SilentPatch"].SetText("Installed · 1.1-BUILD34.1-SA")
 	w.modLabels["Widescreen Fixes"].SetText("Update available · 2026-09-05")
-	w.status.SetText("Scan complete. Select a file for details.")
+	w.status.SetText("Scan complete. Select a cell to copy its full value.")
 	w.progress.SetValue(1)
 	w.window.Show()
 	for _, size := range []fyne.Size{fyne.NewSize(840, 560), fyne.NewSize(720, 480)} {
@@ -42,6 +42,9 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 		canvasSize := w.window.Canvas().Size()
 		if canvasSize.Width > size.Width || canvasSize.Height > size.Height {
 			t.Fatalf("layout forced window from %v to %v", size, canvasSize)
+		}
+		if _, cols := w.table.Length(); cols != 5 {
+			t.Fatalf("expected all five file detail columns, got %d", cols)
 		}
 		if w.table.Size().Height < size.Height*0.55 {
 			t.Fatalf("file table gets only %v of %v", w.table.Size(), size)
@@ -69,13 +72,24 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.window.Resize(fyne.NewSize(840, 560))
 	snapshot(t, w, "GTASA_MODS_SNAPSHOT")
 	w.tabs.SelectIndex(0)
-	w.table.Select(widget.TableCellID{Row: 1, Col: 0})
-	if w.detailsButton.Disabled() {
-		t.Fatal("full file details cannot be opened")
+	for col, want := range fileValues(w.rows[0]) {
+		cell := w.table.CreateCell()
+		w.table.UpdateCell(widget.TableCellID{Row: 1, Col: col}, cell)
+		if got := cell.(*widget.Label).Text; got != want {
+			t.Fatalf("column %d: got %q, want %q", col, got, want)
+		}
+		w.table.Select(widget.TableCellID{Row: 1, Col: col})
+		if w.copyButton.Disabled() {
+			t.Fatal("table value cannot be copied")
+		}
+		test.Tap(w.copyButton)
+		if w.app.Clipboard().Content() != want {
+			t.Fatalf("full value lost from column %d", col)
+		}
 	}
-	details := fileDetails(w.rows[0])
-	if !strings.Contains(details, w.rows[0].CurrentHash) || !strings.Contains(details, w.rows[0].TargetHash) {
-		t.Fatal("full hashes lost from details")
+	w.path.SetText("/another/game")
+	if !w.copyButton.Disabled() {
+		t.Fatal("stale cell remains selected after changing game folder")
 	}
 }
 func snapshot(t *testing.T, w *Window, key string) {
