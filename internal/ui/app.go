@@ -65,8 +65,7 @@ type Window struct {
 	summary                               *widget.Label
 	modLabels                             map[string]*widget.Label
 	modPanel                              *fyne.Container
-	modsExpanded                          bool
-	modsButton                            *widget.Button
+	modsTitle                             *widget.Label
 }
 
 func Run(gamePath, patchPath string) {
@@ -207,14 +206,13 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	})
 	w.cancelButton.Disable()
 	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
-	w.modsButton = widget.NewButtonWithIcon("Mods", theme.Icon(theme.IconNameArrowDropDown), func() { w.setModsExpanded(!w.modsExpanded) })
-	w.modsButton.IconPlacement = widget.ButtonIconTrailingText
+	w.modsTitle = widget.NewLabel("Mods")
+	w.modsTitle.TextStyle.Bold = true
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
 	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
 	modActions := container.NewBorder(nil, nil, nil, container.NewHBox(w.install, w.reinstall), w.modStatus)
 	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modActions))
-	w.modPanel.Hide()
-	sectionHeader := container.NewBorder(nil, nil, w.modsButton, nil, w.summary)
+	sectionHeader := container.NewBorder(nil, nil, w.modsTitle, nil, w.summary)
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)

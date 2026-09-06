@@ -159,7 +159,7 @@ func (t modGridTheme) Size(name fyne.ThemeSizeName) float32 {
 }
 
 func (w *Window) refreshModSelection() {
-	if w.modsButton == nil {
+	if w.modsTitle == nil {
 		return
 	}
 	n := len(w.selected())
@@ -169,18 +169,7 @@ func (w *Window) refreshModSelection() {
 		title = fmt.Sprintf("Mods · %d selected", n)
 	}
 	w.downgrade.SetText(action)
-	w.modsButton.SetText(title)
-}
-
-func (w *Window) setModsExpanded(expanded bool) {
-	w.modsExpanded = expanded
-	if expanded {
-		w.modPanel.Show()
-		w.modsButton.SetIcon(theme.Icon(theme.IconNameArrowDropUp))
-	} else {
-		w.modPanel.Hide()
-		w.modsButton.SetIcon(theme.Icon(theme.IconNameArrowDropDown))
-	}
+	w.modsTitle.SetText(title)
 }
 
 // Keep status text out of the progress lane, even with long paths or at narrow

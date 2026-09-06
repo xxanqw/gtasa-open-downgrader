@@ -47,7 +47,7 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 		if _, cols := w.table.Length(); cols != 5 {
 			t.Fatalf("expected all five file detail columns, got %d", cols)
 		}
-		if w.table.Size().Height < size.Height*0.55 {
+		if w.table.Size().Height < max(float32(150), size.Height*0.35) {
 			t.Fatalf("file table gets only %v of %v", w.table.Size(), size)
 		}
 		for _, object := range []fyne.CanvasObject{w.version, w.summary, w.downgrade, w.status} {
@@ -58,15 +58,14 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 		}
 	}
 	w.window.Resize(fyne.NewSize(840, 560))
-	if w.modPanel.Visible() {
-		t.Fatal("mod controls should start collapsed")
+	if !w.modPanel.Visible() {
+		t.Fatal("mod controls must always be visible")
 	}
 	snapshot(t, w, "GTASA_COMPACT_SNAPSHOT")
 	// Long download messages and upstream release names must not increase the
 	// minimum window size or push the main actions beyond the viewport.
 	w.status.SetText(strings.Repeat("Long download status with a full game file path. ", 12))
 	w.modLabels["SilentPatch"].SetText(strings.Repeat("upstream release name ", 20))
-	test.Tap(w.modsButton)
 	w.window.Resize(fyne.NewSize(720, 480))
 	if w.window.Canvas().Size().Width > 720 || w.window.Canvas().Size().Height > 480 {
 		t.Fatal("long mod/status text enlarged the window")
@@ -74,25 +73,24 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	for _, check := range w.checks {
 		pos := a.Driver().AbsolutePositionForObject(check)
 		if pos.X < 0 || pos.X+check.MinSize().Width > 720 || pos.Y+check.MinSize().Height > 480 {
-			t.Fatalf("expanded mod grid clips %q", check.Text)
+			t.Fatalf("mod grid clips %q", check.Text)
 		}
 		if check.Size().Width < check.MinSize().Width {
 			t.Fatalf("mod label %q does not fit its column", check.Text)
 		}
 	}
 	if w.table.Size().Height < 150 {
-		t.Fatal("expanded mods hide the file table")
+		t.Fatal("mods hide the file table")
 	}
 	if !w.modPanel.Visible() || len(w.selected()) != 3 {
-		t.Fatal("expanding mods lost selected loaders or mod")
+		t.Fatal("mod panel lost selected loaders or mod")
 	}
 	w.modLabels["SilentPatch"].SetText("Installed · 1.1-BUILD34.1-SA")
 	w.status.SetText("3 mods selected, including required loaders.")
 	w.window.Resize(fyne.NewSize(840, 560))
 	snapshot(t, w, "GTASA_MODS_SNAPSHOT")
-	test.Tap(w.modsButton)
-	if w.modPanel.Visible() || len(w.selected()) != 3 {
-		t.Fatal("collapsing mods lost selection")
+	if w.modsTitle.Text != "Mods · 3 selected" {
+		t.Fatal("mod heading lost the selected count")
 	}
 	for col, want := range fileValues(w.rows[0]) {
 		cell := w.table.CreateCell()

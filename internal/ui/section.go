@@ -11,8 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// Keep the expanded controls on a distinct surface without changing their theme
-// or stealing additional space when the section is collapsed.
+// Keep mod controls on a distinct surface without changing their theme.
 func newModPanel(content fyne.CanvasObject) *fyne.Container {
 	background := &sectionBackground{}
 	background.ExtendBaseWidget(background)
