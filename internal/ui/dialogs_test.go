@@ -112,6 +112,23 @@ func TestPickerCancelAndLongPromptsFitWindow(t *testing.T) {
 	if picked || w.promptActive {
 		t.Fatal("cancelled folder selection started an action")
 	}
+	w.confirm("Confirm downgrade", "Back up originals and downgrade this game? Modified files will be attempted; each result must match its target hash.", func(bool) {})
+	var popup *widget.PopUp
+	walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
+		if p, ok := o.(*widget.PopUp); ok {
+			popup = p
+			return true
+		}
+		return false
+	})
+	if popup == nil {
+		t.Fatal("missing confirmation popup")
+	}
+	if popup.Size().Height > 180 {
+		t.Fatalf("short confirmation leaves excessive empty space: %v", popup.Size())
+	}
+	snapshot(t, w, "GTASA_SHORT_PROMPT_SNAPSHOT")
+	w.activePrompt()
 	w.confirm("Long message", strings.Repeat("A long file path and operation message. ", 100), func(bool) {})
 	button := promptButton(w.window.Canvas().Overlays().Top(), "Continue")
 	pos := a.Driver().AbsolutePositionForObject(button)
