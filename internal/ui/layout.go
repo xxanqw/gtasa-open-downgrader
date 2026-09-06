@@ -142,23 +142,45 @@ func (w *Window) refreshSummary() {
 	}
 	w.summary.SetText(strings.Join(parts, "  ·  "))
 }
+
+// Match the original compact mod grid while retaining readable version details.
+type modGridTheme struct{ fyne.Theme }
+
+func (t modGridTheme) Size(name fyne.ThemeSizeName) float32 {
+	switch name {
+	case theme.SizeNameText:
+		return 11
+	case theme.SizeNameInnerPadding:
+		return 3
+	case theme.SizeNameInlineIcon:
+		return 14
+	}
+	return t.Theme.Size(name)
+}
+
 func (w *Window) refreshModSelection() {
-	if w.tabs == nil {
+	if w.modsButton == nil {
 		return
 	}
 	n := len(w.selected())
-	title := "Mods"
-	action := "Downgrade"
-	button := "Choose mods"
+	action, title := "Downgrade", "Mods"
 	if n > 0 {
-		title = fmt.Sprintf("Mods (%d)", n)
 		action = fmt.Sprintf("Downgrade + %d mods", n)
-		button = fmt.Sprintf("%d mods selected", n)
+		title = fmt.Sprintf("Mods · %d selected", n)
 	}
-	w.tabs.Items[1].Text = title
-	w.tabs.Refresh()
 	w.downgrade.SetText(action)
-	w.modsButton.SetText(button)
+	w.modsButton.SetText(title)
+}
+
+func (w *Window) setModsExpanded(expanded bool) {
+	w.modsExpanded = expanded
+	if expanded {
+		w.modPanel.Show()
+		w.modsButton.SetIcon(theme.Icon(theme.IconNameArrowDropUp))
+	} else {
+		w.modPanel.Hide()
+		w.modsButton.SetIcon(theme.Icon(theme.IconNameArrowDropDown))
+	}
 }
 
 // Keep status text out of the progress lane, even with long paths or at narrow

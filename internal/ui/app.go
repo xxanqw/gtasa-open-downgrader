@@ -64,7 +64,8 @@ type Window struct {
 	updateButton                          *widget.Button
 	summary                               *widget.Label
 	modLabels                             map[string]*widget.Label
-	tabs                                  *container.AppTabs
+	modPanel                              *fyne.Container
+	modsExpanded                          bool
 	modsButton                            *widget.Button
 }
 
@@ -147,8 +148,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.summary = compactLabel("Scan a game folder to check its files.")
 	w.status = compactLabel("Ready")
 	w.progress = newThinProgress()
-	w.modStatus = widget.NewLabel("Select mods to install with the downgrade, or install them separately.")
-	w.modStatus.Wrapping = fyne.TextWrapWord
+	w.modStatus = compactLabel("Select mods to include with the downgrade or install separately.")
 	w.table = newReadOnlyTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject {
 		return container.NewThemeOverride(compactLabel(""), fileTableTheme{a.Settings().Theme()})
 	}, func(id widget.TableCellID, o fyne.CanvasObject) {
@@ -184,7 +184,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.checks[name] = c
 		state := compactLabel("Not installed")
 		w.modLabels[name] = state
-		checkObjects = append(checkObjects, container.NewBorder(nil, nil, container.NewGridWrap(fyne.NewSize(210, 28), c), nil, state))
+		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(c, state), modGridTheme{a.Settings().Theme()}))
 	}
 	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
@@ -207,17 +207,20 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	})
 	w.cancelButton.Disable()
 	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
-	w.modsButton = widget.NewButton("Choose mods", func() { w.tabs.SelectIndex(1) })
+	w.modsButton = widget.NewButtonWithIcon("Mods", theme.Icon(theme.IconNameArrowDropDown), func() { w.setModsExpanded(!w.modsExpanded) })
+	w.modsButton.IconPlacement = widget.ButtonIconTrailingText
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
-	fileActions := container.NewBorder(nil, nil, w.modsButton, w.downgrade, nil)
-	files := container.NewBorder(w.summary, fileActions, nil, nil, table)
-	modActions := container.NewHBox(w.install, w.reinstall)
-	modContent := container.NewBorder(w.modStatus, modActions, nil, nil, container.NewVScroll(container.NewVBox(checkObjects...)))
-	w.tabs = container.NewAppTabs(container.NewTabItem("Game files", files), container.NewTabItem("Mods", modContent))
+	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
+	modActions := container.NewBorder(nil, nil, nil, container.NewHBox(w.install, w.reinstall), w.modStatus)
+	w.modPanel = container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modActions)
+	w.modPanel.Hide()
+	sectionHeader := container.NewBorder(nil, nil, w.modsButton, nil, w.summary)
+	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
+
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
 	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
 	bottom := container.New(statusLayout{}, w.status, w.progress, container.NewHBox(w.cancelButton, statusDetails))
-	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.tabs))
+	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, files))
 	w.refreshEnabled()
 	return w
 }
