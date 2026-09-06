@@ -3,7 +3,7 @@ package assets
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +21,12 @@ var AppLicense string
 
 //go:embed LICENSE.txt
 var XdeltaLicense string
+
+//go:embed fontawesome/*.svg
+var FontAwesome embed.FS
+
+//go:embed fontawesome/LICENSE.txt
+var FontAwesomeLicense string
 
 func Xdelta(ctx context.Context) (string, func(), error) {
 	if runtime.GOARCH != "amd64" {

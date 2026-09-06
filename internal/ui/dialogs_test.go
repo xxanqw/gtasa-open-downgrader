@@ -108,6 +108,7 @@ func TestPickerCancelAndLongPromptsFitWindow(t *testing.T) {
 	w.window.Show()
 	picked := false
 	w.chooseFolder("Game directory", t.TempDir(), func(string) { picked = true })
+	snapshot(t, w, "GTASA_PICKER_SNAPSHOT")
 	w.activePrompt()
 	if picked || w.promptActive {
 		t.Fatal("cancelled folder selection started an action")

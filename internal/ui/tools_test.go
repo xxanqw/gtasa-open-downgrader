@@ -18,6 +18,9 @@ func TestToolsKeepGameValidationAndQueueOtherPrompts(t *testing.T) {
 	w := New(a)
 	defer w.jobs.Close()
 	w.window.Show()
+	w.launchOptions()
+	snapshot(t, w, "GTASA_LAUNCH_OPTIONS_SNAPSHOT")
+	tapPrompt(t, w, "Close")
 	w.tools()
 	for _, action := range w.toolActions() {
 		_, label := toolPresentation(action.label)
@@ -74,10 +77,10 @@ func TestAboutContainsOriginalCreditsAndCompleteLicenses(t *testing.T) {
 		}
 		return false
 	})
-	if tabs == nil || len(tabs.Items) != 2 {
-		t.Fatal("About lacks both license tabs")
+	if tabs == nil || len(tabs.Items) != 3 {
+		t.Fatal("About lacks bundled license tabs")
 	}
-	for i, want := range []string{assets.AppLicense, assets.XdeltaLicense} {
+	for i, want := range []string{assets.AppLicense, assets.XdeltaLicense, assets.FontAwesomeLicense} {
 		tabs.SelectIndex(i)
 		found := false
 		walkObjects(tabs.Items[i].Content, func(o fyne.CanvasObject) bool {

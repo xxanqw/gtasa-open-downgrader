@@ -18,7 +18,9 @@ Developer: **Ivan Potiienko (xxanqw)**
 
 Thanks to all of the **GTA SA community** for their continuous support and work!
 
-This application is licensed under the **MIT License**.`
+This application is licensed under the **MIT License**.
+
+Icons: [Font Awesome Free 6.7.2](https://fontawesome.com) by Fonticons, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).`
 
 func (w *Window) showAbout() {
 	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
@@ -27,6 +29,8 @@ func (w *Window) showAbout() {
 			text := assets.AppLicense
 			if licenses.SelectedIndex() == 1 {
 				text = assets.XdeltaLicense
+			} else if licenses.SelectedIndex() == 2 {
+				text = assets.FontAwesomeLicense
 			}
 			w.app.Clipboard().SetContent(text)
 		})
@@ -42,6 +46,7 @@ func aboutContent() (fyne.CanvasObject, *container.AppTabs) {
 	licenses := container.NewAppTabs(
 		container.NewTabItem("App License (MIT)", container.NewVScroll(promptText(assets.AppLicense))),
 		container.NewTabItem("xdelta3 License", container.NewVScroll(promptText(assets.XdeltaLicense))),
+		container.NewTabItem("Font Awesome", container.NewVScroll(promptText(assets.FontAwesomeLicense))),
 	)
 	body := container.NewVSplit(container.NewVScroll(summary), licenses)
 	body.SetOffset(0.44)

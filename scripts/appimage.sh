@@ -11,6 +11,7 @@ trap 'rm -rf "$appdir"' EXIT
 mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/share/licenses/gtasa-open-downgrader"
 cp "dist/$name" "$appdir/usr/bin/$name"
 cp LICENSE internal/assets/LICENSE.txt "$appdir/usr/share/licenses/gtasa-open-downgrader/"
+cp internal/assets/fontawesome/LICENSE.txt "$appdir/usr/share/licenses/gtasa-open-downgrader/fontawesome-LICENSE.txt"
 cp internal/assets/icon.png "$appdir/gtasa-open-downgrader.png"
 # xdelta3 needs liblzma when extracted at runtime. Keep graphics drivers and
 # glibc supplied by the host; build on Ubuntu 22.04 for a conservative baseline.
