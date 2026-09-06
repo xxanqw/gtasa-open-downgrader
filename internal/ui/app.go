@@ -146,8 +146,10 @@ func New(a fyne.App) *Window {
 				switch {
 				case strings.HasPrefix(r.Status, "Failed") || strings.HasPrefix(r.Status, "Error"):
 					label.Importance = widget.DangerImportance
+					label.TextStyle.Bold = true
 				case r.Status == "Missing" || r.Status == "Modified":
 					label.Importance = widget.WarningImportance
+					label.TextStyle.Bold = true
 				case strings.HasPrefix(r.Status, "Already") || r.Status == "Success":
 					label.Importance = widget.SuccessImportance
 				}

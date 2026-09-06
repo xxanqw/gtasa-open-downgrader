@@ -7,10 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
@@ -19,17 +15,41 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
+// Each tool retains its existing validation and confirmation flow after selection.
+type toolAction struct {
+	label string
+	run   func()
+}
+
 func (w *Window) launchOptions() {
-	text := widget.NewEntry()
-	text.SetText(platform.LaunchOptions)
-	dialog.ShowCustom("Steam / Proton launch options", "Close", container.NewVBox(widget.NewLabel("Paste this into the game's Steam Properties → Launch Options:"), text, widget.NewButton("Copy to clipboard", func() { w.window.Clipboard().SetContent(platform.LaunchOptions) })), w.window)
+	w.prompt(promptRequest{kind: promptEntry, title: "Steam / Proton launch options", text: "Copy this into the game's Steam Properties → Launch Options:", initial: platform.LaunchOptions, accept: "Copy", dismiss: "Close", done: func(_ string, ok bool) {
+		if ok {
+			w.app.Clipboard().SetContent(platform.LaunchOptions)
+			w.status.SetText("Steam / Proton launch options copied.")
+		}
+	}})
 }
 func (w *Window) tools() {
-	root := w.scanPath
-	var d dialog.Dialog
-	action := func(label string, fn func()) fyne.CanvasObject {
-		return widget.NewButton(label, func() { d.Hide(); fn() })
+	actions := w.toolActions()
+	names := make([]string, len(actions))
+	for i, action := range actions {
+		names[i] = action.label
 	}
+	w.prompt(promptRequest{kind: promptChoice, title: "Downgrader tools", text: "Choose a tool to open:", choices: names, initial: names[0], accept: "Open", dismiss: "Close", done: func(name string, ok bool) {
+		if !ok {
+			return
+		}
+		for _, action := range actions {
+			if name == action.label {
+				action.run()
+				return
+			}
+		}
+	}})
+}
+func (w *Window) toolActions() []toolAction {
+	root := w.scanPath
+	action := func(label string, fn func()) toolAction { return toolAction{label: label, run: fn} }
 	requireGame := func(fn func()) {
 		if root == "" || !game.HasEXE(root) {
 			w.error(fmt.Errorf("scan a game directory first"))
@@ -40,7 +60,7 @@ func (w *Window) tools() {
 	runGame := func(title string, fn func(context.Context) error) {
 		requireGame(func() { w.run(title, fn, func(error) { w.scan() }) })
 	}
-	objects := []fyne.CanvasObject{
+	actions := []toolAction{
 		action("Download / refresh patch assets", w.downloadPatches),
 		action("Import Patches.zip", func() {
 			w.chooseArchive("Import patch archive", []string{".zip"}, func(p string) {
@@ -148,7 +168,7 @@ func (w *Window) tools() {
 		}),
 	}
 	if runtime.GOOS == "windows" {
-		objects = append(objects,
+		actions = append(actions,
 			action("Repair installation path in Registry", func() {
 				runGame("Repairing Registry", func(ctx context.Context) error { return platform.FixRegistry(ctx, root) })
 			}),
@@ -157,7 +177,7 @@ func (w *Window) tools() {
 			}),
 		)
 	} else {
-		objects = append(objects, action("Steam / Proton launch options", w.launchOptions), action("List Protontricks games", func() {
+		actions = append(actions, action("Steam / Proton launch options", w.launchOptions), action("List Protontricks games", func() {
 			var output string
 			w.run("Listing Proton games", func(ctx context.Context) error { var e error; output, e = platform.ProtonApps(ctx); return e }, func(e error) {
 				if e == nil {
@@ -175,8 +195,5 @@ func (w *Window) tools() {
 			}})
 		}))
 	}
-	d = dialog.NewCustom("Downgrader tools", "Close", container.NewVBox(objects...), w.window)
-	size := w.window.Canvas().Size()
-	d.Resize(fyne.NewSize(min(float32(540), size.Width-40), min(float32(600), size.Height-40)))
-	d.Show()
+	return actions
 }

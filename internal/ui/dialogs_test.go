@@ -12,6 +12,37 @@ import (
 	"github.com/ncruces/zenity"
 )
 
+// Fyne's test driver runs Do immediately on the calling goroutine. Queue those
+// callbacks so dialog tests reproduce the real desktop event loop's ordering.
+type dialogTestDriver struct {
+	fyne.Driver
+	calls chan func()
+}
+
+func (d *dialogTestDriver) DoFromGoroutine(fn func(), wait bool) {
+	if !wait {
+		d.calls <- fn
+		return
+	}
+	done := make(chan struct{})
+	d.calls <- func() { fn(); close(done) }
+	<-done
+}
+
+type dialogTestApp struct {
+	fyne.App
+	driver *dialogTestDriver
+}
+
+func (a *dialogTestApp) Driver() fyne.Driver   { return a.driver }
+func (a *dialogTestApp) dispatch(t *testing.T) { t.Helper(); receive(t, a.driver.calls)() }
+func newDialogTestApp() *dialogTestApp {
+	base := test.NewApp()
+	a := &dialogTestApp{App: base, driver: &dialogTestDriver{Driver: base.Driver(), calls: make(chan func(), 16)}}
+	fyne.SetCurrentApp(a)
+	return a
+}
+
 func receive[T any](t *testing.T, c <-chan T) T {
 	t.Helper()
 	select {
@@ -24,7 +55,7 @@ func receive[T any](t *testing.T, c <-chan T) T {
 	}
 }
 func TestNativePromptsSerializeAndRespectCancel(t *testing.T) {
-	a := test.NewApp()
+	a := newDialogTestApp()
 	defer a.Quit()
 	w := New(a)
 	defer w.jobs.Close()
@@ -52,6 +83,7 @@ func TestNativePromptsSerializeAndRespectCancel(t *testing.T) {
 	default:
 	}
 	replies <- zenity.ErrCanceled
+	a.dispatch(t)
 	if receive(t, done) {
 		t.Fatal("Cancel approved an action")
 	}
@@ -59,6 +91,7 @@ func TestNativePromptsSerializeAndRespectCancel(t *testing.T) {
 		t.Fatal("lost queued prompt")
 	}
 	replies <- nil
+	a.dispatch(t)
 	if !receive(t, done) {
 		t.Fatal("confirmation was lost")
 	}
@@ -68,7 +101,7 @@ func TestNativePromptsSerializeAndRespectCancel(t *testing.T) {
 	}
 }
 func TestClosingCancelsNativeDialog(t *testing.T) {
-	a := test.NewApp()
+	a := newDialogTestApp()
 	defer a.Quit()
 	w := New(a)
 	started := make(chan bool)
@@ -84,6 +117,7 @@ func TestClosingCancelsNativeDialog(t *testing.T) {
 	receive(t, started)
 	w.closing = true
 	w.jobs.Close()
+	a.dispatch(t)
 	receive(t, dismissed)
 	select {
 	case <-called:
@@ -140,7 +174,7 @@ func promptButton(o fyne.CanvasObject, text string) *widget.Button {
 }
 
 func TestBrokenNativeHelperFallsBackWithoutApproving(t *testing.T) {
-	a := test.NewApp()
+	a := newDialogTestApp()
 	defer a.Quit()
 	w := New(a)
 	w.window.Show()
@@ -155,6 +189,7 @@ func TestBrokenNativeHelperFallsBackWithoutApproving(t *testing.T) {
 		}
 	})
 	w.jobs.Close()
+	a.dispatch(t)
 	if called {
 		t.Fatal("helper error bypassed confirmation")
 	}

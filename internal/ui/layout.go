@@ -2,20 +2,51 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
-	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
-// Keep the user's scaling and theme colours, with denser desktop controls.
+// Preserve the user's light/dark preference and scaling with a neutral palette.
 type compactTheme struct{ fyne.Theme }
+
+func (t compactTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	dark := variant != theme.VariantLight
+	neutral := func(light, darkValue uint8) color.Color {
+		value := light
+		if dark {
+			value = darkValue
+		}
+		return color.NRGBA{R: value, G: value, B: value, A: 255}
+	}
+	switch name {
+	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
+		return neutral(36, 224)
+	case theme.ColorNameForegroundOnPrimary, theme.ColorNameForegroundOnError, theme.ColorNameForegroundOnSuccess, theme.ColorNameForegroundOnWarning:
+		return neutral(255, 24)
+	case theme.ColorNameError, theme.ColorNameWarning, theme.ColorNameSuccess:
+		return neutral(48, 224)
+	case theme.ColorNameForeground:
+		return neutral(32, 232)
+	case theme.ColorNameDisabled, theme.ColorNamePlaceHolder:
+		return neutral(116, 136)
+	case theme.ColorNameSelection:
+		return neutral(215, 64)
+	case theme.ColorNameFocus:
+		if dark {
+			return color.NRGBA{R: 255, G: 255, B: 255, A: 64}
+		}
+		return color.NRGBA{A: 40}
+	}
+	// Neutralize every remaining theme role, including translucent overlays.
+	c := color.NRGBAModel.Convert(t.Theme.Color(name, variant)).(color.NRGBA)
+	value := uint8((uint32(c.R)*299 + uint32(c.G)*587 + uint32(c.B)*114) / 1000)
+	return color.NRGBA{R: value, G: value, B: value, A: c.A}
+}
 
 func (t compactTheme) Size(name fyne.ThemeSizeName) float32 {
 	switch name {
@@ -128,15 +159,4 @@ func (w *Window) refreshModSelection() {
 	w.tabs.Refresh()
 	w.downgrade.SetText(action)
 	w.modsButton.SetText(button)
-}
-
-func (w *Window) showAbout() {
-	license := widget.NewMultiLineEntry()
-	license.SetText(assets.XdeltaLicense)
-	license.Wrapping = fyne.TextWrapWord
-	header := container.NewVBox(widget.NewLabel("GTA SA Open Downgrader · "+updater.Version), widget.NewLabel("MIT licensed · Bundled xdelta3: Apache License 2.0"), widget.NewHyperlink("Source and releases", mustURL("https://github.com/xxanqw/gtasa-open-downgrader")))
-	d := dialog.NewCustom("About", "Close", container.NewBorder(header, nil, nil, nil, license), w.window)
-	size := w.window.Canvas().Size()
-	d.Resize(fyne.NewSize(min(float32(540), size.Width-40), min(float32(400), size.Height-40)))
-	d.Show()
 }

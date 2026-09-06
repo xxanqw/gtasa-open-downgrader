@@ -30,6 +30,7 @@ const (
 type promptRequest struct {
 	kind                 promptKind
 	title, text, initial string
+	accept, dismiss      string
 	extensions, choices  []string
 	done                 func(string, bool)
 }
@@ -40,6 +41,12 @@ type dialogBackend struct {
 
 func systemDialog(ctx context.Context, r promptRequest, parent any) (string, error) {
 	opts := []zenity.Option{zenity.Title(r.title), zenity.Context(ctx), zenity.Modal()}
+	if r.accept != "" {
+		opts = append(opts, zenity.OKLabel(r.accept))
+	}
+	if r.dismiss != "" {
+		opts = append(opts, zenity.CancelLabel(r.dismiss))
+	}
 	if parent != nil {
 		opts = append(opts, zenity.Attach(parent))
 	}
@@ -138,6 +145,13 @@ func (w *Window) nextPrompt() {
 }
 
 func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
+	accept, dismiss := r.accept, r.dismiss
+	if accept == "" {
+		accept = "Continue"
+	}
+	if dismiss == "" {
+		dismiss = "Cancel"
+	}
 	switch r.kind {
 	case promptInfo, promptError:
 		var d dialog.Dialog
@@ -189,11 +203,11 @@ func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
 	case promptEntry:
 		entry := widget.NewEntry()
 		entry.SetText(r.initial)
-		dialog.ShowForm(r.title, "Continue", "Cancel", []*widget.FormItem{widget.NewFormItem(r.text, entry)}, func(ok bool) { done(entry.Text, ok) }, w.window)
+		dialog.ShowForm(r.title, accept, dismiss, []*widget.FormItem{widget.NewFormItem(r.text, entry)}, func(ok bool) { done(entry.Text, ok) }, w.window)
 	case promptChoice:
 		choice := widget.NewSelect(r.choices, nil)
 		choice.SetSelected(r.initial)
-		dialog.ShowForm(r.title, "Continue", "Cancel", []*widget.FormItem{widget.NewFormItem(r.text, choice)}, func(ok bool) { done(choice.Selected, ok && choice.Selected != "") }, w.window)
+		dialog.ShowForm(r.title, accept, dismiss, []*widget.FormItem{widget.NewFormItem(r.text, choice)}, func(ok bool) { done(choice.Selected, ok && choice.Selected != "") }, w.window)
 	}
 }
 func (w *Window) setPickerLocation(d *dialog.FileDialog, path string) {
