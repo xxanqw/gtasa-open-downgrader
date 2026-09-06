@@ -18,9 +18,10 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/ncruces/zenity"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -32,6 +33,9 @@ import (
 )
 
 type Window struct {
+	dialogs                               dialogBackend
+	prompts                               []promptRequest
+	promptActive                          bool
 	app                                   fyne.App
 	window                                fyne.Window
 	jobs                                  *jobs.Group
@@ -92,6 +96,9 @@ func New(a fyne.App) *Window {
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
 	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedCell: widget.TableCellID{Row: -1}, warned: map[string]bool{}}
+	if _, ok := w.window.(driver.NativeWindow); ok {
+		w.dialogs = dialogBackend{available: zenity.IsAvailable, show: systemDialog}
+	}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
@@ -112,17 +119,10 @@ func New(a fyne.App) *Window {
 	}
 	w.path.OnSubmitted = func(string) { w.scan() }
 	browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
-		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, e error) {
-			if e != nil {
-				w.error(e)
-				return
-			}
-			if uri != nil {
-				w.path.SetText(uri.Path())
-				w.scan()
-			}
-		}, w.window)
-		d.Show()
+		w.chooseFolder("Select GTA San Andreas folder", w.path.Text, func(path string) {
+			w.path.SetText(path)
+			w.scan()
+		})
 	})
 	scan := widget.NewButtonWithIcon("Scan", theme.SearchIcon(), w.scan)
 	w.version = compactLabel("Select a game folder to get started.")
@@ -214,7 +214,7 @@ func New(a fyne.App) *Window {
 	w.tabs = container.NewAppTabs(container.NewTabItem("Game files", files), container.NewTabItem("Mods", modContent))
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
 	progress := container.NewGridWrap(fyne.NewSize(128, 28), w.progress)
-	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), func() { dialog.ShowInformation("Operation status", w.status.Text, w.window) })
+	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), func() { w.info("Operation status", w.status.Text) })
 	bottom := container.NewBorder(nil, nil, nil, container.NewHBox(statusDetails, progress, w.cancelButton), w.status)
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.tabs))
 	w.refreshEnabled()
@@ -223,7 +223,7 @@ func New(a fyne.App) *Window {
 func mustURL(raw string) *url.URL { u, _ := url.Parse(raw); return u }
 func (w *Window) error(e error) {
 	if e != nil && !w.closing {
-		dialog.ShowError(e, w.window)
+		w.prompt(promptRequest{kind: promptError, title: "Error", text: e.Error()})
 	}
 }
 func (w *Window) post(f func()) {
@@ -246,13 +246,13 @@ func (w *Window) close() {
 }
 func (w *Window) refreshEnabled() {
 	for _, c := range w.controls {
-		if w.busy {
+		if w.busy || w.promptActive {
 			c.Disable()
 		} else {
 			c.Enable()
 		}
 	}
-	ready := w.scanPath != "" && w.scanPath == w.path.Text && !w.readonly && !w.busy
+	ready := w.scanPath != "" && w.scanPath == w.path.Text && !w.readonly && !w.busy && !w.promptActive
 	for _, b := range []*widget.Button{w.downgrade, w.install, w.reinstall} {
 		if ready {
 			b.Enable()
@@ -289,13 +289,13 @@ func (w *Window) selectDependencies() {
 	if dependent {
 		w.checks["ModLoader"].SetChecked(true)
 		w.checks["ModLoader"].Disable()
-	} else if !w.busy && !w.readonly && w.scanPath != "" {
+	} else if !w.busy && !w.promptActive && !w.readonly && w.scanPath != "" {
 		w.checks["ModLoader"].Enable()
 	}
 	if dependent || w.checks["ModLoader"].Checked {
 		w.checks["ASI Loader"].SetChecked(true)
 		w.checks["ASI Loader"].Disable()
-	} else if !w.busy && !w.readonly && w.scanPath != "" {
+	} else if !w.busy && !w.promptActive && !w.readonly && w.scanPath != "" {
 		w.checks["ASI Loader"].Enable()
 	}
 }
@@ -395,13 +395,13 @@ func (w *Window) start() {
 			w.path.SetText(detected)
 		}
 		if prepareError != nil && !errors.Is(e, context.Canceled) {
-			dialog.ShowConfirm("Patches missing", "Download the official Patches.zip from iCloud? You can also import a local archive from Tools.", func(ok bool) {
+			w.confirm("Patches missing", "Download the official Patches.zip from iCloud? You can also import a local archive from Tools.", func(ok bool) {
 				if ok {
 					w.downloadPatches()
 				} else if w.path.Text != "" {
 					w.scan()
 				}
-			}, w.window)
+			})
 		} else if w.path.Text != "" {
 			w.scan()
 		}
@@ -472,7 +472,7 @@ func (w *Window) scan() {
 		w.refreshEnabled()
 		if tracker.Legacy() && !w.warned[root] {
 			w.warned[root] = true
-			dialog.ShowInformation("Older mod tracking format", "The next mod installation will reinstall every recorded mod to migrate version tracking. Back up customized configuration files first.", w.window)
+			w.info("Older mod tracking format", "The next mod installation will reinstall every recorded mod to migrate version tracking. Back up customized configuration files first.")
 		}
 		w.status.SetText(fmt.Sprintf("Scan complete: %d manifest files checked.", len(result.Rows)))
 		w.checkMods(root, tracker)
@@ -532,11 +532,11 @@ func (w *Window) confirmMods(root string, force bool, proceed func()) {
 		return
 	}
 	if force || t.Legacy() {
-		dialog.ShowConfirm("Reinstall mod files", "Reinstallation can overwrite customized mod configuration files. Legacy trackers reinstall every recorded mod. Continue after backing up any settings you want to keep.", func(ok bool) {
+		w.confirm("Reinstall mod files", "Reinstallation can overwrite customized mod configuration files. Legacy trackers reinstall every recorded mod. Continue after backing up any settings you want to keep.", func(ok bool) {
 			if ok {
 				proceed()
 			}
-		}, w.window)
+		})
 	} else {
 		proceed()
 	}
@@ -578,7 +578,7 @@ func (w *Window) apply() {
 		return
 	}
 	warning := "Back up originals and downgrade this game? Modified files will be attempted; each result must match its target hash."
-	dialog.ShowConfirm("Confirm downgrade", warning, func(ok bool) {
+	w.confirm("Confirm downgrade", warning, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -626,7 +626,7 @@ func (w *Window) apply() {
 		} else {
 			proceed()
 		}
-	}, w.window)
+	})
 }
 func (w *Window) downloadPatches() {
 	target := filepath.Join(w.cache, "Patches")
@@ -653,7 +653,7 @@ func (w *Window) checkUpdates(manual bool) {
 			}
 			if !updater.Newer(r.Tag, updater.Version) {
 				if manual {
-					dialog.ShowInformation("App updates", "You are running the current version.", w.window)
+					w.info("App updates", "You are running the current version.")
 				}
 				return
 			}
@@ -663,10 +663,10 @@ func (w *Window) checkUpdates(manual bool) {
 			}
 			a, ok := updater.Select(r, runtime.GOOS, assets.Offline, os.Getenv("APPIMAGE") != "")
 			if !ok {
-				dialog.ShowInformation("Update available", r.Tag+" is available. Download a matching build from the releases page.", w.window)
+				w.info("Update available", r.Tag+" is available. Download a matching build from the releases page.")
 				return
 			}
-			dialog.ShowConfirm("Update available", "Download "+r.Tag+" and restart the application?", func(ok bool) {
+			w.confirm("Update available", "Download "+r.Tag+" and restart the application?", func(ok bool) {
 				if !ok {
 					return
 				}
@@ -686,7 +686,7 @@ func (w *Window) checkUpdates(manual bool) {
 					}
 					w.close()
 				})
-			}, w.window)
+			})
 		})
 	})
 }

@@ -29,6 +29,7 @@ Contributions for other source versions are welcome through GitHub issues.
 ## Features
 
 - **Game Detection:** Checks the Windows Registry and common Steam locations on Linux. A game directory can always be selected manually.
+- **Native Dialogs:** System file/folder pickers, confirmations, messages, and input prompts. Windows needs no extra dialog runtime. Linux uses `qarma` (Qt), `zenity` (GTK), or `matedialog` when installed, with Fyne dialogs as a fallback. Tools and About remain custom Fyne panels.
 - **Responsive Startup:** A native Fyne window opens immediately while background preparation runs. No PyInstaller, Qt, Tcl/Tk or splash IPC.
 - **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.
 - **One-Click Downgrade:** Converts supported files to v1.0 US with `xdelta3`, backing up original files before replacing them.
