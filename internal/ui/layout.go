@@ -160,3 +160,23 @@ func (w *Window) refreshModSelection() {
 	w.downgrade.SetText(action)
 	w.modsButton.SetText(button)
 }
+
+// Keep status text out of the progress lane, even with long paths or at narrow
+// window sizes. A hidden progress bar leaves the footer's geometry unchanged.
+type statusLayout struct{}
+
+func (statusLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return fyne.NewSize(360, max(objects[0].MinSize().Height, objects[2].MinSize().Height))
+}
+func (statusLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	status, progress, actions := objects[0], objects[1], objects[2]
+	right := actions.MinSize().Width
+	available := max(float32(0), size.Width-right-12)
+	left := min(size.Width*0.25, available*0.45)
+	status.Move(fyne.NewPos(0, 0))
+	status.Resize(fyne.NewSize(left, size.Height))
+	progress.Move(fyne.NewPos(left+10, (size.Height-3)/2))
+	progress.Resize(fyne.NewSize(max(float32(0), available-left-10), 3))
+	actions.Move(fyne.NewPos(size.Width-right, (size.Height-actions.MinSize().Height)/2))
+	actions.Resize(actions.MinSize())
+}

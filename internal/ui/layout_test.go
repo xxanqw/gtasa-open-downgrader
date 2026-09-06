@@ -96,6 +96,21 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	if !w.progress.Visible() || !w.cancelButton.Visible() || w.progress.Size().Height > 4 {
 		t.Fatal("active progress is not a thin visible track")
 	}
+	for _, size := range []fyne.Size{fyne.NewSize(720, 480), fyne.NewSize(840, 560)} {
+		w.window.Resize(size)
+		statusPos := a.Driver().AbsolutePositionForObject(w.status)
+		progressPos := a.Driver().AbsolutePositionForObject(w.progress)
+		cancelPos := a.Driver().AbsolutePositionForObject(w.cancelButton)
+		if statusPos.X+w.status.Size().Width >= progressPos.X || progressPos.X+w.progress.Size().Width >= cancelPos.X {
+			t.Fatal("status, progress and actions overlap")
+		}
+		if progressPos.Y < statusPos.Y || progressPos.Y+w.progress.Size().Height > statusPos.Y+w.status.Size().Height {
+			t.Fatal("progress is outside the status row")
+		}
+		if w.progress.Size().Width < size.Width*0.4 {
+			t.Fatal("progress lane is too small")
+		}
+	}
 	snapshot(t, w, "GTASA_PROGRESS_SNAPSHOT")
 
 }

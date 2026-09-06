@@ -6,11 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +23,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -31,6 +35,7 @@ import (
 )
 
 type Window struct {
+	logs                                  *applog.Journal
 	activePrompt                          func()
 	prompts                               []promptRequest
 	promptActive                          bool
@@ -64,8 +69,26 @@ type Window struct {
 }
 
 func Run(gamePath, patchPath string) {
+	journal := &applog.Journal{}
+	previous := log.Writer()
+	log.SetOutput(io.MultiWriter(journal, previous))
+	defer log.SetOutput(previous)
+	journal.Record("INFO", fmt.Sprintf("GTA SA Open Downgrader %s · %s/%s · %s · offline=%t", updater.Version, runtime.GOOS, runtime.GOARCH, runtime.Version(), assets.Offline))
+	// Preserve otherwise fatal runtime panics, including those on other goroutines.
+	if cache, err := os.UserCacheDir(); err == nil {
+		path := filepath.Join(cache, "gtasa-open-downgrader")
+		if os.MkdirAll(path, 0700) == nil {
+			if file, err := os.OpenFile(filepath.Join(path, "last-crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); err == nil {
+				if err := debug.SetCrashOutput(file, debug.CrashOptions{}); err != nil {
+					journal.Record("WARN", err.Error())
+				}
+				file.Close()
+				defer debug.SetCrashOutput(nil, debug.CrashOptions{})
+			}
+		}
+	}
 	a := app.NewWithID("pp.ua.xxanqw.gtasa-open-downgrader")
-	w := New(a)
+	w := newWindow(a, journal)
 	if gamePath != "" {
 		w.path.SetText(gamePath)
 	}
@@ -85,14 +108,15 @@ func Run(gamePath, patchPath string) {
 	w.start()
 	a.Run()
 }
-func New(a fyne.App) *Window {
+func New(a fyne.App) *Window { return newWindow(a, &applog.Journal{}) }
+func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	a.Settings().SetTheme(compactTheme{theme.DefaultTheme()})
 	cache, e := os.UserCacheDir()
 	if e != nil {
 		cache = os.TempDir()
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
-	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, warned: map[string]bool{}}
+	w := &Window{logs: journal, app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, warned: map[string]bool{}}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
@@ -177,7 +201,7 @@ func New(a fyne.App) *Window {
 	w.cancelButton = widget.NewButton("Cancel", func() {
 		if w.cancel != nil {
 			w.cancel()
-			w.status.SetText("Cancelling; waiting for the current operation to stop…")
+			w.setStatus("Cancelling; waiting for the current operation to stop…")
 			w.cancelButton.Disable()
 		}
 	})
@@ -191,15 +215,17 @@ func New(a fyne.App) *Window {
 	modContent := container.NewBorder(w.modStatus, modActions, nil, nil, container.NewVScroll(container.NewVBox(checkObjects...)))
 	w.tabs = container.NewAppTabs(container.NewTabItem("Game files", files), container.NewTabItem("Mods", modContent))
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
-	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), func() { w.info("Operation status", w.status.Text) })
-	statusLine := container.NewBorder(nil, nil, nil, container.NewHBox(statusDetails, w.cancelButton), w.status)
-	bottom := container.NewVBox(w.progress, statusLine)
+	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
+	bottom := container.New(statusLayout{}, w.status, w.progress, container.NewHBox(w.cancelButton, statusDetails))
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.tabs))
 	w.refreshEnabled()
 	return w
 }
 func mustURL(raw string) *url.URL { u, _ := url.Parse(raw); return u }
 func (w *Window) error(e error) {
+	if e != nil {
+		w.logs.Record("ERROR", e.Error())
+	}
 	if e != nil && !w.closing {
 		w.prompt(promptRequest{kind: promptError, title: "Error", text: e.Error()})
 	}
@@ -223,7 +249,7 @@ func (w *Window) close() {
 	if w.cancel != nil {
 		w.cancel()
 	}
-	w.status.SetText("Stopping background work…")
+	w.setStatus("Stopping background work…")
 	go func() { w.jobs.Close(); fyne.Do(func() { w.window.SetCloseIntercept(nil); w.app.Quit() }) }()
 }
 func (w *Window) refreshEnabled() {
@@ -305,7 +331,8 @@ func (w *Window) run(title string, work func(context.Context) error, done func(e
 	}
 	w.busy = true
 	w.generation++
-	w.status.SetText(title)
+	w.transferLabel = ""
+	w.setStatus(title)
 	w.progress.SetValue(0)
 	w.refreshEnabled()
 	w.cancelButton.Enable()
@@ -314,7 +341,12 @@ func (w *Window) run(title string, work func(context.Context) error, done func(e
 	w.jobs.Go(func(parent context.Context) {
 		stop := context.AfterFunc(parent, cancel)
 		defer stop()
-		err := work(ctx)
+		err := w.logs.Guard(ctx, work)
+		if errors.Is(err, context.Canceled) {
+			w.logs.Record("INFO", title+": cancelled")
+		} else if err != nil {
+			w.logs.Record("ERROR", title+": "+err.Error())
+		}
 		cancel()
 		w.post(func() {
 			w.busy = false
@@ -322,13 +354,13 @@ func (w *Window) run(title string, work func(context.Context) error, done func(e
 			w.cancelButton.Disable()
 			w.refreshEnabled()
 			if errors.Is(err, context.Canceled) {
-				w.status.SetText("Cancelled. Completed work and backups have been preserved.")
+				w.setStatus("Cancelled. Completed work and backups have been preserved.")
 			} else if err != nil {
-				w.status.SetText(title + " failed")
+				w.setStatus(title + " failed")
 				w.error(err)
 			} else {
 				w.progress.SetValue(1)
-				w.status.SetText(title + " complete")
+				w.setStatus(title + " complete")
 			}
 			if done != nil {
 				done(err)
@@ -339,6 +371,7 @@ func (w *Window) run(title string, work func(context.Context) error, done func(e
 func (w *Window) report(label string, done, total int64) {
 	w.post(func() {
 		if label != w.transferLabel {
+			w.logs.Record("INFO", label)
 			w.transferLabel = label
 			w.transferStart = time.Now()
 			w.transferBase = done
@@ -380,6 +413,7 @@ func (w *Window) start() {
 	}, func(e error) {
 		w.patchDir = dir
 		if prepareError != nil {
+			w.logs.Record("WARN", "Patch assets: "+prepareError.Error())
 			w.patchDir = ""
 		}
 		if w.path.Text == "" {
@@ -433,6 +467,7 @@ func (w *Window) scan() {
 		if e != nil {
 			return
 		}
+		w.logs.Record("INFO", fmt.Sprintf("Game scan: %s · %s · read-only=%t", root, result.Version, result.ReadOnly))
 		w.scanPath = root
 		w.readonly = result.ReadOnly
 		w.rows = result.Rows
@@ -464,7 +499,7 @@ func (w *Window) scan() {
 			w.warned[root] = true
 			w.info("Older mod tracking format", "The next mod installation will reinstall every recorded mod to migrate version tracking. Back up customized configuration files first.")
 		}
-		w.status.SetText(fmt.Sprintf("Scan complete: %d manifest files checked.", len(result.Rows)))
+		w.setStatus(fmt.Sprintf("Scan complete: %d manifest files checked.", len(result.Rows)))
 		w.checkMods(root, tracker)
 	})
 }
@@ -475,7 +510,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 	}
 	generation := w.generation
 	w.modStatus.SetText("Checking installed mod versions…")
-	w.jobs.Go(func(ctx context.Context) {
+	w.background(func(ctx context.Context) {
 		resolver := mods.NewResolver(w.client)
 		labels := map[string]string{}
 		updates, unknown, failed := 0, 0, 0
@@ -488,6 +523,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 			}
 			latest, e := resolver.Resolve(ctx, name)
 			if e != nil {
+				w.logs.Record("WARN", "Mod update check ("+name+"): "+e.Error())
 				failed++
 				labels[name] = name + " (update check failed)"
 				continue
@@ -594,7 +630,10 @@ func (w *Window) apply() {
 							w.refreshSummary()
 						}
 						w.progress.SetValue(float64(i+1) / float64(len(m.Files)))
-						w.status.SetText(m.Files[i].Path + " · " + status)
+						w.setStatus(m.Files[i].Path + " · " + status)
+						if message != "" {
+							w.logs.Record("INFO", m.Files[i].Path+": "+message)
+						}
 					})
 				})
 				if e != nil {
@@ -632,8 +671,13 @@ func (w *Window) downloadPatches() {
 	})
 }
 func (w *Window) checkUpdates(manual bool) {
-	w.jobs.Go(func(ctx context.Context) {
+	w.background(func(ctx context.Context) {
 		r, e := updater.Check(ctx, w.client)
+		if e != nil {
+			w.logs.Record("WARN", "App update check: "+e.Error())
+		} else {
+			w.logs.Record("INFO", "App update check: latest release "+r.Tag)
+		}
 		w.post(func() {
 			if e != nil {
 				if manual {
@@ -678,5 +722,17 @@ func (w *Window) checkUpdates(manual bool) {
 				})
 			})
 		})
+	})
+}
+
+func (w *Window) setStatus(text string) { w.logs.Record("INFO", text); w.status.SetText(text) }
+
+// Background checks have no operation completion callback, but still need the
+// same panic reporting boundary as a foreground scan or installation.
+func (w *Window) background(work func(context.Context)) {
+	w.jobs.Go(func(ctx context.Context) {
+		if err := w.logs.Guard(ctx, func(ctx context.Context) error { work(ctx); return nil }); err != nil {
+			w.post(func() { w.error(err) })
+		}
 	})
 }

@@ -33,7 +33,7 @@ func (*readOnlyTable) Disabled() bool                 { return true }
 func (*readOnlyTable) Disable()                       {}
 func (*readOnlyTable) Enable()                        {}
 
-// A quiet, full-width progress track. The operation text conveys the task;
+// A quiet progress track for the footer’s reserved middle lane. The operation text conveys the task;
 // the bar shows progress without a second, button-shaped percentage readout.
 type thinProgress struct{ widget.ProgressBar }
 

@@ -28,7 +28,7 @@ func (w *Window) launchOptions() {
 	w.prompt(promptRequest{kind: promptEntry, title: "Steam / Proton launch options", text: "Copy this into the game's Steam Properties → Launch Options:", initial: platform.LaunchOptions, accept: "Copy", dismiss: "Close", done: func(_ string, ok bool) {
 		if ok {
 			w.app.Clipboard().SetContent(platform.LaunchOptions)
-			w.status.SetText("Steam / Proton launch options copied.")
+			w.setStatus("Steam / Proton launch options copied.")
 		}
 	}})
 }
