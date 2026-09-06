@@ -1,47 +1,49 @@
 package ui
 
 import (
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
-
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
+const aboutCredits = `This project is an open-source replication of the original RockstarNexus Downgrader.
+Special thanks to the previous **RockstarNexus** developers for creating the initial application.
+
+Developer: **Ivan Potiienko (xxanqw)**
+
+[https://github.com/xxanqw](https://github.com/xxanqw)
+
+Thanks to all of the **GTA SA community** for their continuous support and work!
+
+This application is licensed under the **MIT License**.`
+
 func (w *Window) showAbout() {
-	information := "GTA SA Open Downgrader · " + updater.Version + "\nMIT licensed\nBundled xdelta3: Apache License 2.0"
-	choices := []string{"Source and releases", "Read bundled xdelta3 license", "Copy app information"}
-	w.prompt(promptRequest{kind: promptChoice, title: "About GTA SA Open Downgrader", text: information, choices: choices, initial: choices[0], accept: "Open", dismiss: "Close", done: func(choice string, ok bool) {
-		if !ok {
-			return
-		}
-		switch choice {
-		case choices[0]:
-			w.error(w.app.OpenURL(mustURL("https://github.com/xxanqw/gtasa-open-downgrader")))
-		case choices[1]:
-			w.openLicense()
-		case choices[2]:
-			w.app.Clipboard().SetContent(information)
-			w.status.SetText("App information copied.")
-		}
+	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
+		body, licenses := aboutContent()
+		copyLicense := widget.NewButtonWithIcon("Copy license", theme.ContentCopyIcon(), func() {
+			text := assets.AppLicense
+			if licenses.SelectedIndex() == 1 {
+				text = assets.XdeltaLicense
+			}
+			w.app.Clipboard().SetContent(text)
+		})
+		return w.panel("About GTA SA Open Downgrader", body, fyne.NewSize(580, 520), "", "OK", copyLicense, func(bool) { done("", false) })
 	}})
 }
-
-func (w *Window) openLicense() {
-	if err := os.MkdirAll(w.cache, 0700); err != nil {
-		w.error(err)
-		return
-	}
-	path := filepath.Join(w.cache, "xdelta3-LICENSE.txt")
-	if err := os.WriteFile(path, []byte(assets.XdeltaLicense), 0644); err != nil {
-		w.error(err)
-		return
-	}
-	path = filepath.ToSlash(path)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	w.error(w.app.OpenURL(&url.URL{Scheme: "file", Path: path}))
+func aboutContent() (fyne.CanvasObject, *container.AppTabs) {
+	title := widget.NewLabelWithStyle("GTA SA Open Downgrader", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	version := widget.NewLabel(updater.Version)
+	credits := widget.NewRichTextFromMarkdown(aboutCredits)
+	credits.Wrapping = fyne.TextWrapWord
+	summary := container.NewVBox(container.NewBorder(nil, nil, nil, version, title), credits)
+	licenses := container.NewAppTabs(
+		container.NewTabItem("App License (MIT)", container.NewVScroll(promptText(assets.AppLicense))),
+		container.NewTabItem("xdelta3 License", container.NewVScroll(promptText(assets.XdeltaLicense))),
+	)
+	body := container.NewVSplit(container.NewVScroll(summary), licenses)
+	body.SetOffset(0.44)
+	return body, licenses
 }

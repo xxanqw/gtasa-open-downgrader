@@ -3,6 +3,9 @@ package ui
 import (
 	"context"
 	"fmt"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,22 +33,57 @@ func (w *Window) launchOptions() {
 	}})
 }
 func (w *Window) tools() {
-	actions := w.toolActions()
-	names := make([]string, len(actions))
-	for i, action := range actions {
-		names[i] = action.label
-	}
-	w.prompt(promptRequest{kind: promptChoice, title: "Downgrader tools", text: "Choose a tool to open:", choices: names, initial: names[0], accept: "Open", dismiss: "Close", done: func(name string, ok bool) {
-		if !ok {
-			return
+	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
+		var close func()
+		groups := []struct {
+			title   string
+			buttons []fyne.CanvasObject
+		}{{title: "Patch assets"}, {title: "Game files & mods"}, {title: "System integration"}}
+		for _, action := range w.toolActions() {
+			action := action
+			group, label := toolPresentation(action.label)
+			button := widget.NewButton(label, func() { close(); action.run() })
+			groups[group].buttons = append(groups[group].buttons, button)
 		}
-		for _, action := range actions {
-			if name == action.label {
-				action.run()
-				return
-			}
+		var sections []fyne.CanvasObject
+		for _, group := range groups {
+			sections = append(sections, widget.NewLabelWithStyle(group.title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), container.NewGridWithColumns(2, group.buttons...))
 		}
+		close = w.panel("Downgrader tools", container.NewVScroll(container.NewVBox(sections...)), fyne.NewSize(560, 440), "", "Close", nil, func(bool) { done("", false) })
+		return close
 	}})
+}
+func toolPresentation(label string) (int, string) {
+	switch label {
+	case "Download / refresh patch assets":
+		return 0, "Download / update patches"
+	case "Import Patches.zip":
+		return 0, "Import Patches.zip"
+	case "Select an existing Patches folder":
+		return 0, "Select patches folder"
+	case "Apply 4GB / Large Address Aware flag":
+		return 1, "Apply 4GB patch"
+	case "Restore downgrade backups":
+		return 1, "Restore original files"
+	case "Delete downgrade backups":
+		return 1, "Delete backups"
+	case "Clear saves, settings and gallery":
+		return 1, "Clear saves & settings"
+	case "Import mod archive (ZIP / 7z)":
+		return 1, "Import mod archive"
+	case "Repair installation path in Registry":
+		return 2, "Repair Registry path"
+	case "Create desktop shortcut":
+		return 2, "Create desktop shortcut"
+	case "Steam / Proton launch options":
+		return 2, "Steam launch options"
+	case "List Protontricks games":
+		return 2, "List Proton games"
+	case "Run installer through Protontricks":
+		return 2, "Run Windows installer"
+	default:
+		return 2, label
+	}
 }
 func (w *Window) toolActions() []toolAction {
 	root := w.scanPath

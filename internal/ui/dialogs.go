@@ -1,18 +1,15 @@
 package ui
 
 import (
-	"context"
-	"errors"
-	"os"
 	"path/filepath"
-	"slices"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/driver"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/ncruces/zenity"
 )
 
 type promptKind int
@@ -33,55 +30,11 @@ type promptRequest struct {
 	accept, dismiss      string
 	extensions, choices  []string
 	done                 func(string, bool)
-}
-type dialogBackend struct {
-	available func() bool
-	show      func(context.Context, promptRequest, any) (string, error)
+	present              func(func(string, bool)) func()
 }
 
-func systemDialog(ctx context.Context, r promptRequest, parent any) (string, error) {
-	opts := []zenity.Option{zenity.Title(r.title), zenity.Context(ctx), zenity.Modal()}
-	if r.accept != "" {
-		opts = append(opts, zenity.OKLabel(r.accept))
-	}
-	if r.dismiss != "" {
-		opts = append(opts, zenity.CancelLabel(r.dismiss))
-	}
-	if parent != nil {
-		opts = append(opts, zenity.Attach(parent))
-	}
-	switch r.kind {
-	case promptInfo:
-		return "", zenity.Info(r.text, opts...)
-	case promptError:
-		return "", zenity.Error(r.text, opts...)
-	case promptConfirm:
-		return "", zenity.Question(r.text, append(opts, zenity.OKLabel("Continue"), zenity.CancelLabel("Cancel"), zenity.DefaultCancel())...)
-	case promptFolder, promptFile:
-		if r.initial != "" {
-			opts = append(opts, zenity.Filename(r.initial+string(os.PathSeparator)))
-		}
-		if r.kind == promptFolder {
-			opts = append(opts, zenity.Directory())
-		}
-		if len(r.extensions) > 0 {
-			patterns := make([]string, len(r.extensions))
-			for i, ext := range r.extensions {
-				patterns[i] = "*" + ext
-			}
-			opts = append(opts, zenity.FileFilter{Name: "Supported files", Patterns: patterns, CaseFold: true})
-		}
-		return zenity.SelectFile(opts...)
-	case promptEntry:
-		return zenity.Entry(r.text, append(opts, zenity.EntryText(r.initial))...)
-	case promptChoice:
-		return zenity.List(r.text, r.choices, append(opts, zenity.DisallowEmpty(), zenity.DefaultItems(r.initial))...)
-	}
-	return "", zenity.ErrUnsupported
-}
-
-// Prompts are serialized and owned by the same cancellable job group as other
-// window work. No system dialog blocks Fyne's event goroutine or outlives Quit.
+// Keep prompts ordered, including prompts arriving from background work while
+// Tools or About is open. Only an explicit confirmation can start an action.
 func (w *Window) prompt(r promptRequest) {
 	if w.closing {
 		return
@@ -97,7 +50,13 @@ func (w *Window) nextPrompt() {
 	w.prompts = w.prompts[1:]
 	w.promptActive = true
 	w.refreshEnabled()
+	finished := false
 	complete := func(value string, ok bool) {
+		if finished {
+			return
+		}
+		finished = true
+		w.activePrompt = nil
 		w.promptActive = false
 		if w.closing {
 			return
@@ -108,43 +67,68 @@ func (w *Window) nextPrompt() {
 		}
 		w.nextPrompt()
 	}
-	if w.dialogs.available == nil || !w.dialogs.available() {
-		w.fallbackPrompt(r, complete)
-		return
+	if r.present != nil {
+		w.activePrompt = r.present(complete)
+	} else {
+		w.activePrompt = w.fynePrompt(r, complete)
 	}
-	var parent any
-	if native, ok := w.window.(driver.NativeWindow); ok {
-		native.RunNative(func(raw any) {
-			switch c := raw.(type) {
-			case driver.WindowsWindowContext:
-				if c.HWND != 0 {
-					parent = c.HWND
-				}
-			case driver.X11WindowContext:
-				if c.WindowHandle != 0 {
-					parent = int(c.WindowHandle)
-				}
-			}
-		})
-	}
-	w.jobs.Go(func(ctx context.Context) {
-		value, err := w.dialogs.show(ctx, r, parent)
-		w.post(func() {
-			if err != nil && !errors.Is(err, zenity.ErrCanceled) && !errors.Is(err, context.Canceled) {
-				// A missing or broken desktop helper must never approve an operation.
-				w.fallbackPrompt(r, complete)
-				return
-			}
-			ok := err == nil
-			if r.kind == promptChoice {
-				ok = ok && slices.Contains(r.choices, value)
-			}
-			complete(value, ok)
-		})
-	})
 }
 
-func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
+// panel gives application dialogs a shared header, spacing and action bar.
+// Content is bounded by the current window; scrollable bodies retain access to
+// long messages and licenses even at the smallest supported window size.
+func (w *Window) panel(title string, body fyne.CanvasObject, size fyne.Size, accept, dismiss string, extra fyne.CanvasObject, done func(bool)) func() {
+	canvas := w.window.Canvas()
+	oldKey, oldFocus := canvas.OnTypedKey(), canvas.Focused()
+	var popup *widget.PopUp
+	closed := false
+	finish := func(ok bool) {
+		if closed {
+			return
+		}
+		closed = true
+		popup.Hide()
+		canvas.SetOnTypedKey(oldKey)
+		if oldFocus != nil {
+			canvas.Focus(oldFocus)
+		} else {
+			canvas.Unfocus()
+		}
+		done(ok)
+	}
+	closeButton := widget.NewButtonWithIcon("", theme.CancelIcon(), func() { finish(false) })
+	heading := compactLabel(title)
+	heading.TextStyle.Bold = true
+	header := container.NewBorder(nil, nil, nil, closeButton, heading)
+	cancel := widget.NewButton(dismiss, func() { finish(false) })
+	buttons := container.NewHBox(cancel)
+	if accept != "" {
+		confirm := widget.NewButton(accept, func() { finish(true) })
+		confirm.Importance = widget.HighImportance
+		buttons.Add(confirm)
+	}
+	footer := container.NewBorder(nil, nil, extra, buttons, nil)
+	frame := container.NewBorder(container.NewVBox(header, widget.NewSeparator()), container.NewVBox(widget.NewSeparator(), footer), nil, nil, body)
+	content := container.New(layout.NewCustomPaddedLayout(10, 10, 14, 14), frame)
+	popup = widget.NewModalPopUp(content, canvas)
+	bounds := canvas.Size()
+	popup.Resize(fyne.NewSize(min(size.Width, bounds.Width-24), min(size.Height, bounds.Height-24)))
+	canvas.Unfocus()
+	canvas.SetOnTypedKey(func(key *fyne.KeyEvent) {
+		if key.Name == fyne.KeyEscape {
+			finish(false)
+		}
+	})
+	popup.Show()
+	return func() { finish(false) }
+}
+func promptText(text string) *widget.Label {
+	label := widget.NewLabel(text)
+	label.Wrapping = fyne.TextWrapWord
+	label.Selectable = true
+	return label
+}
+func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 	accept, dismiss := r.accept, r.dismiss
 	if accept == "" {
 		accept = "Continue"
@@ -154,19 +138,9 @@ func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
 	}
 	switch r.kind {
 	case promptInfo, promptError:
-		var d dialog.Dialog
-		if r.kind == promptError {
-			d = dialog.NewError(errors.New(r.text), w.window)
-		} else {
-			d = dialog.NewInformation(r.title, r.text, w.window)
-		}
-		d.SetOnClosed(func() { done("", true) })
-		d.Show()
+		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(500, 250), "", "Close", nil, func(bool) { done("", false) })
 	case promptConfirm:
-		d := dialog.NewConfirm(r.title, r.text, func(ok bool) { done("", ok) }, w.window)
-		d.SetConfirmText("Continue")
-		d.SetDismissText("Cancel")
-		d.Show()
+		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(500, 245), accept, dismiss, nil, func(ok bool) { done("", ok) })
 	case promptFolder:
 		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
@@ -180,8 +154,10 @@ func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
 			}
 			done(uri.Path(), true)
 		}, w.window)
+		d.SetTitleText(r.title)
 		w.setPickerLocation(d, r.initial)
-		d.Show()
+		w.showPicker(d)
+		return func() { d.Hide(); done("", false) }
 	case promptFile:
 		d := dialog.NewFileOpen(func(file fyne.URIReadCloser, err error) {
 			if err != nil {
@@ -198,17 +174,30 @@ func (w *Window) fallbackPrompt(r promptRequest, done func(string, bool)) {
 			done(path, true)
 		}, w.window)
 		d.SetFilter(storage.NewExtensionFileFilter(r.extensions))
+		d.SetTitleText(r.title)
 		w.setPickerLocation(d, r.initial)
-		d.Show()
+		w.showPicker(d)
+		return func() { d.Hide(); done("", false) }
 	case promptEntry:
 		entry := widget.NewEntry()
 		entry.SetText(r.initial)
-		dialog.ShowForm(r.title, accept, dismiss, []*widget.FormItem{widget.NewFormItem(r.text, entry)}, func(ok bool) { done(entry.Text, ok) }, w.window)
+		body := container.NewBorder(nil, entry, nil, nil, container.NewVScroll(promptText(r.text)))
+		close := w.panel(r.title, body, fyne.NewSize(500, 250), accept, dismiss, nil, func(ok bool) { done(entry.Text, ok) })
+		w.window.Canvas().Focus(entry)
+		return close
 	case promptChoice:
 		choice := widget.NewSelect(r.choices, nil)
 		choice.SetSelected(r.initial)
-		dialog.ShowForm(r.title, accept, dismiss, []*widget.FormItem{widget.NewFormItem(r.text, choice)}, func(ok bool) { done(choice.Selected, ok && choice.Selected != "") }, w.window)
+		body := container.NewBorder(nil, choice, nil, nil, container.NewVScroll(promptText(r.text)))
+		return w.panel(r.title, body, fyne.NewSize(520, 280), accept, dismiss, nil, func(ok bool) { done(choice.Selected, ok && choice.Selected != "") })
 	}
+	return func() { done("", false) }
+}
+func (w *Window) showPicker(d *dialog.FileDialog) {
+	d.SetConfirmText("Select")
+	d.Show()
+	bounds := w.window.Canvas().Size()
+	d.Resize(fyne.NewSize(min(float32(640), bounds.Width-24), min(float32(460), bounds.Height-24)))
 }
 func (w *Window) setPickerLocation(d *dialog.FileDialog, path string) {
 	if path != "" {

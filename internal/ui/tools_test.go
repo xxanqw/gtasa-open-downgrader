@@ -1,94 +1,112 @@
 package ui
 
 import (
-	"context"
-	"net/url"
 	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
-	"github.com/ncruces/zenity"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
-	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
-func TestNativeToolsSelectionOpensPicker(t *testing.T) {
-	a := newDialogTestApp()
+func TestToolsKeepGameValidationAndQueueOtherPrompts(t *testing.T) {
+	a := test.NewApp()
 	defer a.Quit()
 	w := New(a)
 	defer w.jobs.Close()
-	requests := make(chan promptRequest, 2)
-	replies := make(chan string, 2)
-	w.dialogs = dialogBackend{available: func() bool { return true }, show: func(ctx context.Context, r promptRequest, _ any) (string, error) {
-		requests <- r
-		select {
-		case value := <-replies:
-			if value == "" {
-				return "", zenity.ErrCanceled
-			}
-			return value, nil
-		case <-ctx.Done():
-			return "", ctx.Err()
-		}
-	}}
+	w.window.Show()
 	w.tools()
-	r := receive(t, requests)
-	if r.kind != promptChoice || !slices.Contains(r.choices, "Restore downgrade backups") || !slices.Contains(r.choices, "Apply 4GB / Large Address Aware flag") {
-		t.Fatal("native tools lost game operations")
+	for _, action := range w.toolActions() {
+		_, label := toolPresentation(action.label)
+		if promptButton(w.window.Canvas().Overlays().Top(), label) == nil {
+			t.Fatalf("tool lost: %s", label)
+		}
 	}
-	replies <- "Select an existing Patches folder"
-	a.dispatch(t)
-	r = receive(t, requests)
-	if r.kind != promptFolder {
-		t.Fatal("selected tool did not open its native picker")
+	snapshot(t, w, "GTASA_TOOLS_SNAPSHOT")
+	tapPrompt(t, w, "Restore original files")
+	found := false
+	walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
+		if label, ok := o.(*widget.Label); ok && strings.Contains(label.Text, "scan a game directory first") {
+			found = true
+			return true
+		}
+		return false
+	})
+	if !found {
+		t.Fatal("restore bypassed game directory validation")
 	}
-	replies <- ""
-	w.jobs.Close()
-	a.dispatch(t)
-	if w.patchDir != "" {
-		t.Fatal("cancelled tool changed patch assets")
+	tapPrompt(t, w, "Close")
+	w.tools()
+	w.info("Update", "An update is available.")
+	if len(w.prompts) != 1 {
+		t.Fatal("background information overlapped Tools")
 	}
+	tapPrompt(t, w, "Close")
+	if !w.promptActive || len(w.prompts) != 0 {
+		t.Fatal("queued information did not open after Tools")
+	}
+	tapPrompt(t, w, "Close")
 }
-
-type linkCaptureApp struct {
-	fyne.App
-	opened *url.URL
-}
-
-func (a *linkCaptureApp) OpenURL(u *url.URL) error { a.opened = u; return nil }
-
-func TestNativeAboutPreservesInformationAndBundledLicense(t *testing.T) {
-	a := newDialogTestApp()
+func TestAboutContainsOriginalCreditsAndCompleteLicenses(t *testing.T) {
+	a := test.NewApp()
 	defer a.Quit()
-	capture := &linkCaptureApp{App: a}
-	w := New(capture)
-	w.cache = t.TempDir()
-	requests := make(chan promptRequest, 1)
-	w.dialogs = dialogBackend{available: func() bool { return true }}
-	// Capture and inspect the actual native request without opening a system window.
-	w.dialogs.show = func(ctx context.Context, r promptRequest, _ any) (string, error) {
-		requests <- r
-		return "Copy app information", nil
+	w := New(a)
+	defer w.jobs.Close()
+	w.window.Show()
+	source, err := os.ReadFile("../../LICENSE")
+	if err != nil || string(source) != assets.AppLicense {
+		t.Fatal("embedded app license differs from repository license")
+	}
+	for _, credit := range []string{"RockstarNexus", "Ivan Potiienko (xxanqw)", "https://github.com/xxanqw", "GTA SA community", "MIT License"} {
+		if !strings.Contains(aboutCredits, credit) {
+			t.Fatalf("missing original credit %s", credit)
+		}
 	}
 	w.showAbout()
-	r := receive(t, requests)
-	w.jobs.Close()
-	a.dispatch(t)
-	if r.kind != promptChoice || !strings.Contains(r.text, updater.Version) || !slices.Contains(r.choices, "Read bundled xdelta3 license") {
-		t.Fatal("About lost version or license access")
+	var tabs *container.AppTabs
+	walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
+		if v, ok := o.(*container.AppTabs); ok {
+			tabs = v
+			return true
+		}
+		return false
+	})
+	if tabs == nil || len(tabs.Items) != 2 {
+		t.Fatal("About lacks both license tabs")
 	}
-	if !strings.Contains(a.Clipboard().Content(), updater.Version) {
-		t.Fatal("About information was not copied")
+	for i, want := range []string{assets.AppLicense, assets.XdeltaLicense} {
+		tabs.SelectIndex(i)
+		found := false
+		walkObjects(tabs.Items[i].Content, func(o fyne.CanvasObject) bool {
+			if label, ok := o.(*widget.Label); ok && label.Text == want && label.Selectable {
+				found = true
+				return true
+			}
+			return false
+		})
+		if !found {
+			t.Fatalf("license %d is incomplete or not selectable", i)
+		}
+		tapPrompt(t, w, "Copy license")
+		if a.Clipboard().Content() != want {
+			t.Fatalf("license %d was not copied in full", i)
+		}
 	}
-	w.openLicense()
-	if capture.opened == nil || capture.opened.Scheme != "file" {
-		t.Fatal("license did not open in the system viewer")
+	tabs.SelectIndex(0)
+	snapshot(t, w, "GTASA_ABOUT_SNAPSHOT")
+	tapPrompt(t, w, "OK")
+	if w.promptActive {
+		t.Fatal("About did not close")
 	}
-	data, err := os.ReadFile(filepath.Join(w.cache, "xdelta3-LICENSE.txt"))
-	if err != nil || string(data) != assets.XdeltaLicense {
-		t.Fatalf("bundled license changed: %v", err)
+	w.window.Resize(fyne.NewSize(720, 480))
+	w.showAbout()
+	okButton := promptButton(w.window.Canvas().Overlays().Top(), "OK")
+	pos := a.Driver().AbsolutePositionForObject(okButton)
+	if pos.X < 0 || pos.Y < 0 || pos.X+okButton.Size().Width > 720 || pos.Y+okButton.Size().Height > 480 {
+		t.Fatal("small window hides About actions")
 	}
+	tapPrompt(t, w, "OK")
 }

@@ -16,6 +16,9 @@ import (
 //go:embed icon.png
 var Icon []byte
 
+//go:embed app-LICENSE.txt
+var AppLicense string
+
 //go:embed LICENSE.txt
 var XdeltaLicense string
 

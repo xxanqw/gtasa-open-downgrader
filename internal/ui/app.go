@@ -18,10 +18,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/ncruces/zenity"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -33,7 +31,7 @@ import (
 )
 
 type Window struct {
-	dialogs                               dialogBackend
+	activePrompt                          func()
 	prompts                               []promptRequest
 	promptActive                          bool
 	app                                   fyne.App
@@ -96,9 +94,6 @@ func New(a fyne.App) *Window {
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
 	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedCell: widget.TableCellID{Row: -1}, warned: map[string]bool{}}
-	if _, ok := w.window.(driver.NativeWindow); ok {
-		w.dialogs = dialogBackend{available: zenity.IsAvailable, show: systemDialog}
-	}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
@@ -240,6 +235,10 @@ func (w *Window) close() {
 		return
 	}
 	w.closing = true
+	w.prompts = nil
+	if w.activePrompt != nil {
+		w.activePrompt()
+	}
 	if w.cancel != nil {
 		w.cancel()
 	}
