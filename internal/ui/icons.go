@@ -12,6 +12,7 @@ var fontAwesomeIcons = loadFontAwesomeIcons()
 
 func loadFontAwesomeIcons() map[fyne.ThemeIconName]fyne.Resource {
 	files := map[fyne.ThemeIconName]string{
+		theme.IconNameMediaPlay:          "solid-play.svg",
 		theme.IconNameCancel:             "solid-xmark.svg",
 		theme.IconNameWindowClose:        "solid-xmark.svg",
 		theme.IconNameConfirm:            "solid-check.svg",

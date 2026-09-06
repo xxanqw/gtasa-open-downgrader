@@ -186,7 +186,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.modLabels[name] = state
 		checkObjects = append(checkObjects, container.NewBorder(nil, nil, container.NewGridWrap(fyne.NewSize(210, 28), c), nil, state))
 	}
-	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.DownloadIcon(), w.apply)
+	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
 	w.install = widget.NewButton("Install selected", func() { w.installMods(false) })
 	w.reinstall = widget.NewButton("Reinstall / update selected", func() { w.installMods(true) })
