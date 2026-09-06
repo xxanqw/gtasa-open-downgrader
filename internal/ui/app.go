@@ -212,7 +212,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
 	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
 	modActions := container.NewBorder(nil, nil, nil, container.NewHBox(w.install, w.reinstall), w.modStatus)
-	w.modPanel = container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modActions)
+	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modActions))
 	w.modPanel.Hide()
 	sectionHeader := container.NewBorder(nil, nil, w.modsButton, nil, w.summary)
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
