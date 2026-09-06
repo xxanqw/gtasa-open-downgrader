@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -34,7 +35,7 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.checks["SilentPatch"].SetChecked(true)
 	w.modLabels["SilentPatch"].SetText("Installed · 1.1-BUILD34.1-SA")
 	w.modLabels["Widescreen Fixes"].SetText("Update available · 2026-09-05")
-	w.status.SetText("Scan complete. Select a cell to copy its full value.")
+	w.status.SetText("Scan complete: 17 manifest files checked.")
 	w.progress.SetValue(1)
 	w.window.Show()
 	for _, size := range []fyne.Size{fyne.NewSize(840, 560), fyne.NewSize(720, 480)} {
@@ -49,7 +50,7 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 		if w.table.Size().Height < size.Height*0.55 {
 			t.Fatalf("file table gets only %v of %v", w.table.Size(), size)
 		}
-		for _, object := range []fyne.CanvasObject{w.version, w.summary, w.downgrade, w.status, w.progress, w.cancelButton} {
+		for _, object := range []fyne.CanvasObject{w.version, w.summary, w.downgrade, w.status} {
 			pos := a.Driver().AbsolutePositionForObject(object)
 			if pos.Y+object.Size().Height > canvasSize.Height+1 || pos.X+object.Size().Width > canvasSize.Width+1 {
 				t.Fatalf("essential control is outside the window: %T", object)
@@ -75,22 +76,28 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	for col, want := range fileValues(w.rows[0]) {
 		cell := w.table.CreateCell()
 		w.table.UpdateCell(widget.TableCellID{Row: 1, Col: col}, cell)
-		if got := cell.(*widget.Label).Text; got != want {
+		if got := cell.(*container.ThemeOverride).Content.(*widget.Label).Text; got != want {
 			t.Fatalf("column %d: got %q, want %q", col, got, want)
 		}
-		w.table.Select(widget.TableCellID{Row: 1, Col: col})
-		if w.copyButton.Disabled() {
-			t.Fatal("table value cannot be copied")
-		}
-		test.Tap(w.copyButton)
-		if w.app.Clipboard().Content() != want {
-			t.Fatalf("full value lost from column %d", col)
-		}
+
 	}
-	w.path.SetText("/another/game")
-	if !w.copyButton.Disabled() {
-		t.Fatal("stale cell remains selected after changing game folder")
+	if w.progress.Visible() || w.cancelButton.Visible() {
+		t.Fatal("idle window shows operation controls")
 	}
+	pos := a.Driver().AbsolutePositionForObject(w.downgrade)
+	if pos.X < w.window.Canvas().Size().Width/2 {
+		t.Fatal("Downgrade is not aligned right")
+	}
+	w.busy = true
+	w.refreshEnabled()
+	w.cancelButton.Enable()
+	w.progress.SetValue(0.42)
+	w.status.SetText("Downgrading audio/streams/BEATS…")
+	if !w.progress.Visible() || !w.cancelButton.Visible() || w.progress.Size().Height > 4 {
+		t.Fatal("active progress is not a thin visible track")
+	}
+	snapshot(t, w, "GTASA_PROGRESS_SNAPSHOT")
+
 }
 func snapshot(t *testing.T, w *Window, key string) {
 	t.Helper()

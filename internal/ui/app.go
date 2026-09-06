@@ -41,8 +41,8 @@ type Window struct {
 	cache, patchDir                       string
 	path                                  *widget.Entry
 	status, version, modStatus            *widget.Label
-	progress                              *widget.ProgressBar
-	table                                 *widget.Table
+	progress                              *thinProgress
+	table                                 *readOnlyTable
 	rows                                  []game.Row
 	checks                                map[string]*widget.Check
 	controls                              []fyne.Disableable
@@ -60,8 +60,7 @@ type Window struct {
 	summary                               *widget.Label
 	modLabels                             map[string]*widget.Label
 	tabs                                  *container.AppTabs
-	modsButton, copyButton                *widget.Button
-	selectedCell                          widget.TableCellID
+	modsButton                            *widget.Button
 }
 
 func Run(gamePath, patchPath string) {
@@ -93,7 +92,7 @@ func New(a fyne.App) *Window {
 		cache = os.TempDir()
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
-	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, selectedCell: widget.TableCellID{Row: -1}, warned: map[string]bool{}}
+	w := &Window{app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, warned: map[string]bool{}}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)
@@ -105,7 +104,6 @@ func New(a fyne.App) *Window {
 		w.generation++
 		w.rows = nil
 		if w.table != nil {
-			w.table.UnselectAll()
 			w.table.Refresh()
 			w.refreshSummary()
 			w.version.SetText("Scan this folder to detect the game version.")
@@ -124,11 +122,13 @@ func New(a fyne.App) *Window {
 	w.version.TextStyle = fyne.TextStyle{Bold: true}
 	w.summary = compactLabel("Scan a game folder to check its files.")
 	w.status = compactLabel("Ready")
-	w.progress = widget.NewProgressBar()
+	w.progress = newThinProgress()
 	w.modStatus = widget.NewLabel("Select mods to install with the downgrade, or install them separately.")
 	w.modStatus.Wrapping = fyne.TextWrapWord
-	w.table = widget.NewTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject { return compactLabel("") }, func(id widget.TableCellID, o fyne.CanvasObject) {
-		label := o.(*widget.Label)
+	w.table = newReadOnlyTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject {
+		return container.NewThemeOverride(compactLabel(""), fileTableTheme{a.Settings().Theme()})
+	}, func(id widget.TableCellID, o fyne.CanvasObject) {
+		label := o.(*container.ThemeOverride).Content.(*widget.Label)
 		value := ""
 		label.TextStyle = fyne.TextStyle{Bold: id.Row == 0}
 		label.Importance = widget.MediumImportance
@@ -153,25 +153,6 @@ func New(a fyne.App) *Window {
 		label.SetText(value)
 	})
 	w.table.StickyRowCount = 1
-	w.copyButton = widget.NewButtonWithIcon("Copy value", theme.ContentCopyIcon(), func() {
-		id := w.selectedCell
-		if id.Row > 0 && id.Row <= len(w.rows) {
-			w.app.Clipboard().SetContent(fileValues(w.rows[id.Row-1])[id.Col])
-		}
-	})
-	w.copyButton.Disable()
-	w.table.OnSelected = func(id widget.TableCellID) {
-		w.selectedCell = id
-		if id.Row > 0 && id.Row <= len(w.rows) {
-			w.copyButton.Enable()
-		} else {
-			w.copyButton.Disable()
-		}
-	}
-	w.table.OnUnselected = func(widget.TableCellID) {
-		w.selectedCell = widget.TableCellID{Row: -1}
-		w.copyButton.Disable()
-	}
 	var checkObjects []fyne.CanvasObject
 	for _, source := range mods.Catalog {
 		name := source.Name
@@ -204,15 +185,15 @@ func New(a fyne.App) *Window {
 	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
 	w.modsButton = widget.NewButton("Choose mods", func() { w.tabs.SelectIndex(1) })
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
-	fileActions := container.NewBorder(nil, nil, container.NewHBox(w.downgrade, w.modsButton), w.copyButton, nil)
+	fileActions := container.NewBorder(nil, nil, w.modsButton, w.downgrade, nil)
 	files := container.NewBorder(w.summary, fileActions, nil, nil, table)
 	modActions := container.NewHBox(w.install, w.reinstall)
 	modContent := container.NewBorder(w.modStatus, modActions, nil, nil, container.NewVScroll(container.NewVBox(checkObjects...)))
 	w.tabs = container.NewAppTabs(container.NewTabItem("Game files", files), container.NewTabItem("Mods", modContent))
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
-	progress := container.NewGridWrap(fyne.NewSize(128, 28), w.progress)
 	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), func() { w.info("Operation status", w.status.Text) })
-	bottom := container.NewBorder(nil, nil, nil, container.NewHBox(statusDetails, progress, w.cancelButton), w.status)
+	statusLine := container.NewBorder(nil, nil, nil, container.NewHBox(statusDetails, w.cancelButton), w.status)
+	bottom := container.NewVBox(w.progress, statusLine)
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, w.tabs))
 	w.refreshEnabled()
 	return w
@@ -246,6 +227,15 @@ func (w *Window) close() {
 	go func() { w.jobs.Close(); fyne.Do(func() { w.window.SetCloseIntercept(nil); w.app.Quit() }) }()
 }
 func (w *Window) refreshEnabled() {
+	if w.progress != nil && w.cancelButton != nil {
+		if w.busy {
+			w.progress.Show()
+			w.cancelButton.Show()
+		} else {
+			w.progress.Hide()
+			w.cancelButton.Hide()
+		}
+	}
 	for _, c := range w.controls {
 		if w.busy || w.promptActive {
 			c.Disable()
@@ -446,7 +436,6 @@ func (w *Window) scan() {
 		w.scanPath = root
 		w.readonly = result.ReadOnly
 		w.rows = result.Rows
-		w.table.UnselectAll()
 		w.refreshSummary()
 		w.table.Refresh()
 		access := "Writable"

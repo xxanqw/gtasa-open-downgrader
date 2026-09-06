@@ -89,9 +89,9 @@ func fileValues(row game.Row) [5]string {
 }
 
 // Keep all five columns in the viewport. Long values elide like the original
-// Qt table; selecting a cell allows copying its complete value.
+// Qt table, with the grid used only to display scan and patch results.
 type fileTableLayout struct {
-	table *widget.Table
+	table *readOnlyTable
 	width float32
 }
 
