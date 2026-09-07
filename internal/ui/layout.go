@@ -151,7 +151,7 @@ func (t modGridTheme) Size(name fyne.ThemeSizeName) float32 {
 	case theme.SizeNameText:
 		return 11
 	case theme.SizeNameInnerPadding:
-		return 3
+		return 1
 	case theme.SizeNameInlineIcon:
 		return 14
 	}
@@ -190,4 +190,26 @@ func (statusLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	progress.Resize(fyne.NewSize(max(float32(0), available-left-10), 3))
 	actions.Move(fyne.NewPos(size.Width-right, (size.Height-actions.MinSize().Height)/2))
 	actions.Resize(actions.MinSize())
+}
+
+func modCheckSummary(updates, unknown, failed int) string {
+	if updates+unknown+failed == 0 {
+		return "All tracked mods are up to date."
+	}
+	var parts []string
+	for _, item := range []struct {
+		count int
+		label string
+	}{
+		{updates, "update"}, {unknown, "unknown version"}, {failed, "unavailable check"},
+	} {
+		if item.count > 0 {
+			suffix := ""
+			if item.count != 1 {
+				suffix = "s"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s%s", item.count, item.label, suffix))
+		}
+	}
+	return strings.Join(parts, " · ") + "."
 }

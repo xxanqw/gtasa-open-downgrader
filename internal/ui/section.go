@@ -15,7 +15,7 @@ import (
 func newModPanel(content fyne.CanvasObject) *fyne.Container {
 	background := &sectionBackground{}
 	background.ExtendBaseWidget(background)
-	inset := container.New(layout.NewCustomPaddedLayout(7, 7, 9, 9), content)
+	inset := container.New(layout.NewCustomPaddedLayout(5, 5, 9, 9), content)
 	return container.New(layout.NewCustomPaddedLayout(0, 6, 0, 0), container.NewStack(background, inset))
 }
 
@@ -42,12 +42,27 @@ func (b *sectionBackground) Refresh() {
 func (b *sectionBackground) applyColors() {
 	th := b.Theme()
 	variant := fyne.CurrentApp().Settings().ThemeVariant()
+	b.rectangle.FillColor = sectionTint(th, variant, 4)
+	b.rectangle.StrokeColor = sectionTint(th, variant, 9)
+}
+
+func sectionTint(th fyne.Theme, variant fyne.ThemeVariant, weight uint16) color.Color {
 	base := color.NRGBAModel.Convert(th.Color(theme.ColorNameBackground, variant)).(color.NRGBA)
 	foreground := color.NRGBAModel.Convert(th.Color(theme.ColorNameForeground, variant)).(color.NRGBA)
-	tint := func(weight uint16) color.Color {
-		mix := func(bg, fg uint8) uint8 { return uint8((uint16(bg)*(100-weight) + uint16(fg)*weight) / 100) }
-		return color.NRGBA{R: mix(base.R, foreground.R), G: mix(base.G, foreground.G), B: mix(base.B, foreground.B), A: 255}
+	mix := func(bg, fg uint8) uint8 { return uint8((uint16(bg)*(100-weight) + uint16(fg)*weight) / 100) }
+	return color.NRGBA{R: mix(base.R, foreground.R), G: mix(base.G, foreground.G), B: mix(base.B, foreground.B), A: 255}
+}
+
+// Distinguish the secondary mod actions from the surrounding panel without
+// competing with the main Downgrade action's high-importance treatment.
+type modActionTheme struct{ fyne.Theme }
+
+func (t modActionTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	switch name {
+	case theme.ColorNameButton:
+		return sectionTint(t.Theme, variant, 18)
+	case theme.ColorNameDisabledButton:
+		return sectionTint(t.Theme, variant, 7)
 	}
-	b.rectangle.FillColor = tint(7)
-	b.rectangle.StrokeColor = tint(15)
+	return t.Theme.Color(name, variant)
 }

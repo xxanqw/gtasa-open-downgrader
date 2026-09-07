@@ -147,7 +147,8 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.summary = compactLabel("Scan a game folder to check its files.")
 	w.status = compactLabel("Ready")
 	w.progress = newThinProgress()
-	w.modStatus = compactLabel("Select mods to include with the downgrade or install separately.")
+	w.modStatus = widget.NewLabel("Select mods to include with the downgrade or install separately.")
+	w.modStatus.Wrapping = fyne.TextWrapWord
 	w.table = newReadOnlyTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject {
 		return container.NewThemeOverride(compactLabel(""), fileTableTheme{a.Settings().Theme()})
 	}, func(id widget.TableCellID, o fyne.CanvasObject) {
@@ -187,8 +188,8 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	}
 	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
-	w.install = widget.NewButton("Install selected", func() { w.installMods(false) })
-	w.reinstall = widget.NewButton("Reinstall / update selected", func() { w.installMods(true) })
+	w.install = widget.NewButtonWithIcon("Install selected", theme.MediaPlayIcon(), func() { w.installMods(false) })
+	w.reinstall = widget.NewButtonWithIcon("Reinstall / update", theme.ViewRefreshIcon(), func() { w.installMods(true) })
 	tools := widget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
 	var more *widget.Button
 	more = widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {
@@ -210,8 +211,10 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.modsTitle.TextStyle.Bold = true
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
 	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
-	modActions := container.NewBorder(nil, nil, nil, container.NewHBox(w.install, w.reinstall), w.modStatus)
-	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modActions))
+	buttons := container.NewThemeOverride(container.NewHBox(w.install, w.reinstall), modActionTheme{a.Settings().Theme()})
+	modActions := container.NewBorder(nil, nil, nil, buttons, nil)
+	modMessage := container.NewThemeOverride(w.modStatus, modGridTheme{a.Settings().Theme()})
+	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modMessage, modActions))
 	sectionHeader := container.NewBorder(nil, nil, w.modsTitle, nil, w.summary)
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
@@ -548,7 +551,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 			for name, label := range labels {
 				w.modLabels[name].SetText(strings.TrimSuffix(strings.TrimPrefix(label, name+" ("), ")"))
 			}
-			w.modStatus.SetText(fmt.Sprintf("Mod checks: %d updates · %d unknown versions · %d unavailable. Reinstall selected mods to update.", updates, unknown, failed))
+			w.modStatus.SetText(modCheckSummary(updates, unknown, failed))
 		})
 	})
 }
