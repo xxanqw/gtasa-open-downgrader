@@ -1,6 +1,6 @@
 <div align=center>
 
-<img height="512" alt="GTA SA Open Downgrader logo" src="https://github.com/user-attachments/assets/166a2518-be0a-463b-ad2e-1dec1db89c63" />
+<img height="512" alt="GTA SA Open Downgrader logo" src="https://github.com/user-attachments/assets/e4177c99-aa80-4b15-8615-7b0056497821" />
 
 # GTA SA Open Downgrader
 
