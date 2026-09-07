@@ -62,7 +62,6 @@ type Window struct {
 	transferStart                         time.Time
 	transferBase                          int64
 	updateButton                          *widget.Button
-	summary                               *widget.Label
 	modLabels                             map[string]*widget.Label
 	modPanel                              *fyne.Container
 	modsTitle                             *widget.Label
@@ -129,7 +128,6 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.rows = nil
 		if w.table != nil {
 			w.table.Refresh()
-			w.refreshSummary()
 			w.version.SetText("Scan this folder to detect the game version.")
 		}
 		w.refreshEnabled()
@@ -144,7 +142,6 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	scan := widget.NewButtonWithIcon("Scan", theme.SearchIcon(), w.scan)
 	w.version = compactLabel("Select a game folder to get started.")
 	w.version.TextStyle = fyne.TextStyle{Bold: true}
-	w.summary = compactLabel("Scan a game folder to check its files.")
 	w.status = compactLabel("Ready")
 	w.progress = newThinProgress()
 	w.modStatus = widget.NewLabel("Select mods to include with the downgrade or install separately.")
@@ -215,7 +212,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	modActions := container.NewBorder(nil, nil, nil, buttons, nil)
 	modMessage := container.NewThemeOverride(w.modStatus, modGridTheme{a.Settings().Theme()})
 	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modMessage, modActions))
-	sectionHeader := container.NewBorder(nil, nil, w.modsTitle, nil, w.summary)
+	sectionHeader := w.modsTitle
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
@@ -475,7 +472,6 @@ func (w *Window) scan() {
 		w.scanPath = root
 		w.readonly = result.ReadOnly
 		w.rows = result.Rows
-		w.refreshSummary()
 		w.table.Refresh()
 		access := "Writable"
 		if result.ReadOnly {
@@ -488,11 +484,7 @@ func (w *Window) scan() {
 			c.SetChecked(tracker.Has(name))
 			label := "Not installed"
 			if tracker.Has(name) {
-				version := tracker.Versions[name].Version
-				if version == "" {
-					version = "version unknown"
-				}
-				label = "Installed · " + version
+				label = installedModLabel(tracker.Versions[name].Version)
 			}
 			w.modLabels[name].SetText(label)
 		}
@@ -525,23 +517,19 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 			if !mods.Supported(name) {
 				continue
 			}
+			installed := t.Versions[name]
 			latest, e := resolver.Resolve(ctx, name)
+			labels[name] = modUpdateLabel(installed, latest, e)
 			if e != nil {
 				w.logs.Record("WARN", "Mod update check ("+name+"): "+e.Error())
 				failed++
-				labels[name] = name + " (update check failed)"
 				continue
 			}
-			installed := t.Versions[name]
 			switch {
 			case installed.Fingerprint == "":
 				unknown++
-				labels[name] = name + " (version unknown)"
 			case installed.Fingerprint != latest.Fingerprint:
 				updates++
-				labels[name] = name + " (update available: " + latest.Version + ")"
-			default:
-				labels[name] = name + " (" + installed.Version + ")"
 			}
 		}
 		w.post(func() {
@@ -549,7 +537,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 				return
 			}
 			for name, label := range labels {
-				w.modLabels[name].SetText(strings.TrimSuffix(strings.TrimPrefix(label, name+" ("), ")"))
+				w.modLabels[name].SetText(label)
 			}
 			w.modStatus.SetText(modCheckSummary(updates, unknown, failed))
 		})
@@ -631,7 +619,6 @@ func (w *Window) apply() {
 								w.rows[i].Status += " · " + message
 							}
 							w.table.Refresh()
-							w.refreshSummary()
 						}
 						w.progress.SetValue(float64(i+1) / float64(len(m.Files)))
 						w.setStatus(m.Files[i].Path + " · " + status)

@@ -28,13 +28,12 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.rows[1].NeedsPatch = "No"
 	w.rows[2].Status = "Missing"
 	w.rows[2].NeedsPatch = "N/A"
-	w.refreshSummary()
 	w.table.Refresh()
 	w.refreshEnabled()
 	w.version.SetText("NewSteam R2  ·  Writable")
 	w.checks["SilentPatch"].SetChecked(true)
 	w.modLabels["SilentPatch"].SetText("Installed · 1.1-BUILD34.1-SA")
-	w.modLabels["Widescreen Fixes"].SetText("Update available · 2026-09-05")
+	w.modLabels["Widescreen Fixes"].SetText("Installed · 2025-12-08")
 	w.status.SetText("Scan complete: 17 manifest files checked.")
 	w.progress.SetValue(1)
 	w.window.Show()
@@ -50,7 +49,7 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 		if w.table.Size().Height < max(float32(150), size.Height*0.35) {
 			t.Fatalf("file table gets only %v of %v", w.table.Size(), size)
 		}
-		for _, object := range []fyne.CanvasObject{w.version, w.summary, w.downgrade, w.status} {
+		for _, object := range []fyne.CanvasObject{w.version, w.modsTitle, w.downgrade, w.status} {
 			pos := a.Driver().AbsolutePositionForObject(object)
 			if pos.Y+object.Size().Height > canvasSize.Height+1 || pos.X+object.Size().Width > canvasSize.Width+1 {
 				t.Fatalf("essential control is outside the window: %T", object)
@@ -89,8 +88,8 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.status.SetText("3 mods selected, including required loaders.")
 	w.window.Resize(fyne.NewSize(840, 560))
 	snapshot(t, w, "GTASA_MODS_SNAPSHOT")
-	if w.modsTitle.Text != "Mods · 3 selected" {
-		t.Fatal("mod heading lost the selected count")
+	if w.modsTitle.Text != "Mods" {
+		t.Fatal("mod heading includes unwanted summary text")
 	}
 	for col, want := range fileValues(w.rows[0]) {
 		cell := w.table.CreateCell()

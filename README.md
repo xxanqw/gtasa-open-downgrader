@@ -43,7 +43,7 @@ Contributions for other source versions are welcome through GitHub issues.
     - SkyGFX
     - Framerate Vigilante (60fps fix, using the current official ZIP package)
     - Frontend Mods
-- **Mod Selection:** An always-visible compact panel above the file table lets you choose mods, check installed versions, and install or reinstall selected packages. Its heading shows the selected count.
+- **Mod Selection:** An always-visible compact panel above the file table lets you choose mods, check installed versions, and install or reinstall selected packages.
 - **Mod Updates:** Records installed package versions and checks upstream releases in the background. The UI marks available updates and can force reinstall selected mods.
 - **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.
 - **Downgrader Tools:**

@@ -57,7 +57,7 @@ func (t compactTheme) Size(name fyne.ThemeSizeName) float32 {
 	case theme.SizeNameInnerPadding:
 		return 5
 	case theme.SizeNameInlineIcon:
-		return 16
+		return 12
 	}
 	return t.Theme.Size(name)
 }
@@ -108,41 +108,6 @@ func (l *fileTableLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	l.table.Resize(size)
 }
 
-func (w *Window) refreshSummary() {
-	if w.summary == nil {
-		return
-	}
-	if len(w.rows) == 0 {
-		w.summary.SetText("Scan a game folder to check its files.")
-		return
-	}
-	done, missing, modified, need, failed := 0, 0, 0, 0, 0
-	for _, r := range w.rows {
-		switch {
-		case strings.HasPrefix(r.Status, "Already") || r.Status == "Success":
-			done++
-		case r.Status == "Missing":
-			missing++
-		case r.Status == "Modified":
-			modified++
-		case strings.HasPrefix(r.Status, "Failed") || strings.HasPrefix(r.Status, "Error"):
-			failed++
-		default:
-			need++
-		}
-	}
-	parts := []string{fmt.Sprintf("%d files", len(w.rows))}
-	for _, v := range []struct {
-		n     int
-		label string
-	}{{need, "need downgrade"}, {done, "ready"}, {missing, "missing"}, {modified, "modified"}, {failed, "failed"}} {
-		if v.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", v.n, v.label))
-		}
-	}
-	w.summary.SetText(strings.Join(parts, "  ·  "))
-}
-
 // Match the original compact mod grid while retaining readable version details.
 type modGridTheme struct{ fyne.Theme }
 
@@ -163,13 +128,11 @@ func (w *Window) refreshModSelection() {
 		return
 	}
 	n := len(w.selected())
-	action, title := "Downgrade game", "Mods"
+	action := "Downgrade game"
 	if n > 0 {
 		action = fmt.Sprintf("Downgrade game + %d mods", n)
-		title = fmt.Sprintf("Mods · %d selected", n)
 	}
 	w.downgrade.SetText(action)
-	w.modsTitle.SetText(title)
 }
 
 // Keep status text out of the progress lane, even with long paths or at narrow

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -46,5 +47,36 @@ func TestFontAwesomeRoundIconsRenderCleanly(t *testing.T) {
 				t.Fatalf("search icon's clear center contains a stray stroke at %d,%d", x, y)
 			}
 		}
+	}
+}
+
+// Check images stretch to the control's square bounds. Upstream SVG padding
+// made them rectangular; nonzero viewBox origins can hide them in the renderer.
+func TestCheckboxIconsRenderSquare(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	a.Settings().SetTheme(compactTheme{theme.DarkTheme()})
+	for _, name := range []fyne.ThemeIconName{theme.IconNameCheckButton, theme.IconNameCheckButtonChecked, theme.IconNameCheckButtonFill} {
+		t.Run(string(name), func(t *testing.T) {
+			w := a.NewWindow("Checkbox")
+			defer w.Close()
+			w.SetPadded(false)
+			w.SetContent(canvas.NewImageFromResource(a.Settings().Theme().Icon(name)))
+			w.Resize(fyne.NewSize(32, 32))
+			w.Show()
+			img := w.Canvas().Capture()
+			bounds := image.Rectangle{}
+			for y := 0; y < 32; y++ {
+				for x := 0; x < 32; x++ {
+					r, _, _, _ := img.At(x, y).RGBA()
+					if r > 32768 {
+						bounds = bounds.Union(image.Rect(x, y, x+1, y+1))
+					}
+				}
+			}
+			if bounds.Dx() < 30 || bounds.Dy() < 30 || bounds.Dx() != bounds.Dy() {
+				t.Fatalf("checkbox artwork must fill a square, got %v", bounds)
+			}
+		})
 	}
 }
