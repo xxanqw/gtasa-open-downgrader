@@ -186,10 +186,10 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.modLabels[name] = state
 		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(c, state), modGridTheme{a.Settings().Theme()}))
 	}
-	w.downgrade = widget.NewButtonWithIcon("Downgrade", theme.MediaPlayIcon(), w.apply)
+	w.downgrade = widget.NewButtonWithIcon("Downgrade game", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
-	w.install = widget.NewButtonWithIcon("Install selected", theme.MediaPlayIcon(), func() { w.installMods(false) })
-	w.reinstall = widget.NewButtonWithIcon("Reinstall / update", theme.ViewRefreshIcon(), func() { w.installMods(true) })
+	w.install = widget.NewButtonWithIcon("Install mods only", theme.DownloadIcon(), func() { w.installMods(false) })
+	w.reinstall = widget.NewButtonWithIcon("Reinstall / update mods", theme.ViewRefreshIcon(), func() { w.installMods(true) })
 	tools := widget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
 	var more *widget.Button
 	more = widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {

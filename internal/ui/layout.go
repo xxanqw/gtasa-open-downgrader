@@ -163,9 +163,9 @@ func (w *Window) refreshModSelection() {
 		return
 	}
 	n := len(w.selected())
-	action, title := "Downgrade", "Mods"
+	action, title := "Downgrade game", "Mods"
 	if n > 0 {
-		action = fmt.Sprintf("Downgrade + %d mods", n)
+		action = fmt.Sprintf("Downgrade game + %d mods", n)
 		title = fmt.Sprintf("Mods · %d selected", n)
 	}
 	w.downgrade.SetText(action)

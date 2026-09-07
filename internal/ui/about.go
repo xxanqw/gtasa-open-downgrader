@@ -20,7 +20,7 @@ Thanks to all of the **GTA SA community** for their continuous support and work!
 
 This application is licensed under the **MIT License**.
 
-Icons: [Font Awesome Free 6.7.2](https://fontawesome.com) by Fonticons, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).`
+Adapted icons: [Font Awesome Free 6.7.2](https://fontawesome.com) by Fonticons, Inc. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).`
 
 func (w *Window) showAbout() {
 	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
