@@ -100,70 +100,156 @@ The app checks common native Steam and Flatpak Steam locations plus one common S
 
 ## Development
 
-The app is written in Go with [Fyne](https://docs.fyne.io/started/), without HTML or a WebView. Go 1.25 or newer, a C compiler and platform graphics headers are required. Dependencies are pinned in `go.mod` and `go.sum`.
+The app uses Go and Fyne, without HTML or a WebView. Use **Go 1.25 or newer** (see `go.mod`) and an **amd64** Linux or Windows build environment. Fyne's desktop driver uses CGO, so running or building the GUI requires a C compiler and platform graphics dependencies. Dependencies are pinned in `go.mod` and `go.sum`; Python and the Fyne CLI are not required for normal development or builds.
 
-On Ubuntu/Debian:
+Run the following commands from the repository root.
+
+### Linux setup and local runs
+
+On Ubuntu/Debian, install the compiler, graphics headers and xdelta3 runtime dependency:
 
 ```bash
-sudo apt-get install gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
-```
-
-```bash
+sudo apt-get update
+sudo apt-get install gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5
+go mod download
 go run ./cmd/downgrader
-go test ./...
-go test -race ./...
-go vet ./...
-./scripts/build.sh online
 ```
 
-Outputs are in `dist/`. You can provide paths explicitly:
+To start with a specific game folder and an existing patch directory:
 
 ```bash
 go run ./cmd/downgrader --game "/path/to/Grand Theft Auto San Andreas" --patches "/path/to/Patches"
 ```
 
-The app stores downloaded patches in the user's cache directory (`gtasa-open-downgrader/Patches`). It also accepts `Patches` in the working directory or beside the executable. Game backups and the mod tracker remain inside the selected game directory, compatible with earlier releases.
+A normal development run uses the online variant and does not require bundled patches. The app stores downloaded patches in the system user cache directory under `gtasa-open-downgrader/Patches`. It also accepts `Patches` in the working directory or beside the executable. Game backups and the mod tracker remain inside the selected game directory, compatible with earlier releases.
 
-### Windows builds
+### Formatting, tests and UI previews
 
-Install Go and an MSYS2 MinGW-w64 GCC toolchain. Put its `bin` directory on `PATH`, then run from PowerShell:
+Run the same checks as [CI](.github/workflows/test.yml):
+
+```bash
+gofmt -w cmd internal
+go test -race ./...
+go vet ./...
+./scripts/build.sh online
+```
+
+For tests on a machine without a graphical desktop or graphics development libraries, use Fyne's software driver:
+
+```bash
+go test -tags ci ./...
+go vet -tags ci ./...
+```
+
+The `ci` tag is for headless checks, not distributable desktop builds. Race testing still requires CGO and a C compiler.
+
+UI tests can export PNG previews without opening a desktop window. For example:
+
+```bash
+mkdir -p build/previews
+GTASA_COMPACT_SNAPSHOT="$PWD/build/previews/main.png" \
+GTASA_PROGRESS_SNAPSHOT="$PWD/build/previews/progress.png" \
+go test -tags ci -count=1 -run '^TestCompactWindowKeepsGameInformationVisible$' ./internal/ui
+```
+
+### Linux release builds
+
+```bash
+./scripts/build.sh online
+./dist/gtasa-open-downgrader-linux --version
+```
+
+The scripts enable CGO, apply the `release` build tag, strip debugging symbols and write binaries to `dist/`. Set `VERSION` to override the embedded application version:
+
+```bash
+VERSION=v0.2.2 ./scripts/build.sh online
+```
+
+Online and offline builds produce `gtasa-open-downgrader-linux` and `gtasa-open-downgrader-linux-offline`, respectively. These binaries still depend on host graphics libraries. For portable releases, use the Ubuntu 22.04 build environment from CI to retain its glibc 2.35 baseline; building on a newer distribution can increase the required glibc version.
+
+### Windows development and builds
+
+Install Go and an MSYS2 MinGW-w64 GCC toolchain, including `gcc` and `windres`. Add the toolchain's `bin` directory (for example, `C:\msys64\mingw64\bin`) to `PATH`. From PowerShell:
 
 ```powershell
+$env:CGO_ENABLED = "1"
+$env:CC = "gcc"
+$env:WINDRES = "windres"
+go mod download
+go run ./cmd/downgrader
 go test ./...
+go vet ./...
 .\scripts\build.ps1 online
 ```
 
-From Linux with MinGW-w64 installed:
+The output is `dist/gtasa-open-downgrader-windows.exe`. Set `$env:VERSION` to override the embedded version. The build script embeds the Windows icon and manifest and removes its temporary resource file afterwards.
+
+To cross-build from Linux, install MinGW-w64 and run:
 
 ```bash
-GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc ./scripts/build.sh online
+GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
+WINDRES=x86_64-w64-mingw32-windres ./scripts/build.sh online
 ```
 
-Fyne uses CGO: cross-compilation requires a C compiler for the target, as explained in [Fyne's cross-compilation documentation](https://docs.fyne.io/started/cross-compiling/). Bundled xdelta3 supports Linux/Windows **amd64** only.
+Changing `GOOS` alone is insufficient: Fyne needs a target C compiler. Bundled xdelta3 supports Linux/Windows **amd64** only. Check the resulting GUI on Windows as well; a successful cross-build does not exercise Windows behavior.
 
-### Offline builds and AppImages
+### Offline patches and builds
 
 Prepare the official patch set once (approximately 880 MB downloaded):
 
 ```bash
 go run ./cmd/patch-assets
-# Or import an archive already downloaded:
-go run ./cmd/patch-assets -archive /path/to/Patches.zip
-./scripts/build.sh offline
-# Windows: .\scripts\build.ps1 offline
 ```
 
-The offline build embeds the validated patch directory with `go:embed`; a build without `manifest.json` fails. The first run copies embedded patches to a writable cache. Mods and updates still need internet access. Do not commit patch/game assets.
+Alternatively, import an existing archive:
 
-`./scripts/appimage.sh online` and `offline` package built Linux binaries. Set `APPIMAGETOOL` and `APPIMAGE_RUNTIME` to downloaded tools; the release workflow supplies checksum-pinned versions. AppImages bundle liblzma for xdelta3, while graphics libraries/drivers come from the host. The workflow creates online/offline Linux binaries, AppImages, Windows executables and `SHA256SUMS`.
+```bash
+go run ./cmd/patch-assets -archive "/path/to/Patches.zip"
+```
 
-### Package layout and parity
+Both commands validate the assets and place them in `internal/assets/Patches`. To verify an existing copy without downloading anything:
+
+```bash
+go run ./cmd/patch-assets -verify
+```
+
+Then build the offline variant:
+
+```bash
+./scripts/build.sh offline
+```
+
+On Windows, use `.\scripts\build.ps1 offline`; for a local offline development run, use `go run -tags offline ./cmd/downgrader`.
+
+Offline builds embed the validated directory with `go:embed`. The build scripts revalidate it; missing `manifest.json` prevents compilation. The first run copies embedded patches to a writable cache. Allow several GiB of free disk space for offline compilation and packaging; the Linux build script uses `build/tmp` for temporary files to avoid small RAM-backed `/tmp` mounts. Mods and update checks still need internet access. The asset preparation and build directories are ignored by Git. Do not commit patch/game assets or game backups.
+
+### AppImage packaging and release CI
+
+Build the Linux binaries first. Download the checksum-pinned `appimagetool` and static type2 runtime specified in [the release workflow](.github/workflows/build.yml), verify their checksums, then supply their absolute paths:
+
+```bash
+chmod +x /path/to/appimagetool
+export APPIMAGETOOL=/path/to/appimagetool
+export APPIMAGE_RUNTIME=/path/to/runtime-x86_64
+./scripts/appimage.sh online
+./scripts/appimage.sh offline
+```
+
+Each command requires the corresponding binary already in `dist/` and writes its `.AppImage` beside it. AppImages include liblzma for xdelta3 and the application, xdelta3 and Font Awesome licenses. Graphics libraries and drivers come from the host.
+
+The release workflow runs on `v*` tags or a manual workflow dispatch. It builds both variants for Linux and Windows and packages AppImages. **Only a version tag publishes a GitHub release**, including `SHA256SUMS`; a manual run uploads workflow artifacts. Ordinary branch pushes run the checks workflow.
+
+### Package layout and asset maintenance
 
 - `cmd/downgrader`: application and update-helper entry point.
 - `cmd/patch-assets`: patch download/import/validation for offline builds.
-- `internal/game`, `patch`, `mods`, `download`: cancellable domain operations.
+- `internal/game`, `patch`, `mods`, `download`: cancellable domain operations using `context.Context`.
 - `internal/platform`, `updater`, `jobs`: OS integration, updates and worker lifecycle.
-- `internal/ui`, `assets`: Fyne widgets and embedded artwork/binaries.
+- `internal/applog`: bounded application journal, error reporting and log export.
+- `internal/ui`: Fyne windows, dialogs, themes, layouts and UI tests.
+- `internal/assets`: embedded artwork, Font Awesome SVGs, licenses, xdelta3 binaries and optional offline patches.
+
+When replacing Font Awesome SVGs, preserve their attribution and run `scripts/normalize-icons.py` with Python and `fonttools==4.64.0`. This maintenance step converts problematic SVG arcs and makes checkbox canvases square for Fyne's renderer. Commit the normalized SVGs; end users and normal Go builds do not need Python. See [icon attribution and maintenance notes](internal/assets/fontawesome/README.md).
 
 See [migration parity and compatibility notes](docs/parity.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
 
