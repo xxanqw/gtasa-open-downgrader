@@ -15,10 +15,11 @@ if [[ "$variant" == offline ]]; then
 fi
 flags="-s -w -X github.com/xxanqw/gtasa-open-downgrader/internal/updater.Version=${VERSION:-v0.2.2}"
 if [[ "$system" == windows ]]; then
-  name+=.exe
-  flags+=' -H=windowsgui'
-  "${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/downgrader/resources_windows_amd64.syso
-  trap 'rm -f cmd/downgrader/resources_windows_amd64.syso' EXIT
+	name+=.exe
+	flags+=' -H=windowsgui'
+	"${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/downgrader/resources_windows_amd64.syso
+	"${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/steam-launcher/resources_windows_amd64.syso
+	trap 'rm -f cmd/downgrader/resources_windows_amd64.syso cmd/steam-launcher/resources_windows_amd64.syso' EXIT
 fi
 mkdir -p dist build/tmp
 # Offline CGO linking may need several GiB; avoid a small RAM-backed /tmp.
@@ -26,3 +27,6 @@ if [[ $(go env GOHOSTOS) == linux ]]; then
   export TMPDIR="$PWD/build/tmp" GOTMPDIR="$PWD/build/tmp"
 fi
 CGO_ENABLED=1 go build -trimpath -tags "$tags" -ldflags "$flags" -o "dist/$name" ./cmd/downgrader
+if [[ "$system" == windows ]]; then
+	CGO_ENABLED=1 go build -trimpath -tags release,launcher -ldflags "-s -w -H=windowsgui" -o dist/gta-sa.exe ./cmd/steam-launcher
+fi

@@ -8,8 +8,10 @@ case "$variant" in online) name=gtasa-open-downgrader-linux;; offline) name=gtas
 mkdir -p build
 appdir=$(mktemp -d "$PWD/build/AppDir.XXXXXX")
 trap 'rm -rf "$appdir"' EXIT
-mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/share/licenses/gtasa-open-downgrader"
+[[ -f dist/gta-sa.exe ]] || { echo 'Build dist/gta-sa.exe with scripts/build-launcher.sh first.' >&2; exit 1; }
+mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/libexec" "$appdir/usr/share/licenses/gtasa-open-downgrader"
 cp "dist/$name" "$appdir/usr/bin/$name"
+cp dist/gta-sa.exe "$appdir/usr/libexec/gta-sa.exe"
 cp LICENSE internal/assets/LICENSE.txt "$appdir/usr/share/licenses/gtasa-open-downgrader/"
 cp internal/assets/fontawesome/LICENSE.txt "$appdir/usr/share/licenses/gtasa-open-downgrader/fontawesome-LICENSE.txt"
 cp internal/assets/icon.png "$appdir/gtasa-open-downgrader.png"

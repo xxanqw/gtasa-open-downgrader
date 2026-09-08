@@ -53,6 +53,8 @@ Contributions for other source versions are welcome through GitHub issues.
     - Clear GTA San Andreas user data after confirmation.
     - Create a desktop shortcut on Windows.
 - **Windows and Linux Builds:** Includes AppImage builds, common Steam/Flatpak path detection, read-only directory checks, and Proton launch-option guidance for ASI Loader.
+- **Steam Launcher:** Installs a compact Windows Fyne menu as Steam's `gta-sa.exe` while keeping the real downgraded game as `gta_sa.exe`. The operation preserves an existing entrypoint, verifies launcher ownership, supports safe removal, and detects Steam file verification replacing it.
+- **Multiplayer Management:** Detects SA-MP, open.mp, and Multi Theft Auto and offers their installers from the Multiplayer dialog. Linux runs installers in GTA SA's detected Steam Proton context; users do not configure Wine, a prefix, or protontricks.
 
 ## Distribution Variants
 
@@ -62,6 +64,7 @@ Release builds are provided in online and offline variants.
 
 - `gtasa-open-downgrader-windows.exe`
 - `gtasa-open-downgrader-linux.AppImage`
+- `gta-sa.exe` (Windows Steam launcher, also bundled inside the AppImage)
 
 When patch assets are missing, the app asks whether it should download them from iCloud. Internet access is also required for mod installation, mod update checks, and application updates.
 
@@ -97,6 +100,10 @@ On systems where FUSE is unavailable entirely, use the runtime's extraction fall
 ### Steam Deck and Proton
 
 The app checks common native Steam and Flatpak Steam locations plus one common SD-card mount path. If the game is stored elsewhere, select its directory manually. After installing ASI Loader, copy the launch option shown by the app into the game's Steam properties.
+
+Open **Multiplayer** after scanning the game to install or repair the Steam launcher and multiplayer clients. The launcher replaces Steam's `gta-sa.exe` entrypoint, preserves the previous file, and always starts the real game from `gta_sa.exe`. **Remove & restore** returns the preserved entrypoint without deleting the real game. If Steam file verification restores `gta-sa.exe`, the dialog reports the launcher as replaced and offers to reinstall it.
+
+SA-MP requires the user to download its installer from the official successor page because there is no stable first-party artifact URL. open.mp and MTA download from their official sources. Their normal Windows installer windows appear through the game's selected Proton version and prefix; the app never calls system Wine or protontricks. MTA keeps its normal separate installation directory. See [the architecture and current upstream assumptions](docs/steam-launcher-multiplayer.md) for client-specific details and limitations.
 
 ## Development
 
@@ -182,7 +189,7 @@ go vet ./...
 .\scripts\build.ps1 online
 ```
 
-The output is `dist/gtasa-open-downgrader-windows.exe`. Set `$env:VERSION` to override the embedded version. The build script embeds the Windows icon and manifest and removes its temporary resource file afterwards.
+The outputs are `dist/gtasa-open-downgrader-windows.exe` and the Steam launcher `dist/gta-sa.exe`. Set `$env:VERSION` to override the embedded downgrader version. The build script embeds the Windows icon and GUI manifest into both executables and removes its temporary resource files afterwards.
 
 To cross-build from Linux, install MinGW-w64 and run:
 
@@ -190,6 +197,15 @@ To cross-build from Linux, install MinGW-w64 and run:
 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
 WINDRES=x86_64-w64-mingw32-windres ./scripts/build.sh online
 ```
+
+To build only the Windows Steam launcher from Linux:
+
+```bash
+sudo apt-get install mingw-w64
+./scripts/build-launcher.sh
+```
+
+The result is `dist/gta-sa.exe`. The `-H=windowsgui` linker flag prevents a console window. Linux AppImage packaging expects this file and includes it under `usr/libexec`, where the downgrader can install it into the selected game directory.
 
 Changing `GOOS` alone is insufficient: Fyne needs a target C compiler. Bundled xdelta3 supports Linux/Windows **amd64** only. Check the resulting GUI on Windows as well; a successful cross-build does not exercise Windows behavior.
 
@@ -242,7 +258,11 @@ The release workflow runs on `v*` tags or a manual workflow dispatch. It builds 
 ### Package layout and asset maintenance
 
 - `cmd/downgrader`: application and update-helper entry point.
+- `cmd/steam-launcher`: compact, network-free Windows Steam menu built as `gta-sa.exe`.
+- `cmd/multiplayer-context`: developer diagnostic for launcher and client discovery.
 - `cmd/patch-assets`: patch download/import/validation for offline builds.
+- `internal/entrypoint`: launcher identity, executable selection, install, backup and restore.
+- `internal/multiplayer`, `launcherapp`: client discovery/install execution and launcher runtime.
 - `internal/game`, `patch`, `mods`, `download`: cancellable domain operations using `context.Context`.
 - `internal/platform`, `updater`, `jobs`: OS integration, updates and worker lifecycle.
 - `internal/steam`: Steam libraries, AppID manifests, compatibility-tool resolution and reusable Proton execution.
@@ -252,7 +272,7 @@ The release workflow runs on `v*` tags or a manual workflow dispatch. It builds 
 
 When replacing Font Awesome SVGs, preserve their attribution and run `scripts/normalize-icons.py` with Python and `fonttools==4.64.0`. This maintenance step converts problematic SVG arcs and makes checkbox canvases square for Fyne's renderer. Commit the normalized SVGs; end users and normal Go builds do not need Python. See [icon attribution and maintenance notes](internal/assets/fontawesome/README.md).
 
-See [migration parity and compatibility notes](docs/parity.md) and the [Steam/Proton integration notes](docs/steam-proton.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
+See [migration parity and compatibility notes](docs/parity.md), the [Steam/Proton integration notes](docs/steam-proton.md), and the [Steam launcher and multiplayer architecture](docs/steam-launcher-multiplayer.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
 
 ## License
 
