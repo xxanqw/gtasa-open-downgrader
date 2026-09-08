@@ -115,7 +115,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			label.Truncation = fyne.TextTruncateEllipsis
 			button := widget.NewButton(action, func() {
 				close()
-				w.installMultiplayer(runner, client.ID)
+				w.installMultiplayer(environment, runner, client.ID)
 			})
 			if runner == nil {
 				button.Disable()
@@ -128,7 +128,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 	}})
 }
 
-func (w *Window) installMultiplayer(runner multiplayer.Runner, id multiplayer.ClientID) {
+func (w *Window) installMultiplayer(environment multiplayer.Environment, runner multiplayer.Runner, id multiplayer.ClientID) {
 	installer, ok := multiplayer.Installers[id]
 	if !ok {
 		w.error(fmt.Errorf("unsupported multiplayer client %q", id))
@@ -143,7 +143,11 @@ func (w *Window) installMultiplayer(runner multiplayer.Runner, id multiplayer.Cl
 			if err := multiplayer.ValidateInstaller(path); err != nil {
 				return err
 			}
-			return runner.Run(ctx, path)
+			arguments, err := runner.Prepare(ctx, id, environment)
+			if err != nil {
+				return err
+			}
+			return runner.Run(ctx, path, arguments...)
 		}, func(error) {
 			w.scan()
 		})

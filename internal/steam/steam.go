@@ -276,6 +276,81 @@ func (p *ProtonContext) Run(ctx context.Context, exe string, args ...string) err
 	return nil
 }
 
+// WindowsPath translates a host path through the drive mappings in this
+// Proton prefix. The longest matching mapping wins, which normally resolves a
+// Steam library through Proton's Z: drive.
+func (p *ProtonContext) WindowsPath(hostPath string) (string, error) {
+	hostPath, err := filepath.Abs(hostPath)
+	if err != nil {
+		return "", err
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(hostPath); resolveErr == nil {
+		hostPath = resolved
+	}
+	dosDevices := filepath.Join(p.CompatDataPath, "pfx", "dosdevices")
+	entries, err := os.ReadDir(dosDevices)
+	if err != nil {
+		return "", fmt.Errorf("read Proton drive mappings: %w", err)
+	}
+	bestRoot, bestDrive := "", ""
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+		if len(name) != 2 || name[1] != ':' || name[0] < 'a' || name[0] > 'z' {
+			continue
+		}
+		root, resolveErr := filepath.EvalSymlinks(filepath.Join(dosDevices, entry.Name()))
+		if resolveErr != nil {
+			continue
+		}
+		root, resolveErr = filepath.Abs(root)
+		if resolveErr != nil || !within(root, hostPath) || len(root) < len(bestRoot) {
+			continue
+		}
+		bestRoot, bestDrive = root, strings.ToUpper(name[:1])
+	}
+	if bestDrive == "" {
+		return "", fmt.Errorf("path %q is not available through the Proton prefix", hostPath)
+	}
+	relative, err := filepath.Rel(bestRoot, hostPath)
+	if err != nil {
+		return "", err
+	}
+	if relative == "." {
+		return bestDrive + `:\`, nil
+	}
+	return bestDrive + `:\` + strings.ReplaceAll(relative, string(filepath.Separator), `\`), nil
+}
+
+func within(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+// SetRegistryString uses the prefix's Windows reg.exe through the selected
+// Proton build. It is intentionally limited to software keys used for client
+// installer discovery.
+func (p *ProtonContext) SetRegistryString(ctx context.Context, key, name, value string) error {
+	upper := strings.ToUpper(key)
+	if (!strings.HasPrefix(upper, `HKCU\SOFTWARE\`) && !strings.HasPrefix(upper, `HKLM\SOFTWARE\`)) || name == "" || strings.ContainsAny(key+name+value, "\x00\r\n") {
+		return fmt.Errorf("invalid Windows Registry value")
+	}
+	if err := requireExecutable(p.ProtonExecutable, "Proton executable"); err != nil {
+		return err
+	}
+	arguments := []string{"run", "reg.exe", "ADD", key, "/v", name, "/t", "REG_SZ", "/d", value, "/f"}
+	command := exec.CommandContext(ctx, p.ProtonExecutable, arguments...)
+	command.Env = p.Environment(os.Environ())
+	command.Dir = p.GameDir
+	output, err := command.CombinedOutput()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		return fmt.Errorf("set Proton Registry value %q: %w: %s", key, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 func requireFile(path, description string) error {
 	info, err := os.Stat(path)
 	if err != nil {

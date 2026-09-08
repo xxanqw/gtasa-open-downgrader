@@ -70,6 +70,23 @@ func TestRunnersUseInjectedExecution(t *testing.T) {
 	}
 }
 
+func TestInstallerPreparationProvidesAccessibleGamePath(t *testing.T) {
+	environment := Environment{GameDir: "/home/user/.steam/game", WindowsGameDir: `Z:\home\user\.steam\game`}
+	arguments, err := (DirectRunner{}).Prepare(context.Background(), ClientSAMP, environment)
+	if err != nil || !reflect.DeepEqual(arguments, []string{`/D=Z:\home\user\.steam\game`}) {
+		t.Fatalf("SA-MP arguments = %#v, %v", arguments, err)
+	}
+	prepared := false
+	runner := ProtonRunner{Context: &fakeProton{}, PrepareFunc: func(_ context.Context, id ClientID, got Environment) error {
+		prepared = id == ClientMTA && got.WindowsGameDir == environment.WindowsGameDir
+		return nil
+	}}
+	arguments, err = runner.Prepare(context.Background(), ClientMTA, environment)
+	if err != nil || len(arguments) != 0 || !prepared {
+		t.Fatalf("MTA preparation = %#v, %v, prepared=%t", arguments, err, prepared)
+	}
+}
+
 type fakeProton struct{ call []string }
 
 func (f *fakeProton) Run(_ context.Context, executable string, arguments ...string) error {

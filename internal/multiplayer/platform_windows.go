@@ -12,5 +12,5 @@ func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
 	if drive != "" {
 		drive = filepath.Clean(drive + `\`)
 	}
-	return Environment{GameDir: gameDir, PrefixDriveC: drive}, DirectRunner{}, "Native Windows", nil
+	return Environment{GameDir: gameDir, WindowsGameDir: gameDir, PrefixDriveC: drive}, DirectRunner{}, "Native Windows", nil
 }

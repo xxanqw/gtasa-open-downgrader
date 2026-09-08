@@ -29,8 +29,9 @@ type Client struct {
 }
 
 type Environment struct {
-	GameDir      string
-	PrefixDriveC string
+	GameDir        string
+	WindowsGameDir string
+	PrefixDriveC   string
 }
 
 type Installer struct {
@@ -166,6 +167,13 @@ func (f CommandExecutorFunc) Execute(ctx context.Context, directory, executable 
 
 type DirectRunner struct{ Executor CommandExecutor }
 
+func (runner DirectRunner) Prepare(_ context.Context, id ClientID, environment Environment) ([]string, error) {
+	if id == ClientSAMP && environment.WindowsGameDir != "" {
+		return []string{"/D=" + environment.WindowsGameDir}, nil
+	}
+	return nil, nil
+}
+
 func (runner DirectRunner) Run(ctx context.Context, executable string, arguments ...string) error {
 	if runner.Executor == nil {
 		runner.Executor = CommandExecutorFunc(func(ctx context.Context, directory, executable string, arguments ...string) error {
@@ -184,7 +192,27 @@ type ProtonContext interface {
 	Run(context.Context, string, ...string) error
 }
 
-type ProtonRunner struct{ Context ProtonContext }
+type PrepareFunc func(context.Context, ClientID, Environment) error
+
+type ProtonRunner struct {
+	Context     ProtonContext
+	PrepareFunc PrepareFunc
+}
+
+func (runner ProtonRunner) Prepare(ctx context.Context, id ClientID, environment Environment) ([]string, error) {
+	if runner.PrepareFunc != nil {
+		if err := runner.PrepareFunc(ctx, id, environment); err != nil {
+			return nil, err
+		}
+	}
+	if id == ClientSAMP {
+		if environment.WindowsGameDir == "" {
+			return nil, fmt.Errorf("GTA directory is not mapped into the Proton prefix")
+		}
+		return []string{"/D=" + environment.WindowsGameDir}, nil
+	}
+	return nil, nil
+}
 
 func (runner ProtonRunner) Run(ctx context.Context, executable string, arguments ...string) error {
 	if runner.Context == nil {
@@ -197,6 +225,7 @@ func (runner ProtonRunner) Run(ctx context.Context, executable string, arguments
 }
 
 type Runner interface {
+	Prepare(context.Context, ClientID, Environment) ([]string, error)
 	Run(context.Context, string, ...string) error
 }
 

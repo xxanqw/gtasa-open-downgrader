@@ -103,7 +103,7 @@ The app checks common native Steam and Flatpak Steam locations plus one common S
 
 Open **Multiplayer** after scanning the game to install or repair the Steam launcher and multiplayer clients. The launcher replaces Steam's `gta-sa.exe` entrypoint, preserves the previous file, and always starts the real game from `gta_sa.exe`. **Remove & restore** returns the preserved entrypoint without deleting the real game. If Steam file verification restores `gta-sa.exe`, the dialog reports the launcher as replaced and offers to reinstall it.
 
-SA-MP requires the user to download its installer from the official successor page because there is no stable first-party artifact URL. open.mp and MTA download from their official sources. Their normal Windows installer windows appear through the game's selected Proton version and prefix; the app never calls system Wine or protontricks. MTA keeps its normal separate installation directory. See [the architecture and current upstream assumptions](docs/steam-launcher-multiplayer.md) for client-specific details and limitations.
+SA-MP requires the user to download its installer from the official successor page because there is no stable first-party artifact URL. open.mp and MTA download from their official sources. Their normal Windows installer windows appear through the game's selected Proton version and prefix; the app never calls system Wine or protontricks. Hidden `.steam` directories do not need to be browsed manually: the SA-MP destination is prefilled and the GTA path is registered for MTA. MTA keeps its normal separate installation directory. See [the architecture and current upstream assumptions](docs/steam-launcher-multiplayer.md) for client-specific details and limitations.
 
 ## Development
 

@@ -3,6 +3,7 @@
 package multiplayer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,15 +14,27 @@ import (
 const GTAAppID = 12120
 
 func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
-	context, err := steam.DetectProtonContext(GTAAppID)
+	steamContext, err := steam.DetectProtonContext(GTAAppID)
 	if err != nil {
 		return Environment{GameDir: gameDir}, nil, "", err
 	}
-	if gameDir != "" && !sameDirectory(context.GameDir, gameDir) {
-		return Environment{GameDir: gameDir}, nil, "", fmt.Errorf("selected game folder does not match Steam AppID %d (%s)", GTAAppID, context.GameDir)
+	if gameDir != "" && !sameDirectory(steamContext.GameDir, gameDir) {
+		return Environment{GameDir: gameDir}, nil, "", fmt.Errorf("selected game folder does not match Steam AppID %d (%s)", GTAAppID, steamContext.GameDir)
 	}
-	driveC := context.CompatDataPath + "/pfx/drive_c"
-	return Environment{GameDir: context.GameDir, PrefixDriveC: driveC}, ProtonRunner{Context: context}, context.ToolDisplayName, nil
+	driveC := filepath.Join(steamContext.CompatDataPath, "pfx", "drive_c")
+	windowsGame, err := steamContext.WindowsPath(steamContext.GameDir)
+	if err != nil {
+		return Environment{GameDir: steamContext.GameDir, PrefixDriveC: driveC}, nil, steamContext.ToolDisplayName, err
+	}
+	environment := Environment{GameDir: steamContext.GameDir, WindowsGameDir: windowsGame, PrefixDriveC: driveC}
+	prepare := func(ctx context.Context, _ ClientID, environment Environment) error {
+		executable := environment.WindowsGameDir + `\gta_sa.exe`
+		if err := steamContext.SetRegistryString(ctx, `HKLM\SOFTWARE\Rockstar Games\GTA San Andreas\Installation`, "ExePath", executable); err != nil {
+			return err
+		}
+		return steamContext.SetRegistryString(ctx, `HKLM\SOFTWARE\Multi Theft Auto: San Andreas All\Common`, "GTA:SA Path", environment.WindowsGameDir)
+	}
+	return environment, ProtonRunner{Context: steamContext, PrepareFunc: prepare}, steamContext.ToolDisplayName, nil
 }
 
 func sameDirectory(left, right string) bool {

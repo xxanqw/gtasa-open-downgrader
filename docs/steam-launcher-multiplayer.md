@@ -34,6 +34,8 @@ MTA is a separate application and is not installed into the GTA directory. Its s
 
 On native Windows, installers run directly with an argument array and the installer's own working directory. On Linux, the UI calls `steam.DetectProtonContext(12120)` and runs the same installer through that detected context. This reuses Steam's exact library, compatibility data directory, and selected Proton build. No system Wine, protontricks, arbitrary Proton build, or second prefix is used.
 
+Before launching an installer on Linux, the backend translates the native Steam library path through the prefix's actual DOS drive mappings. SA-MP receives that Windows path through NSIS's standard `/D=` argument, so its directory page starts at the correct game folder even when `.steam` is hidden by the folder tree. The backend also writes the detected `gta_sa.exe` and GTA directory into the prefix's normal Rockstar and MTA Registry keys using `reg.exe`; MTA can therefore preselect the game without browsing into a hidden Linux directory.
+
 Automatic downloads require HTTPS, propagate HTTP failures through the existing job UI, use staged file writes, and reject files without a Windows `MZ` signature. Neither open.mp nor MTA publishes a checksum beside the stable programmatic URL, so there is no upstream checksum available to pin. TLS plus the executable header check protects against transport failures and HTML/error pages; it is not a publisher signature verification.
 
 ## Process lifetime and limitations
