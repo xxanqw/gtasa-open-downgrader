@@ -367,6 +367,59 @@ func (p *ProtonContext) EnsureDriveMapping(hostPath string) (string, error) {
 	return "", fmt.Errorf("no free Proton drive letter is available for the GTA directory")
 }
 
+// EnsureGameDirectoryMapping maps the game's parent directory and returns the
+// game as a normal child folder. Some NSIS installers reject a drive root even
+// when that root contains a valid GTA installation.
+func (p *ProtonContext) EnsureGameDirectoryMapping(gameDir string) (string, error) {
+	gameDir, err := filepath.Abs(gameDir)
+	if err != nil {
+		return "", err
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(gameDir); resolveErr == nil {
+		gameDir = resolved
+	}
+	parent := filepath.Dir(gameDir)
+	dosDevices := filepath.Join(p.CompatDataPath, "pfx", "dosdevices")
+	// Migrate the short-lived layout that mapped the game itself as G:\. Only
+	// replace a symbolic drive mapping that resolves to this exact game folder.
+	for _, drive := range "ghijklmnopqrstuvwxy" {
+		mapping := filepath.Join(dosDevices, string(drive)+":")
+		resolved, resolveErr := filepath.EvalSymlinks(mapping)
+		if resolveErr != nil {
+			continue
+		}
+		resolved, _ = filepath.Abs(resolved)
+		if resolved == parent {
+			return gameFolderOnDrive(drive, gameDir), nil
+		}
+		if resolved != gameDir {
+			continue
+		}
+		info, statErr := os.Lstat(mapping)
+		if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		temporary := mapping + ".downgrader-new"
+		if err = os.Symlink(parent, temporary); err != nil {
+			return "", fmt.Errorf("prepare migrated Proton drive mapping: %w", err)
+		}
+		if err = os.Rename(temporary, mapping); err != nil {
+			_ = os.Remove(temporary)
+			return "", fmt.Errorf("migrate Proton drive mapping: %w", err)
+		}
+		return gameFolderOnDrive(drive, gameDir), nil
+	}
+	drive, err := p.EnsureDriveMapping(parent)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(drive, `\`) + `\` + filepath.Base(gameDir), nil
+}
+
+func gameFolderOnDrive(drive rune, gameDir string) string {
+	return strings.ToUpper(string(drive)) + `:\` + filepath.Base(gameDir)
+}
+
 func within(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))

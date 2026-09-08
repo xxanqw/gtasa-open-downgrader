@@ -23,7 +23,7 @@ func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
 		return Environment{GameDir: gameDir}, nil, "", fmt.Errorf("selected game folder does not match Steam AppID %d (%s)", GTAAppID, steamContext.GameDir)
 	}
 	driveC := filepath.Join(steamContext.CompatDataPath, "pfx", "drive_c")
-	windowsGame, err := steamContext.EnsureDriveMapping(steamContext.GameDir)
+	windowsGame, err := steamContext.EnsureGameDirectoryMapping(steamContext.GameDir)
 	if err != nil {
 		return Environment{GameDir: steamContext.GameDir, PrefixDriveC: driveC}, nil, steamContext.ToolDisplayName, err
 	}

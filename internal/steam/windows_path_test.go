@@ -77,3 +77,35 @@ func TestEnsureDriveMappingCreatesVisibleDedicatedDrive(t *testing.T) {
 		t.Fatalf("idempotent mapping = %q, %v", again, err)
 	}
 }
+
+func TestEnsureGameDirectoryMappingMigratesDriveRootLayout(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "common")
+	game := filepath.Join(parent, "Grand Theft Auto San Andreas")
+	if err := os.MkdirAll(game, 0755); err != nil {
+		t.Fatal(err)
+	}
+	dosDevices := filepath.Join(root, "compatdata", "pfx", "dosdevices")
+	if err := os.MkdirAll(dosDevices, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mapping := filepath.Join(dosDevices, "g:")
+	if err := os.Symlink(game, mapping); err != nil {
+		t.Fatal(err)
+	}
+	proton := ProtonContext{CompatDataPath: filepath.Join(root, "compatdata")}
+	got, err := proton.EnsureGameDirectoryMapping(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != `G:\Grand Theft Auto San Andreas` {
+		t.Fatalf("game path = %q", got)
+	}
+	resolved, err := filepath.EvalSymlinks(mapping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved != parent {
+		t.Fatalf("mapping target = %q, want %q", resolved, parent)
+	}
+}
