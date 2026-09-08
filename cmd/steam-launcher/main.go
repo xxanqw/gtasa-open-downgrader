@@ -104,6 +104,15 @@ func main() {
 	multiplayerStatus := "Installed multiplayer clients appear below."
 	if installed == 0 {
 		multiplayerStatus = "No multiplayer clients detected. Install them with the downgrader."
+	} else {
+		for _, client := range clients {
+			if client.ID == "samp" && client.Installed {
+				if _, err := os.Stat(filepath.Join(gameDir, "modloader.asi")); err == nil {
+					multiplayerStatus = "SA-MP uses compatibility mode to avoid the Mod Loader R5 crash."
+				}
+				break
+			}
+		}
 	}
 	multiplayerLabel := widget.NewLabel(multiplayerStatus)
 	multiplayerLabel.Wrapping = fyne.TextWrapWord

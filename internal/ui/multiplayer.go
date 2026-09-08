@@ -113,6 +113,11 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			}
 			label := widget.NewLabel(state)
 			label.Truncation = fyne.TextTruncateEllipsis
+			if client.ID == multiplayer.ClientSAMP && client.Installed {
+				if _, err := os.Stat(filepath.Join(root, "modloader.asi")); err == nil {
+					label.SetText(state + " · launcher uses compatibility mode")
+				}
+			}
 			button := widget.NewButton(action, func() {
 				close()
 				w.installMultiplayer(environment, runner, client.ID)
