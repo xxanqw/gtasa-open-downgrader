@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/steam"
 )
@@ -22,13 +23,13 @@ func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
 		return Environment{GameDir: gameDir}, nil, "", fmt.Errorf("selected game folder does not match Steam AppID %d (%s)", GTAAppID, steamContext.GameDir)
 	}
 	driveC := filepath.Join(steamContext.CompatDataPath, "pfx", "drive_c")
-	windowsGame, err := steamContext.WindowsPath(steamContext.GameDir)
+	windowsGame, err := steamContext.EnsureDriveMapping(steamContext.GameDir)
 	if err != nil {
 		return Environment{GameDir: steamContext.GameDir, PrefixDriveC: driveC}, nil, steamContext.ToolDisplayName, err
 	}
 	environment := Environment{GameDir: steamContext.GameDir, WindowsGameDir: windowsGame, PrefixDriveC: driveC}
 	prepare := func(ctx context.Context, _ ClientID, environment Environment) error {
-		executable := environment.WindowsGameDir + `\gta_sa.exe`
+		executable := strings.TrimRight(environment.WindowsGameDir, `\`) + `\gta_sa.exe`
 		if err := steamContext.SetRegistryString(ctx, `HKLM\SOFTWARE\Rockstar Games\GTA San Andreas\Installation`, "ExePath", executable); err != nil {
 			return err
 		}

@@ -42,3 +42,38 @@ func TestRegistrySetterRejectsUnrelatedKeys(t *testing.T) {
 		t.Fatal("unrelated Registry key accepted")
 	}
 }
+
+func TestEnsureDriveMappingCreatesVisibleDedicatedDrive(t *testing.T) {
+	root, game := t.TempDir(), t.TempDir()
+	dosDevices := filepath.Join(root, "pfx", "dosdevices")
+	if err := os.MkdirAll(dosDevices, 0755); err != nil {
+		t.Fatal(err)
+	}
+	occupied := filepath.Join(root, "occupied")
+	if err := os.MkdirAll(occupied, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(occupied, filepath.Join(dosDevices, "g:")); err != nil {
+		t.Fatal(err)
+	}
+	proton := ProtonContext{CompatDataPath: root}
+	got, err := proton.EnsureDriveMapping(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != `H:\` {
+		t.Fatalf("drive = %q, want H:\\", got)
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(dosDevices, "h:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	game, _ = filepath.Abs(game)
+	if resolved != game {
+		t.Fatalf("mapping target = %q, want %q", resolved, game)
+	}
+	again, err := proton.EnsureDriveMapping(game)
+	if err != nil || again != got {
+		t.Fatalf("idempotent mapping = %q, %v", again, err)
+	}
+}

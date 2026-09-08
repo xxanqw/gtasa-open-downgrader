@@ -321,6 +321,52 @@ func (p *ProtonContext) WindowsPath(hostPath string) (string, error) {
 	return bestDrive + `:\` + strings.ReplaceAll(relative, string(filepath.Separator), `\`), nil
 }
 
+// EnsureDriveMapping gives a host directory its own visible drive in the
+// Proton prefix. This avoids Windows installer trees that hide .steam while
+// browsing through Z:. Existing mappings are never replaced.
+func (p *ProtonContext) EnsureDriveMapping(hostPath string) (string, error) {
+	hostPath, err := filepath.Abs(hostPath)
+	if err != nil {
+		return "", err
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(hostPath); resolveErr == nil {
+		hostPath = resolved
+	}
+	info, err := os.Stat(hostPath)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("drive mapping target %q is not a directory", hostPath)
+	}
+	dosDevices := filepath.Join(p.CompatDataPath, "pfx", "dosdevices")
+	if err = os.MkdirAll(dosDevices, 0700); err != nil {
+		return "", err
+	}
+	for _, drive := range "ghijklmnopqrstuvwxy" {
+		mapping := filepath.Join(dosDevices, string(drive)+":")
+		resolved, resolveErr := filepath.EvalSymlinks(mapping)
+		if resolveErr == nil {
+			resolved, _ = filepath.Abs(resolved)
+			if resolved == hostPath {
+				return strings.ToUpper(string(drive)) + `:\`, nil
+			}
+			continue
+		}
+		if !errors.Is(resolveErr, os.ErrNotExist) {
+			continue
+		}
+		if err = os.Symlink(hostPath, mapping); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return "", fmt.Errorf("create Proton drive mapping: %w", err)
+		}
+		return strings.ToUpper(string(drive)) + `:\`, nil
+	}
+	return "", fmt.Errorf("no free Proton drive letter is available for the GTA directory")
+}
+
 func within(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
