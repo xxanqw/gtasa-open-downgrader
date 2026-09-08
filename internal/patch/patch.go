@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
@@ -86,7 +87,7 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 	targets := []string{filepath.Base(src)}
 	if !game.IsEXE(f.Path) {
 		targets = []string{f.Path}
-	} else {
+	} else if !entrypoint.MetadataPresent(root) {
 		targets = append(targets, game.OtherEXE(filepath.Base(src)))
 	}
 	if h == f.TargetHash || game.IsEXE(f.Path) && h == game.LAAHash {
@@ -278,6 +279,12 @@ func Revert(ctx context.Context, root string, progress func(int, int)) error {
 	for i, rel := range keys {
 		if e = ctx.Err(); e != nil {
 			return e
+		}
+		if entrypoint.MetadataPresent(root) && rel == entrypoint.SteamExecutable {
+			if progress != nil {
+				progress(i+1, len(keys))
+			}
+			continue
 		}
 		dst, e := fsutil.Join(root, rel)
 		if e != nil {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/patch"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/testutil"
@@ -75,6 +76,48 @@ func TestCopyAliasBackupsAndRevert(t *testing.T) {
 	}
 	if _, e := os.Stat(filepath.Join(root, "gta_sa.exe")); !os.IsNotExist(e) {
 		t.Fatal("new alias survived revert")
+	}
+}
+func TestManagedLauncherIsNotPatched(t *testing.T) {
+	root, patches, launcherDir := t.TempDir(), t.TempDir(), t.TempDir()
+	testutil.Write(t, root, entrypoint.RealGameExecutable, "original")
+	testutil.Write(t, root, entrypoint.SteamExecutable, "Steam original")
+	launcher := testutil.Write(t, launcherDir, entrypoint.SteamExecutable, "launcher")
+	if _, err := entrypoint.Install(context.Background(), root, launcher); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Write(t, patches, entrypoint.RealGameExecutable, "target")
+	m := manifest(entrypoint.SteamExecutable, "copy", "original", "target")
+	if _, err := (patch.Engine{}).Apply(context.Background(), root, patches, m, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Read(t, root, entrypoint.SteamExecutable); got != "launcher" {
+		t.Fatalf("launcher was overwritten: %q", got)
+	}
+	if got := testutil.Read(t, root, entrypoint.RealGameExecutable); got != "target" {
+		t.Fatalf("real game = %q", got)
+	}
+}
+func TestRevertDoesNotOverwriteManagedLauncher(t *testing.T) {
+	root, patches, launcherDir := t.TempDir(), t.TempDir(), t.TempDir()
+	testutil.Write(t, root, entrypoint.RealGameExecutable, "original")
+	testutil.Write(t, root, entrypoint.SteamExecutable, "Steam original")
+	testutil.Write(t, patches, entrypoint.RealGameExecutable, "target")
+	if _, err := (patch.Engine{}).Apply(context.Background(), root, patches, manifest(entrypoint.RealGameExecutable, "copy", "original", "target"), nil); err != nil {
+		t.Fatal(err)
+	}
+	launcher := testutil.Write(t, launcherDir, entrypoint.SteamExecutable, "launcher")
+	if _, err := entrypoint.Install(context.Background(), root, launcher); err != nil {
+		t.Fatal(err)
+	}
+	if err := patch.Revert(context.Background(), root, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Read(t, root, entrypoint.SteamExecutable); got != "launcher" {
+		t.Fatalf("revert overwrote launcher: %q", got)
+	}
+	if got := testutil.Read(t, root, entrypoint.RealGameExecutable); got != "original" {
+		t.Fatalf("real game was not restored: %q", got)
 	}
 }
 func TestBothExecutableOriginalsPreserved(t *testing.T) {

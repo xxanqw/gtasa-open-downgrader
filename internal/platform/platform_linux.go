@@ -6,8 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -34,19 +32,6 @@ func FixRegistry(context.Context, string) error {
 }
 func Shortcut(context.Context, string) error {
 	return fmt.Errorf("desktop shortcuts are available on Windows")
-}
-func ProtonApps(ctx context.Context) (string, error) {
-	b, e := exec.CommandContext(ctx, "protontricks", "-l").CombinedOutput()
-	return string(b), e
-}
-func ProtonInstall(ctx context.Context, id, file string) error {
-	if !regexp.MustCompile(`^\d+$`).MatchString(id) {
-		return fmt.Errorf("invalid Steam app ID")
-	}
-	if !strings.HasSuffix(strings.ToLower(file), ".exe") {
-		return fmt.Errorf("select a Windows executable")
-	}
-	return exec.CommandContext(ctx, "protontricks-launch", "--appid", id, file).Run()
 }
 func WaitProcess(ctx context.Context, pid int) error {
 	for {

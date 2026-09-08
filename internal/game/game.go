@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 )
 
@@ -84,14 +85,19 @@ func Load(path string) (Manifest, error) {
 	}
 	return m, e
 }
-func IsEXE(p string) bool { return p == "gta_sa.exe" || p == "gta-sa.exe" }
+func IsEXE(p string) bool {
+	return p == entrypoint.RealGameExecutable || p == entrypoint.SteamExecutable
+}
 func OtherEXE(p string) string {
-	if p == "gta_sa.exe" {
-		return "gta-sa.exe"
+	if p == entrypoint.RealGameExecutable {
+		return entrypoint.SteamExecutable
 	}
-	return "gta_sa.exe"
+	return entrypoint.RealGameExecutable
 }
 func Source(root, rel string) (string, error) {
+	if IsEXE(rel) && entrypoint.MetadataPresent(root) {
+		return fsutil.Join(root, entrypoint.RealGameExecutable)
+	}
 	p, e := fsutil.Join(root, rel)
 	if e != nil {
 		return "", e
@@ -108,7 +114,11 @@ func Source(root, rel string) (string, error) {
 	return p, nil
 }
 func HasEXE(p string) bool {
-	for _, n := range []string{"gta_sa.exe", "gta-sa.exe"} {
+	names := []string{entrypoint.RealGameExecutable, entrypoint.SteamExecutable}
+	if entrypoint.MetadataPresent(p) {
+		names = names[:1]
+	}
+	for _, n := range names {
 		st, e := os.Stat(filepath.Join(p, n))
 		if e == nil && st.Mode().IsRegular() {
 			return true
@@ -140,7 +150,11 @@ func Inspect(ctx context.Context, root string, m Manifest, progress func(int, in
 		probe.Close()
 		os.Remove(probe.Name())
 	}
-	for _, exe := range []string{"gta_sa.exe", "gta-sa.exe"} {
+	executables := []string{entrypoint.RealGameExecutable, entrypoint.SteamExecutable}
+	if entrypoint.MetadataPresent(root) {
+		executables = executables[:1]
+	}
+	for _, exe := range executables {
 		p, e := fsutil.Join(root, exe)
 		if e != nil {
 			return result, e

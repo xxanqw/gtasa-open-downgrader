@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/testutil"
 )
 
@@ -28,6 +29,23 @@ func TestScanStatusesAndExecutableAlias(t *testing.T) {
 	}
 	if r.ReadOnly {
 		t.Fatal("temporary game should be writable")
+	}
+}
+func TestScanUsesRealGameAndIgnoresManagedLauncher(t *testing.T) {
+	root, launcherDir := t.TempDir(), t.TempDir()
+	testutil.Write(t, root, entrypoint.RealGameExecutable, "real game")
+	testutil.Write(t, root, entrypoint.SteamExecutable, "original Steam file")
+	launcher := testutil.Write(t, launcherDir, entrypoint.SteamExecutable, "launcher")
+	if _, err := entrypoint.Install(context.Background(), root, launcher); err != nil {
+		t.Fatal(err)
+	}
+	m := Manifest{Files: []File{{Path: entrypoint.SteamExecutable, SourceHash: testutil.Hash("real game"), TargetHash: testutil.Hash("target")}}}
+	result, err := Inspect(context.Background(), root, m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Rows[0].CurrentHash; got != testutil.Hash("real game") {
+		t.Fatalf("scanned %q, want real game hash %q", got, testutil.Hash("real game"))
 	}
 }
 func TestManifestRejectsInvalidInputs(t *testing.T) {

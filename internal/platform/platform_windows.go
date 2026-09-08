@@ -78,12 +78,6 @@ func Shortcut(ctx context.Context, game string) error {
 	}
 	return nil
 }
-func ProtonApps(context.Context) (string, error) {
-	return "", fmt.Errorf("Protontricks is available on Linux")
-}
-func ProtonInstall(context.Context, string, string) error {
-	return fmt.Errorf("Protontricks is available on Linux")
-}
 func WaitProcess(ctx context.Context, pid int) error {
 	handle, e := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
 	if e != nil {
