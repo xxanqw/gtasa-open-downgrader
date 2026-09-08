@@ -16,12 +16,24 @@ def is_newer_version(candidate, current=CURRENT_VERSION):
     except (AttributeError, InvalidVersion):
         return False
 
+# Prefer real HTTPS hostnames over bare IPs (e.g. https://1.1.1.1 fails
+# certificate verification on many machines and falsely reports offline).
+_CONNECTIVITY_URLS = (
+    "https://clients3.google.com/generate_204",
+    "https://www.icloud.com",
+    "https://api.github.com",
+)
+
+
 def has_internet():
-    try:
-        requests.get("https://1.1.1.1", timeout=3)
-        return True
-    except (requests.ConnectionError, requests.Timeout):
-        return False
+    for url in _CONNECTIVITY_URLS:
+        try:
+            response = requests.get(url, timeout=5, stream=True)
+            response.close()
+            return True
+        except requests.RequestException:
+            continue
+    return False
 
 def check_for_updates():
     if not has_internet():
