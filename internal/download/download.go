@@ -29,7 +29,14 @@ func New() *Client {
 	jar, _ := cookiejar.New(nil)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 30 * time.Second
-	return &Client{HTTP: &http.Client{Transport: transport, Jar: jar, Timeout: 30 * time.Minute}, ICloudAPI: ICloudAPI}
+	httpClient := &http.Client{Transport: transport, Jar: jar, Timeout: 30 * time.Minute}
+	httpClient.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+		if len(via) > 0 && via[0].URL.Scheme == "https" && request.URL.Scheme != "https" {
+			return fmt.Errorf("refusing HTTPS downgrade redirect")
+		}
+		return nil
+	}
+	return &Client{HTTP: httpClient, ICloudAPI: ICloudAPI}
 }
 func (c *Client) Request(ctx context.Context, method, raw string, body io.Reader, contentType string) (*http.Response, error) {
 	u, e := url.Parse(raw)

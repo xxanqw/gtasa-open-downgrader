@@ -1,3 +1,5 @@
+//go:build !launcher
+
 package assets
 
 import (

@@ -1,4 +1,4 @@
-//go:build offline
+//go:build offline && !launcher
 
 package assets
 

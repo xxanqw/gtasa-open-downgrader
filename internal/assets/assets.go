@@ -1,3 +1,5 @@
+//go:build !launcher
+
 // Package assets embeds the application artwork and platform patch engine.
 package assets
 

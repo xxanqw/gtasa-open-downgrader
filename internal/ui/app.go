@@ -65,6 +65,7 @@ type Window struct {
 	modLabels                             map[string]*widget.Label
 	modPanel                              *fyne.Container
 	modsTitle                             *widget.Label
+	multiplayerButton                     *widget.Button
 }
 
 func Run(gamePath, patchPath string) {
@@ -188,6 +189,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.install = widget.NewButtonWithIcon("Install mods only", theme.DownloadIcon(), func() { w.installMods(false) })
 	w.reinstall = widget.NewButtonWithIcon("Reinstall / update mods", theme.ViewRefreshIcon(), func() { w.installMods(true) })
 	tools := widget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
+	w.multiplayerButton = widget.NewButton("Multiplayer", w.multiplayer)
 	var more *widget.Button
 	more = widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {
 		menu := fyne.NewMenu("", fyne.NewMenuItem("Check app updates", func() { w.checkUpdates(true) }), fyne.NewMenuItem("About", w.showAbout))
@@ -203,7 +205,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		}
 	})
 	w.cancelButton.Disable()
-	w.controls = []fyne.Disableable{w.path, browse, scan, tools, more}
+	w.controls = []fyne.Disableable{w.path, browse, scan, w.multiplayerButton, tools, more}
 	w.modsTitle = widget.NewLabel("Mods")
 	w.modsTitle.TextStyle.Bold = true
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
@@ -215,7 +217,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	sectionHeader := w.modsTitle
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
-	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, tools, more), w.path), w.version)
+	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, w.multiplayerButton, tools, more), w.path), w.version)
 	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
 	bottom := container.New(statusLayout{}, w.status, w.progress, container.NewHBox(w.cancelButton, statusDetails))
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, files))
