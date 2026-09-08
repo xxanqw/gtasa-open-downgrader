@@ -17,12 +17,12 @@ import (
 type Executor func(context.Context, string, string, ...string) error
 
 type Runtime struct {
-	GameDir       string
-	Execute       Executor
-	AfterSAMPExit func(context.Context) error
+	GameDir                string
+	Execute                Executor
+	AfterCompatibilityExit func(context.Context) error
 }
 
-const sampModLoaderDelay = 12 * time.Second
+const modLoaderRestoreDelay = 12 * time.Second
 
 func New(gameDir string) *Runtime {
 	return &Runtime{GameDir: gameDir, Execute: execute}
@@ -57,27 +57,28 @@ func (runtime *Runtime) Multiplayer(ctx context.Context, id multiplayer.ClientID
 	if err := multiplayer.ValidateExecutable(client); err != nil {
 		return err
 	}
-	if id == multiplayer.ClientSAMP {
-		return runtime.runSAMP(ctx, client)
+	if id == multiplayer.ClientSAMP || id == multiplayer.ClientMTA {
+		return runtime.runWithoutModLoader(ctx, client)
 	}
 	return runtime.run(ctx, client.WorkingDir, client.Executable)
 }
 
-// runSAMP keeps Mod Loader out of SA-MP R5. Mod Loader can crash during its
-// own initialization when samp.dll is present, before any individual mod is
-// loaded. The ASI is restored after SA-MP exits and a short startup grace
-// period, and it is also recovered before every later launch.
-func (runtime *Runtime) runSAMP(ctx context.Context, client multiplayer.Client) error {
+// runWithoutModLoader keeps Mod Loader out of clients that reject or conflict
+// with injected ASI plugins. SA-MP R5 can crash inside Mod Loader during
+// initialization, while MTA warns about every ASI in the game directory. The
+// file is restored after the client exits and a short startup grace period,
+// and it is also recovered before every later launch.
+func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multiplayer.Client) error {
 	disabled, err := runtime.disableModLoader()
 	if err != nil {
 		return err
 	}
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable)
 	if disabled && runErr == nil {
-		if runtime.AfterSAMPExit != nil {
-			_ = runtime.AfterSAMPExit(ctx)
+		if runtime.AfterCompatibilityExit != nil {
+			_ = runtime.AfterCompatibilityExit(ctx)
 		} else {
-			timer := time.NewTimer(sampModLoaderDelay)
+			timer := time.NewTimer(modLoaderRestoreDelay)
 			select {
 			case <-timer.C:
 			case <-ctx.Done():
@@ -103,15 +104,15 @@ func (runtime *Runtime) disableModLoader() (bool, error) {
 		return false, fmt.Errorf("inspect Mod Loader: %w", err)
 	}
 	if _, err := os.Stat(disabled); err == nil {
-		return false, fmt.Errorf("cannot enable SA-MP compatibility mode because both Mod Loader copies exist")
+		return false, fmt.Errorf("cannot enable multiplayer compatibility mode because both Mod Loader copies exist")
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return false, fmt.Errorf("inspect disabled Mod Loader: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(disabled), 0700); err != nil {
-		return false, fmt.Errorf("prepare SA-MP compatibility mode: %w", err)
+		return false, fmt.Errorf("prepare multiplayer compatibility mode: %w", err)
 	}
 	if err := os.Rename(active, disabled); err != nil {
-		return false, fmt.Errorf("disable Mod Loader for SA-MP: %w", err)
+		return false, fmt.Errorf("disable Mod Loader for multiplayer: %w", err)
 	}
 	return true, nil
 }
@@ -129,7 +130,7 @@ func (runtime *Runtime) restoreModLoader() error {
 		return fmt.Errorf("inspect Mod Loader: %w", err)
 	}
 	if err := os.Rename(disabled, active); err != nil {
-		return fmt.Errorf("restore Mod Loader after SA-MP: %w", err)
+		return fmt.Errorf("restore Mod Loader after multiplayer: %w", err)
 	}
 	_ = os.Remove(filepath.Dir(disabled))
 	return nil

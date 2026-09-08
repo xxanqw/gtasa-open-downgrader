@@ -59,7 +59,7 @@ func TestSAMPTemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 			}
 			return nil
 		},
-		AfterSAMPExit: func(context.Context) error { return nil },
+		AfterCompatibilityExit: func(context.Context) error { return nil },
 	}
 	if err := runtime.Multiplayer(context.Background(), multiplayer.ClientSAMP); err != nil {
 		t.Fatal(err)
@@ -70,6 +70,41 @@ func TestSAMPTemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 	}
 	if _, err := os.Stat(disabled); !os.IsNotExist(err) {
 		t.Fatalf("disabled copy remained after launch: %v", err)
+	}
+}
+
+func TestMTATemporarilyDisablesAndRestoresModLoader(t *testing.T) {
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"modloader.asi":                "loader",
+		"clients/Multi Theft Auto.exe": "mta",
+		multiplayer.ConfigPath:         `{"schema_version":1,"clients":{"mta":{"executable":"clients/Multi Theft Auto.exe"}}}`,
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime := &Runtime{
+		GameDir: root,
+		Execute: func(_ context.Context, _, _ string, _ ...string) error {
+			active, _ := runtimePaths(root)
+			if _, err := os.Stat(active); !os.IsNotExist(err) {
+				t.Fatalf("Mod Loader remained active during MTA launch: %v", err)
+			}
+			return nil
+		},
+		AfterCompatibilityExit: func(context.Context) error { return nil },
+	}
+	if err := runtime.Multiplayer(context.Background(), multiplayer.ClientMTA); err != nil {
+		t.Fatal(err)
+	}
+	active, _ := runtimePaths(root)
+	if data, err := os.ReadFile(active); err != nil || string(data) != "loader" {
+		t.Fatalf("Mod Loader was not restored after MTA: %q, %v", data, err)
 	}
 }
 
