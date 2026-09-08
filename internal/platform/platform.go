@@ -8,11 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/steam"
 )
 
 const LaunchOptions = `WINEDLLOVERRIDES="vorbisFile=n,b" %command%`
@@ -26,15 +25,15 @@ func Detect() string {
 	return ""
 }
 func SteamLibraries(root string) []string {
-	libs := []string{filepath.Join(root, "steamapps", "common", "Grand Theft Auto San Andreas")}
-	b, e := os.ReadFile(filepath.Join(root, "steamapps", "libraryfolders.vdf"))
-	if e != nil {
-		return libs
+	libraries, err := steam.LibraryRoots(root)
+	if err != nil {
+		libraries = []string{root}
 	}
-	for _, m := range regexp.MustCompile(`"path"\s+"([^"]+)"`).FindAllStringSubmatch(string(b), -1) {
-		libs = append(libs, filepath.Join(strings.ReplaceAll(m[1], `\\`, `\`), "steamapps", "common", "Grand Theft Auto San Andreas"))
+	paths := make([]string, 0, len(libraries))
+	for _, library := range libraries {
+		paths = append(paths, filepath.Join(library, "steamapps", "common", "Grand Theft Auto San Andreas"))
 	}
-	return libs
+	return paths
 }
 
 // ApplyLAA validates the DOS and PE signatures before modifying characteristics.
