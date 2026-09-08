@@ -245,13 +245,14 @@ The release workflow runs on `v*` tags or a manual workflow dispatch. It builds 
 - `cmd/patch-assets`: patch download/import/validation for offline builds.
 - `internal/game`, `patch`, `mods`, `download`: cancellable domain operations using `context.Context`.
 - `internal/platform`, `updater`, `jobs`: OS integration, updates and worker lifecycle.
+- `internal/steam`: Steam libraries, AppID manifests, compatibility-tool resolution and reusable Proton execution.
 - `internal/applog`: bounded application journal, error reporting and log export.
 - `internal/ui`: Fyne windows, dialogs, themes, layouts and UI tests.
 - `internal/assets`: embedded artwork, Font Awesome SVGs, licenses, xdelta3 binaries and optional offline patches.
 
 When replacing Font Awesome SVGs, preserve their attribution and run `scripts/normalize-icons.py` with Python and `fonttools==4.64.0`. This maintenance step converts problematic SVG arcs and makes checkbox canvases square for Fyne's renderer. Commit the normalized SVGs; end users and normal Go builds do not need Python. See [icon attribution and maintenance notes](internal/assets/fontawesome/README.md).
 
-See [migration parity and compatibility notes](docs/parity.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
+See [migration parity and compatibility notes](docs/parity.md) and the [Steam/Proton integration notes](docs/steam-proton.md). The Python implementation is retained in Git history at `cee6363`. ShareMods can challenge automated requests; **Tools → Import mod archive** provides an official-package fallback. Forced mod reinstalls can overwrite customized settings.
 
 ## License
 
