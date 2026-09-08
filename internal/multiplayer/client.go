@@ -155,6 +155,25 @@ func ValidateExecutable(client Client) error {
 	return nil
 }
 
+// InstallerResult handles the MTA installer's UAC handoff under Proton. A
+// completed install can return 199 to the host even though the client was
+// written successfully. Only accept that result after detecting and validating
+// the installed client; every other non-zero result remains an error.
+func InstallerResult(id ClientID, environment Environment, runErr error) error {
+	if runErr == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if id != ClientMTA || !errors.As(runErr, &exitErr) || exitErr.ExitCode() != 199 {
+		return runErr
+	}
+	client, ok := Find(Detect(environment), id)
+	if !ok || ValidateExecutable(client) != nil {
+		return runErr
+	}
+	return nil
+}
+
 type CommandExecutor interface {
 	Execute(context.Context, string, string, ...string) error
 }

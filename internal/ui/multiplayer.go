@@ -152,7 +152,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			if err != nil {
 				return err
 			}
-			return runner.Run(ctx, path, arguments...)
+			return multiplayer.InstallerResult(id, environment, runner.Run(ctx, path, arguments...))
 		}, func(error) {
 			w.scan()
 		})

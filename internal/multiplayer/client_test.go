@@ -2,7 +2,9 @@ package multiplayer
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -114,6 +116,31 @@ func TestInstallerValidation(t *testing.T) {
 	}
 	if err := ValidateDownloadURL(Installers[ClientOpenMP].URL); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMTAInstallerAcceptsVerifiedProtonCompletionCode(t *testing.T) {
+	if os.Getenv("GO_TEST_EXIT_199") == "1" {
+		os.Exit(199)
+	}
+	driveC := t.TempDir()
+	mta := filepath.Join(driveC, "Program Files (x86)", "MTA San Andreas 1.6", "Multi Theft Auto.exe")
+	file(t, mta)
+	command := exec.Command(os.Args[0], "-test.run=TestMTAInstallerAcceptsVerifiedProtonCompletionCode")
+	command.Env = append(os.Environ(), "GO_TEST_EXIT_199=1")
+	runErr := command.Run()
+	if runErr == nil {
+		t.Fatal("helper process did not return exit code 199")
+	}
+	environment := Environment{GameDir: t.TempDir(), PrefixDriveC: driveC}
+	if err := InstallerResult(ClientMTA, environment, fmt.Errorf("wrapped: %w", runErr)); err != nil {
+		t.Fatalf("verified MTA installation was rejected: %v", err)
+	}
+	if err := InstallerResult(ClientMTA, Environment{GameDir: t.TempDir()}, runErr); err == nil {
+		t.Fatal("exit code 199 was accepted without an installed client")
+	}
+	if err := InstallerResult(ClientSAMP, environment, runErr); err == nil {
+		t.Fatal("exit code 199 was accepted for another installer")
 	}
 }
 
