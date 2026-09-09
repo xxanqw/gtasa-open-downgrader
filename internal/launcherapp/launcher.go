@@ -166,22 +166,26 @@ func (runtime *Runtime) runWithOpenMPSAMP(ctx context.Context, client multiplaye
 	}
 	if hadOriginal {
 		if err := os.Rename(active, backup); err != nil {
-			_ = runtime.restoreOpenMPSAMP()
+			_ = runtime.restoreOpenMPSAMP(false)
 			return fmt.Errorf("preserve existing samp.dll: %w", err)
 		}
 	}
 	if err := fsutil.CopyFile(ctx, managed, active); err != nil {
-		return errors.Join(fmt.Errorf("install selected open.mp SA-MP client: %w", err), runtime.restoreOpenMPSAMP())
+		return errors.Join(fmt.Errorf("install selected open.mp SA-MP client: %w", err), runtime.restoreOpenMPSAMP(false))
 	}
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
-	return errors.Join(runErr, runtime.restoreOpenMPSAMP())
+	return errors.Join(runErr, runtime.restoreOpenMPSAMP(runErr == nil))
 }
 
 func (runtime *Runtime) restoreCompatibility() error {
-	return errors.Join(runtime.restoreOpenMPSAMP(), runtime.restoreModLoader())
+	return errors.Join(runtime.restoreOpenMPSAMP(false), runtime.restoreModLoader())
 }
 
-func (runtime *Runtime) restoreOpenMPSAMP() error {
+// restoreOpenMPSAMP restores the game-local client before a new launch. After
+// open.mp successfully injects the managed DLL, Wine keeps that file locked
+// until GTA exits. In that one case, leave the verified state and backup in
+// place; the next launcher start performs the strict restoration.
+func (runtime *Runtime) restoreOpenMPSAMP(allowDeferred bool) error {
 	active, backup, statePath := runtime.openMPSAMPPaths()
 	data, err := os.ReadFile(statePath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -210,6 +214,9 @@ func (runtime *Runtime) restoreOpenMPSAMP() error {
 		}
 		if digest == state.ManagedSHA256 {
 			if err := os.Remove(active); err != nil {
+				if allowDeferred {
+					return nil
+				}
 				return fmt.Errorf("remove temporary open.mp samp.dll: %w", err)
 			}
 		} else if backupExists {
@@ -255,14 +262,11 @@ func (runtime *Runtime) installOpenMPSharedFiles(ctx context.Context, source str
 // file is restored after the client exits and a short startup grace period,
 // and it is also recovered before every later launch.
 func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multiplayer.Client) error {
-	disabled, err := runtime.disableModLoader()
+	_, err := runtime.disableModLoader()
 	if err != nil {
 		return err
 	}
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable)
-	if disabled && runErr == nil {
-		runtime.waitForClientStartup(ctx)
-	}
 	restoreErr := runtime.restoreModLoader()
 	return errors.Join(runErr, restoreErr)
 }
