@@ -31,7 +31,7 @@ Contributions for other source versions are welcome through GitHub issues.
 - **Game Detection:** Checks the Windows Registry and common Steam locations on Linux. A game directory can always be selected manually.
 - **Font Awesome Icons:** Embedded Font Awesome Free SVG icons follow the monochrome theme across the toolbar, controls, menus, and file dialogs. No icon font or network connection is needed. Attribution and license information are included in About.
 - **Monochrome Interface:** A compact grayscale theme follows the system light/dark preference. File statuses stay explicit, with bold text for missing, modified, or failed files. Dialogs share the same compact monochrome styling.
-- **Fyne Dialogs:** Consistent file/folder pickers, confirmations, messages, and input prompts without external dialog helpers. Tools are grouped by purpose; About includes the original credits and complete embedded licenses.
+- **Dialogs:** File, folder, and export destinations use the operating system's file explorer, with a Fyne fallback when it is unavailable. Confirmations, messages, Tools, and About keep the compact monochrome Fyne design.
 - **Application Log:** The footer’s ⓘ button opens a live session journal with operation events, Fyne diagnostics, and error details. Copy or export the retained log (up to 1 MiB) as a `.log` file. Worker panics are reported with stack traces; fatal runtime crash reports are appended to `gtasa-open-downgrader/last-crash.log` in the system user cache directory.
 - **Responsive Startup:** A native Fyne window opens immediately while background preparation runs. No PyInstaller, Qt, Tcl/Tk or splash IPC.
 - **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.

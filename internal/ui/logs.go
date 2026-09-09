@@ -3,12 +3,13 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
@@ -98,31 +99,21 @@ func logPreview(text string) string {
 
 func (w *Window) exportLogs() {
 	text, _ := w.logs.Snapshot()
-	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
-		d := dialog.NewFileSave(func(file fyne.URIWriteCloser, err error) {
-			if err != nil {
-				done("", false)
-				w.error(err)
-				return
-			}
-			if file == nil {
-				done("", false)
-				return
-			}
-			path := file.URI().String()
+	directory := w.cache
+	if home, err := os.UserHomeDir(); err == nil {
+		directory = home
+	}
+	initial := filepath.Join(directory, "gtasa-downgrader-"+time.Now().Format("20060102-150405")+".log")
+	w.chooseDestination("Export application log", initial, []string{".log"}, func(path string) {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		if err == nil {
 			err = applog.Export(file, text)
-			done("", err == nil)
-			if err != nil {
-				w.error(fmt.Errorf("export application log: %w", err))
-				return
-			}
-			w.setStatus("Application log exported.")
-			w.logs.Record("INFO", "Log exported to "+path)
-		}, w.window)
-		d.SetTitleText("Export application log")
-		d.SetFileName("gtasa-downgrader-" + time.Now().Format("20060102-150405") + ".log")
-		w.showPicker(d)
-		d.SetConfirmText("Save")
-		return func() { d.Hide(); done("", false) }
-	}})
+		}
+		if err != nil {
+			w.error(fmt.Errorf("export application log: %w", err))
+			return
+		}
+		w.setStatus("Application log exported.")
+		w.logs.Record("INFO", "Log exported to "+path)
+	})
 }

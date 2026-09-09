@@ -21,8 +21,10 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/ncruces/zenity"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
@@ -37,6 +39,7 @@ import (
 
 type Window struct {
 	logs                                  *applog.Journal
+	pickers                               pickerBackend
 	activePrompt                          func()
 	prompts                               []promptRequest
 	promptActive                          bool
@@ -118,6 +121,9 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
 	w := &Window{logs: journal, app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, warned: map[string]bool{}}
+	if _, ok := w.window.(driver.NativeWindow); ok {
+		w.pickers = pickerBackend{available: zenity.IsAvailable, show: systemPicker}
+	}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
 	w.window.Resize(fyne.NewSize(840, 560))
 	w.window.SetCloseIntercept(w.close)

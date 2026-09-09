@@ -1,15 +1,20 @@
 package ui
 
 import (
+	"context"
+	"errors"
+	"os"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/ncruces/zenity"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
@@ -21,6 +26,7 @@ const (
 	promptConfirm
 	promptFolder
 	promptFile
+	promptSave
 	promptEntry
 	promptChoice
 )
@@ -32,6 +38,44 @@ type promptRequest struct {
 	extensions, choices  []string
 	done                 func(string, bool)
 	present              func(func(string, bool)) func()
+}
+
+type pickerBackend struct {
+	available func() bool
+	show      func(context.Context, promptRequest, any) (string, error)
+}
+
+func systemPicker(ctx context.Context, r promptRequest, parent any) (string, error) {
+	options := []zenity.Option{zenity.Title(r.title), zenity.Context(ctx), zenity.Modal()}
+	if parent != nil {
+		options = append(options, zenity.Attach(parent))
+	}
+	if r.initial != "" {
+		initial := r.initial
+		if r.kind != promptSave {
+			if info, err := os.Stat(initial); err == nil && info.IsDir() {
+				initial += string(os.PathSeparator)
+			}
+		}
+		options = append(options, zenity.Filename(initial))
+	}
+	if len(r.extensions) > 0 {
+		patterns := make([]string, len(r.extensions))
+		for index, extension := range r.extensions {
+			patterns[index] = "*" + extension
+		}
+		options = append(options, zenity.FileFilter{Name: "Supported files", Patterns: patterns, CaseFold: true})
+	}
+	switch r.kind {
+	case promptFolder:
+		return zenity.SelectFile(append(options, zenity.Directory())...)
+	case promptFile:
+		return zenity.SelectFile(options...)
+	case promptSave:
+		return zenity.SelectFileSave(append(options, zenity.ConfirmOverwrite())...)
+	default:
+		return "", zenity.ErrUnsupported
+	}
 }
 
 // Keep prompts ordered, including prompts arriving from background work while
@@ -70,8 +114,55 @@ func (w *Window) nextPrompt() {
 	}
 	if r.present != nil {
 		w.activePrompt = r.present(complete)
+	} else if isPicker(r.kind) && w.pickers.available != nil && w.pickers.available() {
+		w.activePrompt = w.nativePicker(r, complete)
 	} else {
 		w.activePrompt = w.fynePrompt(r, complete)
+	}
+}
+
+func isPicker(kind promptKind) bool {
+	return kind == promptFolder || kind == promptFile || kind == promptSave
+}
+
+func (w *Window) nativePicker(r promptRequest, done func(string, bool)) func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	var parent any
+	if native, ok := w.window.(driver.NativeWindow); ok {
+		native.RunNative(func(raw any) {
+			switch value := raw.(type) {
+			case driver.WindowsWindowContext:
+				if value.HWND != 0 {
+					parent = value.HWND
+				}
+			case driver.X11WindowContext:
+				if value.WindowHandle != 0 {
+					parent = int(value.WindowHandle)
+				}
+			}
+		})
+	}
+	w.jobs.Go(func(groupContext context.Context) {
+		stop := context.AfterFunc(groupContext, cancel)
+		defer stop()
+		value, err := w.pickers.show(ctx, r, parent)
+		cancel()
+		w.post(func() {
+			switch {
+			case err == nil:
+				done(value, value != "")
+			case errors.Is(err, zenity.ErrCanceled), errors.Is(err, context.Canceled):
+				done("", false)
+			default:
+				// Keep the operation usable if a desktop helper disappears or
+				// the native API fails at runtime.
+				w.activePrompt = w.fynePrompt(r, done)
+			}
+		})
+	})
+	return func() {
+		cancel()
+		done("", false)
 	}
 }
 
@@ -203,6 +294,34 @@ func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 		w.setPickerLocation(d, r.initial)
 		w.showPicker(d)
 		return func() { d.Hide(); done("", false) }
+	case promptSave:
+		d := dialog.NewFileSave(func(file fyne.URIWriteCloser, err error) {
+			if err != nil {
+				done("", false)
+				w.error(err)
+				return
+			}
+			if file == nil {
+				done("", false)
+				return
+			}
+			path := file.URI().Path()
+			if err := file.Close(); err != nil {
+				done("", false)
+				w.error(err)
+				return
+			}
+			done(path, true)
+		}, w.window)
+		d.SetFilter(storage.NewExtensionFileFilter(r.extensions))
+		d.SetTitleText(r.title)
+		if r.initial != "" {
+			d.SetFileName(filepath.Base(r.initial))
+			w.setPickerLocation(d, filepath.Dir(r.initial))
+		}
+		w.showPicker(d)
+		d.SetConfirmText("Save")
+		return func() { d.Hide(); done("", false) }
 	case promptEntry:
 		entry := widget.NewEntry()
 		entry.SetText(r.initial)
@@ -248,6 +367,14 @@ func (w *Window) chooseArchive(title string, extensions []string, chosen func(st
 	w.prompt(promptRequest{kind: promptFile, title: title, initial: w.path.Text, extensions: extensions, done: func(path string, ok bool) {
 		if ok && path != "" {
 			chosen(path)
+		}
+	}})
+}
+
+func (w *Window) chooseDestination(title, initial string, extensions []string, chosen func(string)) {
+	w.prompt(promptRequest{kind: promptSave, title: title, initial: initial, extensions: extensions, done: func(path string, ok bool) {
+		if ok && path != "" {
+			chosen(filepath.Clean(path))
 		}
 	}})
 }
