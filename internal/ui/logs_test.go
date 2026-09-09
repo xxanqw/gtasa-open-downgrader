@@ -16,12 +16,16 @@ func TestApplicationLogIncludesErrorsAndExportsThroughPicker(t *testing.T) {
 	w.window = clipboardWindow{Window: w.window, clipboard: test.NewClipboard()}
 	defer w.jobs.Close()
 	w.window.Show()
-	w.setStatus("Scanning game files")
+	fullStatus := "audio/streams/CUTSCENE/advertisement-track.ogg · Successfully restored from the original backup"
+	w.setStatus(fullStatus)
 	w.error(errors.New("xdelta3: fixture diagnostic"))
 	w.activePrompt()
 	text, _ := w.logs.Snapshot()
-	if !strings.Contains(text, "[INFO] Scanning game files") || !strings.Contains(text, "[ERROR] xdelta3: fixture diagnostic") {
+	if !strings.Contains(text, "[INFO] "+fullStatus) || !strings.Contains(text, "[ERROR] xdelta3: fixture diagnostic") {
 		t.Fatal("global journal missing status or error", text)
+	}
+	if w.status.Text == fullStatus || len([]rune(w.status.Text)) > 30 {
+		t.Fatalf("footer status was not compacted: %q", w.status.Text)
 	}
 	w.showLogs()
 	snapshot(t, w, "GTASA_LOGS_SNAPSHOT")

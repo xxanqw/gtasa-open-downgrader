@@ -16,7 +16,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -63,8 +62,6 @@ type Window struct {
 	warned                                map[string]bool
 	scanPath                              string
 	transferLabel                         string
-	transferStart                         time.Time
-	transferBase                          int64
 	updateButton                          *appwidget.Button
 	modLabels                             map[string]*widget.Label
 	modPanel                              *fyne.Container
@@ -386,26 +383,12 @@ func (w *Window) report(label string, done, total int64) {
 		if label != w.transferLabel {
 			w.logs.Record("INFO", label)
 			w.transferLabel = label
-			w.transferStart = time.Now()
-			w.transferBase = done
-		}
-		seconds := time.Since(w.transferStart).Seconds()
-		if seconds > 0.5 && done > w.transferBase {
-			rate := float64(done-w.transferBase) / seconds
-			label += fmt.Sprintf(" · %.1f MiB/s", rate/(1<<20))
-			if total > done {
-				label += fmt.Sprintf(" · %ds remaining", int(float64(total-done)/rate))
-			}
 		}
 		if total > 0 {
 			w.progress.SetValue(float64(done) / float64(total))
+			label += fmt.Sprintf(" · %.0f%%", 100*float64(done)/float64(total))
 		}
-		if total > 0 {
-			label += fmt.Sprintf(" · %.1f / %.1f MiB", float64(done)/(1<<20), float64(total)/(1<<20))
-		} else if done > 0 {
-			label += fmt.Sprintf(" · %.1f MiB downloaded", float64(done)/(1<<20))
-		}
-		w.status.SetText(label)
+		w.status.SetText(compactStatusText(label))
 	})
 }
 func (w *Window) start() {
@@ -728,7 +711,10 @@ func (w *Window) checkUpdates(manual bool) {
 	})
 }
 
-func (w *Window) setStatus(text string) { w.logs.Record("INFO", text); w.status.SetText(text) }
+func (w *Window) setStatus(text string) {
+	w.logs.Record("INFO", text)
+	w.status.SetText(compactStatusText(text))
+}
 
 // Background checks have no operation completion callback, but still need the
 // same panic reporting boundary as a foreground scan or installation.

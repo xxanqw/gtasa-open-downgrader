@@ -34,7 +34,10 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.checks["SilentPatch"].SetChecked(true)
 	w.modLabels["SilentPatch"].SetText("Installed · 1.1-BUILD34.1-SA")
 	w.modLabels["Widescreen Fixes"].SetText("Installed · 2025-12-08")
-	w.status.SetText("Scan complete: 17 manifest files checked.")
+	w.setStatus("Scan complete: 17 manifest files checked.")
+	if w.status.Text != "Scan complete · 17 files" {
+		t.Fatalf("scan status is not compact: %q", w.status.Text)
+	}
 	w.progress.SetValue(1)
 	w.window.Show()
 	for _, size := range []fyne.Size{fyne.NewSize(840, 560), fyne.NewSize(720, 480)} {
@@ -110,7 +113,10 @@ func TestCompactWindowKeepsGameInformationVisible(t *testing.T) {
 	w.refreshEnabled()
 	w.cancelButton.Enable()
 	w.progress.SetValue(0.42)
-	w.status.SetText("Downgrading audio/streams/BEATS…")
+	w.setStatus("audio/streams/BEATS · Downgrading from the original game archive")
+	if !strings.HasPrefix(w.status.Text, "BEATS · ") || len([]rune(w.status.Text)) > 30 {
+		t.Fatalf("path status is not compact: %q", w.status.Text)
+	}
 	if !w.progress.Visible() || !w.cancelButton.Visible() || w.progress.Size().Height > 4 {
 		t.Fatal("active progress is not a thin visible track")
 	}

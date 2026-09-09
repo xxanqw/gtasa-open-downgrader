@@ -100,6 +100,37 @@ func compactLabel(text string) *widget.Label {
 	return l
 }
 
+// Keep the footer glanceable while the journal retains the complete message.
+// Paths are reduced to their final component because the full source path is
+// available from the log button beside the status bar.
+func compactStatusText(text string) string {
+	if strings.HasPrefix(text, "Scan complete: ") {
+		var files int
+		if _, err := fmt.Sscanf(text, "Scan complete: %d manifest files checked.", &files); err == nil {
+			return fmt.Sprintf("Scan complete · %d files", files)
+		}
+	}
+	if strings.HasPrefix(text, "Cancelled.") {
+		return "Cancelled · backups preserved"
+	}
+	if strings.HasPrefix(text, "Cancelling;") {
+		return "Cancelling…"
+	}
+	if parts := strings.SplitN(text, " · ", 2); len(parts) == 2 && strings.ContainsAny(parts[0], `/\`) {
+		path := strings.TrimRight(parts[0], `/\`)
+		if index := strings.LastIndexAny(path, `/\`); index >= 0 {
+			path = path[index+1:]
+		}
+		text = path + " · " + parts[1]
+	}
+	const limit = 30
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit-1]) + "…"
+}
+
 // The file grid uses tighter typography and padding than the surrounding controls.
 // Leave Fyne's scale setting intact for high-DPI displays.
 type fileTableTheme struct{ fyne.Theme }
