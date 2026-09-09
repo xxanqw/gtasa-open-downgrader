@@ -202,8 +202,8 @@ func (w *Window) panel(title string, body fyne.CanvasObject, size fyne.Size, acc
 		buttons.Add(confirm)
 	}
 	footer := container.NewBorder(nil, nil, extra, buttons, nil)
-	headerSpace := container.New(layout.NewCustomPaddedLayout(0, 6, 0, 0), header)
-	footerSpace := container.New(layout.NewCustomPaddedLayout(10, 0, 0, 0), footer)
+	headerSpace := container.NewVBox(container.New(layout.NewCustomPaddedLayout(0, 6, 0, 0), header), widget.NewSeparator())
+	footerSpace := container.NewVBox(widget.NewSeparator(), container.New(layout.NewCustomPaddedLayout(10, 0, 0, 0), footer))
 	frame := container.NewBorder(headerSpace, footerSpace, nil, nil, body)
 	content := container.New(layout.NewCustomPaddedLayout(10, 10, 14, 14), frame)
 	popup = widget.NewModalPopUp(content, canvas)

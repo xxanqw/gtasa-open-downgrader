@@ -38,3 +38,22 @@ func TestMonochromeThemePreservesTextContrast(t *testing.T) {
 		}
 	}
 }
+
+func TestMonochromeThemeSeparatesInterfaceSurfaces(t *testing.T) {
+	themeValue := compactTheme{theme.DefaultTheme()}
+	for _, variant := range []fyne.ThemeVariant{theme.VariantDark, theme.VariantLight} {
+		shade := func(name fyne.ThemeColorName) uint32 {
+			red, green, blue, _ := themeValue.Color(name, variant).RGBA()
+			if red != green || green != blue {
+				t.Fatalf("variant %v role %s is not monochrome", variant, name)
+			}
+			return red
+		}
+		background := shade(theme.ColorNameBackground)
+		for _, role := range []fyne.ThemeColorName{theme.ColorNameInputBackground, theme.ColorNameButton, theme.ColorNameHeaderBackground, theme.ColorNameSeparator} {
+			if got := shade(role); got == background {
+				t.Errorf("variant %v role %s blends into the background", variant, role)
+			}
+		}
+	}
+}

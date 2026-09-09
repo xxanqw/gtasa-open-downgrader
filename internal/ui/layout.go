@@ -12,6 +12,8 @@ import (
 )
 
 // Preserve the user's light/dark preference and scaling with a neutral palette.
+// Explicit surface shades keep controls, collection headers and separators
+// distinct instead of flattening the interface into one grey plane.
 type compactTheme struct{ fyne.Theme }
 
 func (t compactTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
@@ -25,22 +27,52 @@ func (t compactTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant)
 	}
 	switch name {
 	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
-		return neutral(36, 224)
+		return neutral(32, 238)
 	case theme.ColorNameForegroundOnPrimary, theme.ColorNameForegroundOnError, theme.ColorNameForegroundOnSuccess, theme.ColorNameForegroundOnWarning:
-		return neutral(255, 24)
+		return neutral(255, 18)
 	case theme.ColorNameError, theme.ColorNameWarning, theme.ColorNameSuccess:
-		return neutral(48, 224)
+		return neutral(45, 220)
 	case theme.ColorNameForeground:
-		return neutral(32, 232)
+		return neutral(24, 242)
 	case theme.ColorNameDisabled, theme.ColorNamePlaceHolder:
-		return neutral(116, 136)
+		return neutral(104, 154)
+	case theme.ColorNameBackground:
+		return neutral(244, 18)
+	case theme.ColorNameInputBackground:
+		return neutral(255, 30)
+	case theme.ColorNameButton:
+		return neutral(218, 48)
+	case theme.ColorNameDisabledButton:
+		return neutral(234, 30)
+	case theme.ColorNameHeaderBackground:
+		return neutral(222, 40)
+	case theme.ColorNameMenuBackground, theme.ColorNameOverlayBackground:
+		return neutral(250, 28)
+	case theme.ColorNameInputBorder, theme.ColorNameSeparator, theme.ColorNameInnerWindowBorder, theme.ColorNameInnerWindowBorderInactive:
+		return neutral(170, 68)
+	case theme.ColorNameScrollBar:
+		return neutral(96, 160)
+	case theme.ColorNameScrollBarBackground:
+		return neutral(230, 35)
 	case theme.ColorNameSelection:
-		return neutral(215, 64)
+		return neutral(200, 76)
 	case theme.ColorNameFocus:
 		if dark {
-			return color.NRGBA{R: 255, G: 255, B: 255, A: 64}
+			return color.NRGBA{R: 255, G: 255, B: 255, A: 112}
 		}
-		return color.NRGBA{A: 40}
+		return color.NRGBA{A: 72}
+	case theme.ColorNameHover:
+		if dark {
+			return color.NRGBA{R: 255, G: 255, B: 255, A: 36}
+		}
+		return color.NRGBA{A: 28}
+	case theme.ColorNamePressed:
+		if dark {
+			return color.NRGBA{R: 255, G: 255, B: 255, A: 72}
+		}
+		return color.NRGBA{A: 52}
+	case theme.ColorNameShadow:
+		return color.NRGBA{A: 104}
 	}
 	// Neutralize every remaining theme role, including translucent overlays.
 	c := color.NRGBAModel.Convert(t.Theme.Color(name, variant)).(color.NRGBA)

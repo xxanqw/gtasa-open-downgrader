@@ -154,6 +154,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.progress = newThinProgress()
 	w.modStatus = widget.NewLabel("Select mods to include with the downgrade or install separately.")
 	w.modStatus.Wrapping = fyne.TextWrapWord
+	w.modStatus.Importance = widget.LowImportance
 	w.table = newReadOnlyTable(func() (int, int) { return len(w.rows) + 1, 5 }, func() fyne.CanvasObject {
 		return container.NewThemeOverride(compactLabel(""), fileTableTheme{a.Settings().Theme()})
 	}, func(id widget.TableCellID, o fyne.CanvasObject) {
@@ -188,6 +189,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		c := widget.NewCheck(strings.TrimSuffix(name, " (60fps fix)"), func(bool) { w.selectDependencies() })
 		w.checks[name] = c
 		state := compactLabel("Not installed")
+		state.Importance = widget.LowImportance
 		w.modLabels[name] = state
 		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(c, state), modGridTheme{a.Settings().Theme()}))
 	}
@@ -215,6 +217,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.controls = []fyne.Disableable{w.path, browse, scan, w.multiplayerButton, tools, more}
 	w.modsTitle = widget.NewLabel("Mods")
 	w.modsTitle.TextStyle.Bold = true
+	w.modsTitle.Importance = widget.HighImportance
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
 	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
 	buttons := container.NewThemeOverride(container.NewHBox(w.install, w.reinstall), modActionTheme{a.Settings().Theme()})
@@ -224,7 +227,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	sectionHeader := w.modsTitle
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
-	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, w.multiplayerButton, tools, more), w.path), w.version)
+	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, w.multiplayerButton, tools, more), w.path), w.version, widget.NewSeparator())
 	statusDetails := appwidget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
 	bottom := container.New(statusLayout{}, w.status, w.progress, container.NewHBox(w.cancelButton, statusDetails))
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, files))
