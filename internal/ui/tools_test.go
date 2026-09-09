@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
@@ -69,21 +68,21 @@ func TestAboutContainsOriginalCreditsAndCompleteLicenses(t *testing.T) {
 		}
 	}
 	w.showAbout()
-	var tabs *container.AppTabs
+	var licenses *widget.Select
 	walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
-		if v, ok := o.(*container.AppTabs); ok {
-			tabs = v
+		if v, ok := o.(*widget.Select); ok {
+			licenses = v
 			return true
 		}
 		return false
 	})
-	if tabs == nil || len(tabs.Items) != 3 {
-		t.Fatal("About lacks bundled license tabs")
+	if licenses == nil || len(licenses.Options) != 3 {
+		t.Fatal("About lacks bundled license selector")
 	}
 	for i, want := range []string{assets.AppLicense, assets.XdeltaLicense, assets.FontAwesomeLicense} {
-		tabs.SelectIndex(i)
+		licenses.SetSelected(licenses.Options[i])
 		found := false
-		walkObjects(tabs.Items[i].Content, func(o fyne.CanvasObject) bool {
+		walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
 			if label, ok := o.(*widget.Label); ok && label.Text == want && label.Selectable {
 				found = true
 				return true
@@ -98,18 +97,18 @@ func TestAboutContainsOriginalCreditsAndCompleteLicenses(t *testing.T) {
 			t.Fatalf("license %d was not copied in full", i)
 		}
 	}
-	tabs.SelectIndex(0)
+	licenses.SetSelected(appLicenseName)
 	snapshot(t, w, "GTASA_ABOUT_SNAPSHOT")
-	tapPrompt(t, w, "OK")
+	tapPrompt(t, w, "Close")
 	if w.promptActive {
 		t.Fatal("About did not close")
 	}
 	w.window.Resize(fyne.NewSize(720, 480))
 	w.showAbout()
-	okButton := promptButton(w.window.Canvas().Overlays().Top(), "OK")
+	okButton := promptButton(w.window.Canvas().Overlays().Top(), "Close")
 	pos := a.Driver().AbsolutePositionForObject(okButton)
 	if pos.X < 0 || pos.Y < 0 || pos.X+okButton.Size().Width > 720 || pos.Y+okButton.Size().Height > 480 {
 		t.Fatal("small window hides About actions")
 	}
-	tapPrompt(t, w, "OK")
+	tapPrompt(t, w, "Close")
 }
