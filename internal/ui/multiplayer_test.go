@@ -7,6 +7,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 )
@@ -30,4 +31,38 @@ func TestMultiplayerDialogKeepsClientActionsCompact(t *testing.T) {
 	}
 	snapshot(t, w, "GTASA_MULTIPLAYER_SNAPSHOT")
 	w.activePrompt()
+}
+
+func TestSAMPInstallerGuideExplainsMappedDriveBeforeStarting(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	w := New(a)
+	defer w.jobs.Close()
+	w.window.Show()
+
+	started := false
+	w.showSAMPInstallerGuide(multiplayer.Environment{WindowsGameDir: `G:\Grand Theft Auto San Andreas`}, func() {
+		started = true
+	})
+	if started {
+		t.Fatal("SA-MP installer started before the guide was accepted")
+	}
+	for _, want := range []string{"mounted inside the Windows installer as drive G:", `G:\Grand Theft Auto San Andreas`, "expand My Computer"} {
+		found := false
+		walkObjects(w.window.Canvas().Overlays().Top(), func(o fyne.CanvasObject) bool {
+			if label, ok := o.(*widget.Label); ok && strings.Contains(label.Text, want) {
+				found = true
+				return true
+			}
+			return false
+		})
+		if !found {
+			t.Fatalf("SA-MP guide does not explain %q", want)
+		}
+	}
+	snapshot(t, w, "GTASA_SAMP_GUIDE_SNAPSHOT")
+	tapPrompt(t, w, "Open installer")
+	if !started {
+		t.Fatal("accepting the guide did not start the SA-MP installer")
+	}
 }

@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
@@ -253,10 +255,17 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			w.scan()
 		})
 	}
+	start := func(path string) {
+		if id == multiplayer.ClientSAMP && runtime.GOOS == "linux" {
+			w.showSAMPInstallerGuide(environment, func() { run(path) })
+			return
+		}
+		run(path)
+	}
 	if installer.Manual {
 		w.info("Download SA-MP installer", "SA-MP does not publish a stable first-party installer URL. Its official page will open; download the current client from a listed source, then select the installer here. The installer will use the detected Steam environment automatically.")
 		_ = w.app.OpenURL(mustURL(installer.OfficialPage))
-		w.chooseArchive("Select SA-MP installer", []string{".exe"}, run)
+		w.chooseArchive("Select SA-MP installer", []string{".exe"}, start)
 		return
 	}
 	if err := multiplayer.ValidateDownloadURL(installer.URL); err != nil {
@@ -281,6 +290,44 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			run(destination)
 		}
 	})
+}
+
+func (w *Window) showSAMPInstallerGuide(environment multiplayer.Environment, start func()) {
+	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
+		windowsPath := strings.TrimSpace(environment.WindowsGameDir)
+		if windowsPath == "" {
+			windowsPath = `G:\Grand Theft Auto San Andreas`
+		}
+		drive := "G:"
+		if len(windowsPath) >= 2 && windowsPath[1] == ':' {
+			drive = strings.ToUpper(windowsPath[:2])
+		}
+
+		intro := widget.NewLabel("The Steam library containing GTA San Andreas is mounted inside the Windows installer as drive " + drive + ".")
+		intro.Wrapping = fyne.TextWrapWord
+		guide := canvas.NewImageFromResource(fyne.NewStaticResource("samp-drive-guide.png", assets.SAMPDriveGuide))
+		guide.FillMode = canvas.ImageFillContain
+		guide.SetMinSize(fyne.NewSize(313, 136))
+		pathHeading := widget.NewLabelWithStyle("Select this game folder:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		path := widget.NewLabel(windowsPath)
+		path.TextStyle.Monospace = true
+		path.Selectable = true
+		steps := widget.NewLabel("In the SA-MP folder browser, expand My Computer, open " + drive + ", select the GTA San Andreas folder, and then continue the installation.")
+		steps.Wrapping = fyne.TextWrapWord
+		body := container.NewVBox(
+			intro,
+			container.NewCenter(guide),
+			pathHeading,
+			path,
+			steps,
+		)
+		return w.panel("Before SA-MP setup opens", body, fyne.NewSize(540, 390), "Open installer", "Cancel", nil, func(ok bool) {
+			done("", ok)
+			if ok {
+				start()
+			}
+		})
+	}})
 }
 
 func launcherBinary() (string, error) {

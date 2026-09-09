@@ -18,6 +18,9 @@ import (
 //go:embed icon.png
 var Icon []byte
 
+//go:embed samp-drive-guide.png
+var SAMPDriveGuide []byte
+
 //go:embed app-LICENSE.txt
 var AppLicense string
 
