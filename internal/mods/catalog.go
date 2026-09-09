@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/service"
 )
 
 const (
@@ -63,7 +64,7 @@ type Resolver struct {
 }
 
 func NewResolver(c *download.Client) *Resolver {
-	return &Resolver{Client: c, GitHubAPI: "https://api.github.com/repos", cache: map[string]githubRelease{}}
+	return &Resolver{Client: c, GitHubAPI: service.GitHubMetadataURL, cache: map[string]githubRelease{}}
 }
 func Supported(name string) bool {
 	for _, s := range Catalog {

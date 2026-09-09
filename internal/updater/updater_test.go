@@ -4,13 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/service"
 )
 
 func TestVersionComparison(t *testing.T) {
@@ -21,6 +24,44 @@ func TestVersionComparison(t *testing.T) {
 		if Newer(c.candidate, c.current) != c.want {
 			t.Fatal(c)
 		}
+	}
+}
+
+func TestManagedServiceEndpointsAreFirstParty(t *testing.T) {
+	for _, endpoint := range []string{service.HealthURL, service.LatestReleaseURL, service.GitHubMetadataURL} {
+		if !strings.HasPrefix(endpoint, "https://dwngrdr.xxanqw.me/api/v1/") || strings.Contains(endpoint, "1.1.1.1") || strings.Contains(endpoint, "api.github.com") {
+			t.Fatalf("network service is not first-party: %s", endpoint)
+		}
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
+
+func TestCheckVerifiesServiceBeforeReadingManagedRelease(t *testing.T) {
+	var requests []string
+	client := &download.Client{HTTP: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.String())
+		body := ""
+		switch request.URL.String() {
+		case service.HealthURL:
+			if request.Method != http.MethodHead {
+				t.Fatalf("health check used %s", request.Method)
+			}
+		case service.LatestReleaseURL:
+			body = `{"tag_name":"v9.8.7","assets":[]}`
+		default:
+			t.Fatalf("unexpected update request: %s", request.URL)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}}
+	release, err := Check(context.Background(), client)
+	if err != nil || release.Tag != "v9.8.7" {
+		t.Fatalf("managed update check failed: %+v, %v", release, err)
+	}
+	if len(requests) != 2 || !strings.HasPrefix(requests[0], "HEAD ") || !strings.HasPrefix(requests[1], "GET ") {
+		t.Fatalf("unexpected update sequence: %v", requests)
 	}
 }
 func TestExactPlatformAndVariantSelection(t *testing.T) {

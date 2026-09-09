@@ -67,7 +67,7 @@ Release builds are provided in online and offline variants.
 - `gtasa-open-downgrader-linux.AppImage`
 - `gta-sa.exe` (Windows Steam launcher, also bundled inside the AppImage)
 
-When patch assets are missing, the app asks whether it should download them from iCloud. Internet access is also required for mod installation, mod update checks, and application updates.
+When patch assets are missing, the app asks whether it should download them from iCloud. Internet access is also required for mod installation, mod update checks, and application updates. Connectivity and application updates use the project's Cloudflare Worker at `dwngrdr.xxanqw.me`; the desktop app no longer probes a public DNS address or calls GitHub's releases API directly.
 
 ### Offline
 

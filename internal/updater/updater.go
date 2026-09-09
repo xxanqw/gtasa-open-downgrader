@@ -17,12 +17,11 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/service"
 	"golang.org/x/mod/semver"
 )
 
 var Version = "v0.2.2"
-
-const API = "https://api.github.com/repos/xxanqw/gtasa-open-downgrader/releases/latest"
 
 type Asset struct {
 	Name   string `json:"name"`
@@ -65,7 +64,15 @@ func Select(r Release, system string, offline, appimage bool) (Asset, bool) {
 }
 func Check(ctx context.Context, c *download.Client) (Release, error) {
 	var r Release
-	e := c.JSON(ctx, API, &r)
+	health, e := c.Request(ctx, "HEAD", service.HealthURL, nil, "")
+	if e != nil {
+		return r, fmt.Errorf("update service connectivity check: %w", e)
+	}
+	health.Body.Close()
+	e = c.JSON(ctx, service.LatestReleaseURL, &r)
+	if e != nil {
+		e = fmt.Errorf("read managed update information: %w", e)
+	}
 	return r, e
 }
 func Executable() string {
