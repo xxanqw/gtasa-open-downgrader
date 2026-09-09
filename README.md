@@ -36,13 +36,14 @@ Contributions for other source versions are welcome through GitHub issues.
 - **Responsive Startup:** A native Fyne window opens immediately while background preparation runs. No PyInstaller, Qt, Tcl/Tk or splash IPC.
 - **Version-Aware Scanning:** Identifies known executables and verifies game files against the selected patch manifest.
 - **One-Click Downgrade:** Converts supported files to v1.0 US with `xdelta3`, backing up original files before replacing them.
-- **Official Mod Packages:** Downloads mods from their official upstream sources and normalizes their archive layouts automatically.
+- **Curated Mod Packages:** Downloads mods from their upstream sources or a documented manual-package mirror and normalizes their archive layouts automatically.
     - ASI Loader & ModLoader
     - SilentPatch & GInput
     - Widescreen Fixes & Project 2DFX
     - SkyGFX
     - Framerate Vigilante (60fps fix, using the current official ZIP package)
     - Frontend Mods
+    - SALtd Russian (SanLtd Team 0.56, installed from the manual ZIP without its executable or intro videos)
 - **Mod Selection:** An always-visible compact panel above the file table lets you choose mods, check installed versions, and install or reinstall selected packages.
 - **Mod Updates:** Records installed package versions and checks upstream releases in the background. The UI marks available updates and can force reinstall selected mods.
 - **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.

@@ -51,6 +51,23 @@ func layout(mod, name string) string {
 		}
 	case "Project 2DFX":
 		return "modloader/Project2DFX/" + name
+	case SALtdRussian:
+		const prefix = "00 - Copy to game folder/"
+		if !strings.HasPrefix(name, prefix) {
+			return ""
+		}
+		rel := strings.TrimPrefix(name, prefix)
+		lower := strings.ToLower(rel)
+		switch {
+		case lower == "data/fonts.dat",
+			lower == "text/american.gxt",
+			lower == "text/spanish.gxt",
+			lower == "models/fonts.txd",
+			lower == "models/fronten1.txd",
+			lower == "models/hud.txd",
+			strings.HasPrefix(lower, "models/txd/") && strings.HasSuffix(lower, ".txd"):
+			return "modloader/SALtdRussian/" + rel
+		}
 	}
 	return ""
 }

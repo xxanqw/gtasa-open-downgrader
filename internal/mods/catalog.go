@@ -13,7 +13,10 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 )
 
-const Framerate = "Framerate Vigilante (60fps fix)"
+const (
+	Framerate    = "Framerate Vigilante (60fps fix)"
+	SALtdRussian = "SALtd Russian"
+)
 
 type Source struct {
 	Name, Repository, Endpoint, Asset, Prefix, Version, URL, Page string
@@ -30,6 +33,7 @@ var Catalog = []Source{
 	{Name: Framerate, Version: "2026-08-16", URL: "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html", Page: "https://www.mixmods.com.br/2022/08/iii-vc-sa-framerate-vigilante/"},
 	{Name: "GInput", Version: "2016-02-09", URL: "https://silent.rockstarvision.com/uploads/GInputSA.zip", Page: "https://silentsblog.com/mods/gta-sa/#ginput"},
 	{Name: "Project 2DFX", Repository: "ThirteenAG/III.VC.SA.IV.Project2DFX", Endpoint: "releases/tags/gtasa", Asset: "SA.Project2DFX.zip", DateVersion: true},
+	{Name: SALtdRussian, Version: "0.56", URL: "https://www.gtavicecity.ru/get-manual/4a8dcc0c87c81d056678016d25a011279b7def52/22077-lokalizaciya-ot-sanltd-team.html", Page: "https://www.gtavicecity.ru/gta-san-andreas/mods/22077-lokalizaciya-ot-sanltd-team.html"},
 }
 
 type Release struct {
@@ -106,6 +110,9 @@ func (r *Resolver) Resolve(ctx context.Context, name string) (Release, error) {
 	if name == Framerate {
 		return r.framerate(ctx, s)
 	}
+	if name == SALtdRussian {
+		return r.saltdRussian(ctx, s)
+	}
 	parts := []string{"static", s.URL, s.Version}
 	short, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -118,6 +125,45 @@ func (r *Resolver) Resolve(ctx context.Context, name string) (Release, error) {
 		return Release{}, ctx.Err()
 	}
 	return Release{Version: s.Version, Fingerprint: strings.Join(parts, ":"), URL: s.URL, SourceURL: s.Page, ArchiveType: "zip"}, nil
+}
+
+var saltdCDN = regexp.MustCompile(`^dl[0-9]+\.gtavicecity\.ru$`)
+
+func saltdDownload(body string) (string, error) {
+	for _, match := range regexp.MustCompile(`(?i)href=["']([^"']+)["']`).FindAllStringSubmatch(body, -1) {
+		candidate := html.UnescapeString(match[1])
+		u, err := url.Parse(candidate)
+		if err != nil {
+			continue
+		}
+		if u.Scheme == "https" && saltdCDN.MatchString(strings.ToLower(u.Hostname())) && strings.HasPrefix(u.Path, "/ru/manual/22077/") {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("the SALtd manual ZIP mirror did not provide a valid download link")
+}
+
+func (r *Resolver) saltdRussian(ctx context.Context, s Source) (Release, error) {
+	b, err := r.Client.Bytes(ctx, "GET", s.URL+"?ajax=true", nil, "")
+	if err != nil {
+		return Release{}, err
+	}
+	raw, err := saltdDownload(string(b))
+	if err != nil {
+		return Release{}, err
+	}
+	// The mirror rejects HEAD, so open and immediately close a GET response to
+	// validate the generated URL and read stable archive metadata.
+	resp, err := r.Client.Request(ctx, "GET", raw, nil, "")
+	if err != nil {
+		return Release{}, fmt.Errorf("validate SALtd manual ZIP: %w", err)
+	}
+	resp.Body.Close()
+	fingerprint := strings.Join([]string{
+		"gtavicecity", "22077", s.Version,
+		resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), resp.Header.Get("Content-Length"),
+	}, ":")
+	return Release{Version: s.Version, Fingerprint: fingerprint, SourceURL: s.Page, URL: raw, ArchiveType: "zip"}, nil
 }
 
 var shareLink = regexp.MustCompile(`(?i)https?://(?:www\.)?sharemods\.com/([^/"'<>\s]+)/[^"'<>\s]+\.(zip|7z)\.html`)

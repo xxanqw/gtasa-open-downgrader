@@ -30,6 +30,7 @@ func TestPackageLayouts(t *testing.T) {
 		{Framerate, map[string]string{"GTA SA/FramerateVigilante/FramerateVigilante.ini": "sa", "GTA VC/FramerateVigilante/FramerateVigilante.ini": "vc", "GTA III/FramerateVigilante/FramerateVigilante.III.asi": "iii"}, "modloader/FramerateVigilante/FramerateVigilante.ini", "modloader/FramerateVigilante/FramerateVigilante.III.asi"},
 		{"GInput", map[string]string{"GInputSA.asi": "asi", "GInputAPI (for modders)/api.h": "ignore"}, "modloader/GInput/GInputSA.asi", "modloader/GInput/GInputAPI (for modders)/api.h"},
 		{"Project 2DFX", map[string]string{"SALodLights.asi": "asi"}, "modloader/Project2DFX/SALodLights.asi", "none"},
+		{SALtdRussian, map[string]string{"00 - Copy to game folder/text/american.gxt": "translation", "00 - Copy to game folder/movies/logo.mpg": "video", "00 - Copy to game folder/readme_sanltd.exe": "program"}, "modloader/SALtdRussian/text/american.gxt", "modloader/SALtdRussian/movies/logo.mpg"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,6 +46,11 @@ func TestPackageLayouts(t *testing.T) {
 			}
 			if c.name == Framerate && testutil.Read(t, root, c.want) != "sa" {
 				t.Fatal("wrong game's configuration")
+			}
+			if c.name == SALtdRussian {
+				if _, e := os.Stat(filepath.Join(root, "modloader/SALtdRussian/readme_sanltd.exe")); !os.IsNotExist(e) {
+					t.Fatal("translation executable was installed")
+				}
 			}
 		})
 	}
@@ -174,6 +180,23 @@ func TestShareModsAllowsOfficialStorageOnly(t *testing.T) {
 	}
 	if _, e = shareDownload(`<a href="https://r2.cloudflarestorage.com.evil.com/file">x</a>`, "id"); e == nil {
 		t.Fatal("accepted fake storage host")
+	}
+}
+
+func TestSALtdDownloadAllowsManualArchiveCDNOnly(t *testing.T) {
+	body := `<a href="https://ads.example/file.zip">Ad</a><a href="https://dl1.gtavicecity.ru/ru/manual/22077/token/archive/">Download</a>`
+	got, err := saltdDownload(body)
+	if err != nil || got != "https://dl1.gtavicecity.ru/ru/manual/22077/token/archive/" {
+		t.Fatal(got, err)
+	}
+	for _, body := range []string{
+		`<a href="http://dl1.gtavicecity.ru/ru/manual/22077/token/archive/">Download</a>`,
+		`<a href="https://dl1.gtavicecity.ru.evil.example/ru/manual/22077/token/archive/">Download</a>`,
+		`<a href="https://dl1.gtavicecity.ru/ru/manual/999/token/archive/">Download</a>`,
+	} {
+		if _, err = saltdDownload(body); err == nil {
+			t.Fatal("accepted invalid manual download link")
+		}
 	}
 }
 func TestCorruptTrackerIsNotOverwritten(t *testing.T) {
