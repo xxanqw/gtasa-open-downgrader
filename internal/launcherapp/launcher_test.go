@@ -128,6 +128,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	for name, contents := range map[string]string{
 		"clients/omp-launcher.exe": "launcher",
 		multiplayer.ConfigPath:     `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
+		"samp.dll":                 "MZoriginal",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -140,24 +141,46 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	localAppData := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", localAppData)
 	support := filepath.Join(localAppData, "mp.open.launcher", "omp", "omp-client.dll")
-	if err := os.MkdirAll(filepath.Dir(support), 0755); err != nil {
-		t.Fatal(err)
+	managed := filepath.Join(localAppData, "mp.open.launcher", "samp", "0.3.7-R5", "samp.dll")
+	for path, contents := range map[string]string{support: "MZclient", managed: "MZmanaged"} {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(support, []byte("MZclient"), 0644); err != nil {
-		t.Fatal(err)
+	sharedRoot := filepath.Join(localAppData, "mp.open.launcher", "samp", "shared")
+	for _, relative := range multiplayer.OpenMPSharedFiles {
+		path := filepath.Join(sharedRoot, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("shared"), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var got []string
 	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, dir, exe string, args ...string) error {
+		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
+			t.Fatalf("managed SA-MP client was not active during open.mp launch: %q, %v", data, err)
+		}
 		got = append([]string{dir, exe}, args...)
 		return nil
 	}}
-	connection := multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: "Player"}
+	connection := multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: "Player", Password: "secret", ClientVersion: "037R5"}
 	if err := runtime.OpenMP(context.Background(), connection); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{clientDir, client, "-h", "server.example", "-p", "7777", "-n", "Player", "-g", root}
+	want := []string{clientDir, client, "-h", "server.example", "-p", "7777", "-n", "Player", "-g", root, "-P", "secret"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("call = %#v, want %#v", got, want)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZoriginal" {
+		t.Fatalf("original samp.dll was not restored: %q, %v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "bass.dll")); err != nil || string(data) != "shared" {
+		t.Fatalf("managed shared file was not installed: %q, %v", data, err)
 	}
 }
 

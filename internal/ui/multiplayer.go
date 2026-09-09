@@ -113,8 +113,8 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			}
 			if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
 				path, err := multiplayer.OpenMPClientPath(environment)
-				if err != nil || multiplayer.ValidateOpenMPClient(path) != nil {
-					state = "Installed · Linux support file missing · reinstall to repair"
+				if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment) != nil {
+					state = "Installed · managed clients missing · reinstall to repair"
 				}
 			}
 			label := widget.NewLabel(state)
@@ -181,6 +181,16 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 				}
 				if err := multiplayer.ValidateOpenMPClient(destination); err != nil {
 					_ = os.Remove(destination)
+					return err
+				}
+				archive := filepath.Join(w.cache, "multiplayer", "samp_clients.7z")
+				if err := w.client.File(ctx, multiplayer.OpenMPSAMPArchiveURL, archive, func(done, total int64) {
+					w.report("Downloading open.mp SA-MP clients", done, total)
+				}); err != nil {
+					return fmt.Errorf("download open.mp managed SA-MP clients: %w", err)
+				}
+				if err := multiplayer.InstallOpenMPSAMPArchive(ctx, archive, environment); err != nil {
+					_ = os.Remove(archive)
 					return err
 				}
 			}

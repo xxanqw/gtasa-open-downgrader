@@ -102,15 +102,40 @@ func main() {
 			_, err := (multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: value}).Arguments(gameDir)
 			return err
 		}
+		password := widget.NewPasswordEntry()
+		password.SetPlaceHolder("Optional")
+		versionNames := make([]string, 0, len(multiplayer.OpenMPSAMPVersions))
+		versionIDs := make(map[string]string, len(multiplayer.OpenMPSAMPVersions))
+		selectedVersion := a.Preferences().StringWithFallback("openmp-client-version", multiplayer.DefaultOpenMPSAMPVersion)
+		selectedVersionName := ""
+		for _, version := range multiplayer.OpenMPSAMPVersions {
+			versionNames = append(versionNames, version.Name)
+			versionIDs[version.Name] = version.ID
+			if version.ID == selectedVersion {
+				selectedVersionName = version.Name
+			}
+		}
+		if selectedVersionName == "" {
+			selectedVersion = multiplayer.DefaultOpenMPSAMPVersion
+			selectedVersionName = versionNames[0]
+		}
+		clientVersion := widget.NewSelect(versionNames, nil)
+		clientVersion.SetSelected(selectedVersionName)
 		form := dialog.NewForm("Join an open.mp server", "Connect", "Cancel", []*widget.FormItem{
 			widget.NewFormItem("Server", host),
 			widget.NewFormItem("Port", port),
 			widget.NewFormItem("Nickname", nickname),
+			widget.NewFormItem("Password", password),
+			widget.NewFormItem("SA-MP client", clientVersion),
 		}, func(confirmed bool) {
 			if !confirmed {
 				return
 			}
-			connection := multiplayer.OpenMPConnection{Host: host.Text, Port: port.Text, Nickname: nickname.Text}
+			selectedVersion = versionIDs[clientVersion.Selected]
+			connection := multiplayer.OpenMPConnection{
+				Host: host.Text, Port: port.Text, Nickname: nickname.Text,
+				Password: password.Text, ClientVersion: selectedVersion,
+			}
 			if _, err := connection.Arguments(gameDir); err != nil {
 				dialog.ShowError(err, w)
 				return
@@ -118,9 +143,10 @@ func main() {
 			a.Preferences().SetString("openmp-host", host.Text)
 			a.Preferences().SetString("openmp-port", port.Text)
 			a.Preferences().SetString("openmp-nickname", nickname.Text)
+			a.Preferences().SetString("openmp-client-version", selectedVersion)
 			launch(func(ctx context.Context) error { return launcher.OpenMP(ctx, connection) })
 		}, w)
-		form.Resize(fyne.NewSize(360, 230))
+		form.Resize(fyne.NewSize(380, 300))
 		form.Show()
 	}
 	single := widget.NewButtonWithIcon("Single Player", theme.MediaPlayIcon(), func() {
@@ -172,7 +198,7 @@ func main() {
 	if underProton {
 		for _, client := range clients {
 			if client.ID == multiplayer.ClientOpenMP && client.Installed {
-				multiplayerStatus = "open.mp connects through a compact server dialog under Proton."
+				multiplayerStatus = "open.mp uses its managed SA-MP clients through a compact connection dialog."
 			}
 		}
 	}

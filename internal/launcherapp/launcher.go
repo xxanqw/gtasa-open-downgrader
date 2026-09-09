@@ -3,6 +3,7 @@ package launcherapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 )
 
@@ -37,7 +39,7 @@ func (runtime *Runtime) Clients() []multiplayer.Client {
 }
 
 func (runtime *Runtime) SinglePlayer(ctx context.Context, arguments ...string) error {
-	if err := runtime.restoreModLoader(); err != nil {
+	if err := runtime.restoreCompatibility(); err != nil {
 		return err
 	}
 	path, err := entrypoint.GamePath(runtime.GameDir)
@@ -55,6 +57,9 @@ func (runtime *Runtime) Multiplayer(ctx context.Context, id multiplayer.ClientID
 }
 
 func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenMPConnection) error {
+	if err := runtime.restoreCompatibility(); err != nil {
+		return err
+	}
 	arguments, err := connection.Arguments(runtime.GameDir)
 	if err != nil {
 		return err
@@ -64,13 +69,42 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 		return err
 	}
 	if err := multiplayer.ValidateOpenMPClient(clientPath); err != nil {
-		return fmt.Errorf("%w; reinstall open.mp from the downgrader to add Linux command-line support", err)
+		return fmt.Errorf("%w; reinstall open.mp from the downgrader to repair its managed clients", err)
 	}
-	return runtime.multiplayer(ctx, multiplayer.ClientOpenMP, arguments...)
+	managedSAMP, err := multiplayer.OpenMPSAMPPath(multiplayer.Environment{}, connection.ClientVersion)
+	if err != nil {
+		return err
+	}
+	if err := multiplayer.ValidateInstaller(managedSAMP); err != nil {
+		return fmt.Errorf("open.mp managed SA-MP client is missing or invalid; reinstall open.mp from the downgrader")
+	}
+	client, ok := multiplayer.Find(runtime.Clients(), multiplayer.ClientOpenMP)
+	if !ok || !client.Installed {
+		return fmt.Errorf("open.mp is not installed")
+	}
+	if err := multiplayer.ValidateExecutable(client); err != nil {
+		return err
+	}
+	dataRoot, err := multiplayer.OpenMPDataPath(multiplayer.Environment{})
+	if err != nil {
+		return err
+	}
+	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
+		return err
+	}
+	disabled, err := runtime.disableModLoader()
+	if err != nil {
+		return err
+	}
+	runErr := runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
+	if disabled && runErr == nil {
+		runtime.waitForClientStartup(ctx)
+	}
+	return errors.Join(runErr, runtime.restoreModLoader())
 }
 
 func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID, arguments ...string) error {
-	if err := runtime.restoreModLoader(); err != nil {
+	if err := runtime.restoreCompatibility(); err != nil {
 		return err
 	}
 	client, ok := multiplayer.Find(runtime.Clients(), id)
@@ -86,6 +120,135 @@ func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID
 	return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 }
 
+type openMPSAMPState struct {
+	ManagedSHA256 string `json:"managed_sha256"`
+	HadOriginal   bool   `json:"had_original"`
+}
+
+func (runtime *Runtime) openMPSAMPPaths() (active, backup, state string) {
+	directory := filepath.Join(runtime.GameDir, ".downgrader", "multiplayer")
+	return filepath.Join(runtime.GameDir, "samp.dll"), filepath.Join(directory, "samp.dll.before-openmp"), filepath.Join(directory, "openmp-samp.json")
+}
+
+func (runtime *Runtime) runWithOpenMPSAMP(ctx context.Context, client multiplayer.Client, managed string, arguments ...string) error {
+	active, backup, statePath := runtime.openMPSAMPPaths()
+	digest, err := entrypoint.Hash(ctx, managed)
+	if err != nil {
+		return fmt.Errorf("hash open.mp managed SA-MP client: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(statePath), 0700); err != nil {
+		return fmt.Errorf("prepare open.mp compatibility mode: %w", err)
+	}
+	if _, statErr := os.Stat(backup); statErr == nil {
+		return fmt.Errorf("preserved samp.dll already exists at %s; restore or remove it before launching open.mp", backup)
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect preserved samp.dll: %w", statErr)
+	}
+	hadOriginal := false
+	if info, statErr := os.Stat(active); statErr == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("existing samp.dll is not a regular file")
+		}
+		hadOriginal = true
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect existing samp.dll: %w", statErr)
+	}
+	state, err := json.Marshal(openMPSAMPState{ManagedSHA256: digest, HadOriginal: hadOriginal})
+	if err != nil {
+		return err
+	}
+	temporaryState := statePath + ".tmp"
+	if err := os.WriteFile(temporaryState, state, 0600); err != nil {
+		return fmt.Errorf("record open.mp compatibility mode: %w", err)
+	}
+	if err := os.Rename(temporaryState, statePath); err != nil {
+		return fmt.Errorf("activate open.mp compatibility mode: %w", err)
+	}
+	if hadOriginal {
+		if err := os.Rename(active, backup); err != nil {
+			_ = runtime.restoreOpenMPSAMP()
+			return fmt.Errorf("preserve existing samp.dll: %w", err)
+		}
+	}
+	if err := fsutil.CopyFile(ctx, managed, active); err != nil {
+		return errors.Join(fmt.Errorf("install selected open.mp SA-MP client: %w", err), runtime.restoreOpenMPSAMP())
+	}
+	runErr := runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
+	return errors.Join(runErr, runtime.restoreOpenMPSAMP())
+}
+
+func (runtime *Runtime) restoreCompatibility() error {
+	return errors.Join(runtime.restoreOpenMPSAMP(), runtime.restoreModLoader())
+}
+
+func (runtime *Runtime) restoreOpenMPSAMP() error {
+	active, backup, statePath := runtime.openMPSAMPPaths()
+	data, err := os.ReadFile(statePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read open.mp compatibility state: %w", err)
+	}
+	var state openMPSAMPState
+	if err := json.Unmarshal(data, &state); err != nil || state.ManagedSHA256 == "" {
+		return fmt.Errorf("open.mp compatibility state is invalid")
+	}
+	backupExists := false
+	if info, statErr := os.Stat(backup); statErr == nil {
+		backupExists = info.Mode().IsRegular()
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect preserved samp.dll: %w", statErr)
+	}
+	if info, statErr := os.Stat(active); statErr == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("active samp.dll is not a regular file")
+		}
+		digest, hashErr := entrypoint.Hash(context.Background(), active)
+		if hashErr != nil {
+			return hashErr
+		}
+		if digest == state.ManagedSHA256 {
+			if err := os.Remove(active); err != nil {
+				return fmt.Errorf("remove temporary open.mp samp.dll: %w", err)
+			}
+		} else if backupExists {
+			return fmt.Errorf("samp.dll changed while open.mp compatibility mode was active; preserved original left at %s", backup)
+		} else if state.HadOriginal {
+			return os.Remove(statePath)
+		} else {
+			return fmt.Errorf("samp.dll changed while open.mp compatibility mode was active")
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect temporary open.mp samp.dll: %w", statErr)
+	}
+	if state.HadOriginal {
+		if !backupExists {
+			return fmt.Errorf("preserved samp.dll is missing")
+		}
+		if err := os.Rename(backup, active); err != nil {
+			return fmt.Errorf("restore preserved samp.dll: %w", err)
+		}
+	}
+	if err := os.Remove(statePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("clear open.mp compatibility state: %w", err)
+	}
+	return nil
+}
+
+func (runtime *Runtime) installOpenMPSharedFiles(ctx context.Context, source string) error {
+	for _, relative := range multiplayer.OpenMPSharedFiles {
+		from := filepath.Join(source, filepath.FromSlash(relative))
+		if info, err := os.Stat(from); err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("open.mp managed SA-MP resource is missing: %s", relative)
+		}
+		if err := fsutil.CopyFile(ctx, from, filepath.Join(runtime.GameDir, filepath.FromSlash(relative))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // runWithoutModLoader keeps Mod Loader out of clients that reject or conflict
 // with injected ASI plugins. SA-MP R5 can crash inside Mod Loader during
 // initialization, while MTA warns about every ASI in the game directory. The
@@ -98,21 +261,25 @@ func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multipla
 	}
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable)
 	if disabled && runErr == nil {
-		if runtime.AfterCompatibilityExit != nil {
-			_ = runtime.AfterCompatibilityExit(ctx)
-		} else {
-			timer := time.NewTimer(modLoaderRestoreDelay)
-			select {
-			case <-timer.C:
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
-			}
-		}
+		runtime.waitForClientStartup(ctx)
 	}
 	restoreErr := runtime.restoreModLoader()
 	return errors.Join(runErr, restoreErr)
+}
+
+func (runtime *Runtime) waitForClientStartup(ctx context.Context) {
+	if runtime.AfterCompatibilityExit != nil {
+		_ = runtime.AfterCompatibilityExit(ctx)
+		return
+	}
+	timer := time.NewTimer(modLoaderRestoreDelay)
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+	}
 }
 
 func (runtime *Runtime) modLoaderPaths() (active, disabled string) {

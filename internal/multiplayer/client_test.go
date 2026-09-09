@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -171,6 +172,32 @@ func TestOpenMPClientPathUsesEnvironmentLocalAppData(t *testing.T) {
 	want := filepath.Join(root, "mp.open.launcher", "omp", "omp-client.dll")
 	if got != want {
 		t.Fatalf("path = %q, want %q", got, want)
+	}
+}
+
+func TestOpenMPManagedClientInventory(t *testing.T) {
+	localAppData := t.TempDir()
+	environment := Environment{LocalAppData: localAppData}
+	for _, version := range OpenMPSAMPVersions {
+		path, err := OpenMPSAMPPath(environment, version.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		file(t, path)
+	}
+	root, err := OpenMPDataPath(environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range OpenMPSharedFiles {
+		file(t, filepath.Join(root, "samp", "shared", filepath.FromSlash(relative)))
+	}
+	if err := ValidateOpenMPSAMPInstallation(environment); err != nil {
+		t.Fatal(err)
+	}
+	defaultPath, err := OpenMPSAMPPath(environment, "")
+	if err != nil || !strings.Contains(filepath.ToSlash(defaultPath), "/0.3.7-R5/samp.dll") {
+		t.Fatalf("default managed client = %q, %v", defaultPath, err)
 	}
 }
 

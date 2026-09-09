@@ -24,9 +24,11 @@ const (
 )
 
 type OpenMPConnection struct {
-	Host     string
-	Port     string
-	Nickname string
+	Host          string
+	Port          string
+	Nickname      string
+	Password      string
+	ClientVersion string
 }
 
 type Client struct {
@@ -67,22 +69,25 @@ func (connection OpenMPConnection) Arguments(gameDir string) ([]string, error) {
 	if strings.TrimSpace(gameDir) == "" {
 		return nil, fmt.Errorf("GTA directory is missing")
 	}
-	return []string{"-h", host, "-p", strconv.Itoa(port), "-n", nickname, "-g", gameDir}, nil
+	if _, ok := FindOpenMPSAMPVersion(connection.ClientVersion); !ok {
+		return nil, fmt.Errorf("unsupported open.mp SA-MP client version %q", connection.ClientVersion)
+	}
+	arguments := []string{"-h", host, "-p", strconv.Itoa(port), "-n", nickname, "-g", gameDir}
+	if connection.Password != "" {
+		if strings.ContainsAny(connection.Password, "\x00\r\n") {
+			return nil, fmt.Errorf("server password contains invalid characters")
+		}
+		arguments = append(arguments, "-P", connection.Password)
+	}
+	return arguments, nil
 }
 
 func OpenMPClientPath(environment Environment) (string, error) {
-	root := environment.LocalAppData
-	if root == "" {
-		var err error
-		root, err = os.UserCacheDir()
-		if err != nil {
-			return "", fmt.Errorf("locate Local AppData: %w", err)
-		}
+	root, err := OpenMPDataPath(environment)
+	if err != nil {
+		return "", err
 	}
-	if root == "" {
-		return "", fmt.Errorf("Local AppData is unavailable")
-	}
-	return filepath.Join(root, "mp.open.launcher", "omp", "omp-client.dll"), nil
+	return filepath.Join(root, "omp", "omp-client.dll"), nil
 }
 
 func ValidateOpenMPClient(path string) error {
