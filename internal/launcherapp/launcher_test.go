@@ -30,6 +30,19 @@ func TestSinglePlayerUsesRealExecutableAndPassesArguments(t *testing.T) {
 	}
 }
 
+func TestRunningUnderProton(t *testing.T) {
+	t.Setenv("STEAM_COMPAT_DATA_PATH", "")
+	t.Setenv("STEAM_COMPAT_CLIENT_INSTALL_PATH", "")
+	t.Setenv("PROTON_VERSION", "")
+	if RunningUnderProton() {
+		t.Fatal("native environment detected as Proton")
+	}
+	t.Setenv("STEAM_COMPAT_DATA_PATH", "/tmp/compatdata")
+	if !RunningUnderProton() {
+		t.Fatal("Steam compatibility environment was not detected")
+	}
+}
+
 func TestSinglePlayerNeverFallsBackToLauncher(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, entrypoint.SteamExecutable), []byte("launcher"), 0644); err != nil {

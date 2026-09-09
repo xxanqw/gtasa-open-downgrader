@@ -28,6 +28,10 @@ func New(gameDir string) *Runtime {
 	return &Runtime{GameDir: gameDir, Execute: execute}
 }
 
+func RunningUnderProton() bool {
+	return os.Getenv("STEAM_COMPAT_DATA_PATH") != "" || os.Getenv("STEAM_COMPAT_CLIENT_INSTALL_PATH") != "" || os.Getenv("PROTON_VERSION") != ""
+}
+
 func (runtime *Runtime) Clients() []multiplayer.Client {
 	return multiplayer.Detect(multiplayer.Environment{GameDir: runtime.GameDir})
 }

@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -15,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherapp"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 )
 
 type monochrome struct{ fyne.Theme }
@@ -47,7 +49,7 @@ func main() {
 		return
 	}
 	gameDir := filepath.Dir(executable)
-	runtime := launcherapp.New(gameDir)
+	launcher := launcherapp.New(gameDir)
 	a := app.NewWithID("pp.ua.xxanqw.gtasa-steam-launcher")
 	a.Settings().SetTheme(monochrome{theme.DefaultTheme()})
 	w := a.NewWindow("Grand Theft Auto: San Andreas")
@@ -79,20 +81,27 @@ func main() {
 		}()
 	}
 	single := widget.NewButtonWithIcon("Single Player", theme.MediaPlayIcon(), func() {
-		launch(func(ctx context.Context) error { return runtime.SinglePlayer(ctx, os.Args[1:]...) })
+		launch(func(ctx context.Context) error { return launcher.SinglePlayer(ctx, os.Args[1:]...) })
 	})
 	single.Importance = widget.HighImportance
 	controls = append(controls, single)
 
-	clients := runtime.Clients()
+	clients := launcher.Clients()
+	underProton := launcherapp.RunningUnderProton()
 	installed := 0
 	var multiplayerButtons []fyne.CanvasObject
+	var unsupportedMessage string
 	for _, client := range clients {
 		client := client
 		button := widget.NewButton(client.Name, func() {
-			launch(func(ctx context.Context) error { return runtime.Multiplayer(ctx, client.ID) })
+			launch(func(ctx context.Context) error { return launcher.Multiplayer(ctx, client.ID) })
 		})
-		if !client.Installed {
+		supported, reason := multiplayer.LaunchSupport(client.ID, runtime.GOOS, underProton)
+		if !supported {
+			button.Disable()
+			button.SetText(client.Name + " · Unavailable under Proton")
+			unsupportedMessage = reason
+		} else if !client.Installed {
 			button.Disable()
 			button.SetText(client.Name + " · Not installed")
 		} else {
@@ -112,6 +121,9 @@ func main() {
 				}
 			}
 		}
+	}
+	if unsupportedMessage != "" {
+		multiplayerStatus = unsupportedMessage + "."
 	}
 	multiplayerLabel := widget.NewLabel(multiplayerStatus)
 	multiplayerLabel.Wrapping = fyne.TextWrapWord

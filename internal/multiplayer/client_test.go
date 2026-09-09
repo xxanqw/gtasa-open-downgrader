@@ -48,6 +48,21 @@ func TestSAMPRequiresDLLAndMissingExecutableIsRejected(t *testing.T) {
 	}
 }
 
+func TestMTAPlatformSupport(t *testing.T) {
+	if supported, _ := LaunchSupport(ClientMTA, "linux", false); supported {
+		t.Fatal("MTA was presented as supported by the Linux host")
+	}
+	if supported, _ := LaunchSupport(ClientMTA, "windows", true); supported {
+		t.Fatal("MTA was presented as supported under Proton")
+	}
+	if supported, reason := LaunchSupport(ClientMTA, "windows", false); !supported || reason != "" {
+		t.Fatalf("native Windows MTA support = %t, %q", supported, reason)
+	}
+	if supported, reason := LaunchSupport(ClientSAMP, "linux", true); !supported || reason != "" {
+		t.Fatalf("SA-MP support = %t, %q", supported, reason)
+	}
+}
+
 func TestRunnersUseInjectedExecution(t *testing.T) {
 	installer := filepath.Join(t.TempDir(), "setup.exe")
 	file(t, installer)

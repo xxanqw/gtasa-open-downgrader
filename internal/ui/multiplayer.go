@@ -125,6 +125,10 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			if runner == nil {
 				button.Disable()
 			}
+			if supported, _ := multiplayer.LaunchSupport(client.ID, runtime.GOOS, false); !supported {
+				label.SetText(state + " · Unavailable on Linux (upstream integrity failure)")
+				button.Disable()
+			}
 			row := container.NewBorder(nil, nil, nil, button, container.NewVBox(widget.NewLabelWithStyle(client.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), label))
 			sections = append(sections, row)
 		}
@@ -134,6 +138,10 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 }
 
 func (w *Window) installMultiplayer(environment multiplayer.Environment, runner multiplayer.Runner, id multiplayer.ClientID) {
+	if supported, reason := multiplayer.LaunchSupport(id, runtime.GOOS, false); !supported {
+		w.error(fmt.Errorf("%s", reason))
+		return
+	}
 	installer, ok := multiplayer.Installers[id]
 	if !ok {
 		w.error(fmt.Errorf("unsupported multiplayer client %q", id))

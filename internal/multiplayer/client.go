@@ -34,6 +34,16 @@ type Environment struct {
 	PrefixDriveC   string
 }
 
+// LaunchSupport reports client restrictions that cannot be solved by changing
+// the GTA installation. Current MTA production clients terminate in their
+// integrity initialization under Wine/Proton (upstream issue #4783).
+func LaunchSupport(id ClientID, hostOS string, underProton bool) (bool, string) {
+	if id == ClientMTA && (hostOS == "linux" || underProton) {
+		return false, "MTA is currently unavailable on Linux because its integrity system terminates under Wine/Proton"
+	}
+	return true, ""
+}
+
 type Installer struct {
 	Client       ClientID
 	Name         string

@@ -54,7 +54,7 @@ Contributions for other source versions are welcome through GitHub issues.
     - Create a desktop shortcut on Windows.
 - **Windows and Linux Builds:** Includes AppImage builds, common Steam/Flatpak path detection, read-only directory checks, and Proton launch-option guidance for ASI Loader.
 - **Steam Launcher:** Installs a compact Windows Fyne menu as Steam's `gta-sa.exe` while keeping the real downgraded game as `gta_sa.exe`. The operation preserves an existing entrypoint, verifies launcher ownership, supports safe removal, and detects Steam file verification replacing it.
-- **Multiplayer Management:** Detects SA-MP, open.mp, and Multi Theft Auto and offers their installers from the Multiplayer dialog. Linux runs installers in GTA SA's detected Steam Proton context; users do not configure Wine, a prefix, or protontricks.
+- **Multiplayer Management:** Detects SA-MP, open.mp, and Multi Theft Auto and offers supported installers from the Multiplayer dialog. Linux runs compatible clients in GTA SA's detected Steam Proton context; MTA remains available on native Windows but is currently disabled under Wine/Proton because its upstream integrity system terminates the client.
 
 ## Distribution Variants
 
