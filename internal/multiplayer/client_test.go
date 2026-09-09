@@ -134,6 +134,46 @@ func TestInstallerValidation(t *testing.T) {
 	}
 }
 
+func TestOpenMPConnectionArguments(t *testing.T) {
+	connection := OpenMPConnection{Host: " play.example.com ", Port: " 7777 ", Nickname: " Player "}
+	got, err := connection.Arguments(`G:\Grand Theft Auto San Andreas`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-h", "play.example.com", "-p", "7777", "-n", "Player", "-g", `G:\Grand Theft Auto San Andreas`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("arguments = %#v, want %#v", got, want)
+	}
+}
+
+func TestOpenMPConnectionRejectsInvalidValues(t *testing.T) {
+	valid := OpenMPConnection{Host: "127.0.0.1", Port: "7777", Nickname: "Player"}
+	tests := []OpenMPConnection{
+		{Host: "", Port: valid.Port, Nickname: valid.Nickname},
+		{Host: "bad host", Port: valid.Port, Nickname: valid.Nickname},
+		{Host: valid.Host, Port: "0", Nickname: valid.Nickname},
+		{Host: valid.Host, Port: "65536", Nickname: valid.Nickname},
+		{Host: valid.Host, Port: valid.Port, Nickname: ""},
+	}
+	for _, connection := range tests {
+		if _, err := connection.Arguments("game"); err == nil {
+			t.Fatalf("accepted invalid connection: %#v", connection)
+		}
+	}
+}
+
+func TestOpenMPClientPathUsesEnvironmentLocalAppData(t *testing.T) {
+	root := t.TempDir()
+	got, err := OpenMPClientPath(Environment{LocalAppData: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "mp.open.launcher", "omp", "omp-client.dll")
+	if got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+}
+
 func TestMTAInstallerAcceptsVerifiedProtonCompletionCode(t *testing.T) {
 	if os.Getenv("GO_TEST_EXIT_199") == "1" {
 		os.Exit(199)

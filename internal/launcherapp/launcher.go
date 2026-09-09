@@ -51,6 +51,25 @@ func (runtime *Runtime) SinglePlayer(ctx context.Context, arguments ...string) e
 }
 
 func (runtime *Runtime) Multiplayer(ctx context.Context, id multiplayer.ClientID) error {
+	return runtime.multiplayer(ctx, id)
+}
+
+func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenMPConnection) error {
+	arguments, err := connection.Arguments(runtime.GameDir)
+	if err != nil {
+		return err
+	}
+	clientPath, err := multiplayer.OpenMPClientPath(multiplayer.Environment{})
+	if err != nil {
+		return err
+	}
+	if err := multiplayer.ValidateOpenMPClient(clientPath); err != nil {
+		return fmt.Errorf("%w; reinstall open.mp from the downgrader to add Linux command-line support", err)
+	}
+	return runtime.multiplayer(ctx, multiplayer.ClientOpenMP, arguments...)
+}
+
+func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID, arguments ...string) error {
 	if err := runtime.restoreModLoader(); err != nil {
 		return err
 	}
@@ -64,7 +83,7 @@ func (runtime *Runtime) Multiplayer(ctx context.Context, id multiplayer.ClientID
 	if id == multiplayer.ClientSAMP || id == multiplayer.ClientMTA {
 		return runtime.runWithoutModLoader(ctx, client)
 	}
-	return runtime.run(ctx, client.WorkingDir, client.Executable)
+	return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 }
 
 // runWithoutModLoader keeps Mod Loader out of clients that reject or conflict

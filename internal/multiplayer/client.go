@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 type ClientID string
@@ -17,7 +19,15 @@ const (
 	ClientSAMP   ClientID = "samp"
 	ClientOpenMP ClientID = "openmp"
 	ClientMTA    ClientID = "mta"
+
+	OpenMPClientURL = "https://assets.open.mp/omp-client.dll"
 )
+
+type OpenMPConnection struct {
+	Host     string
+	Port     string
+	Nickname string
+}
 
 type Client struct {
 	ID         ClientID
@@ -32,6 +42,54 @@ type Environment struct {
 	GameDir        string
 	WindowsGameDir string
 	PrefixDriveC   string
+	LocalAppData   string
+}
+
+func (connection OpenMPConnection) Arguments(gameDir string) ([]string, error) {
+	host := strings.TrimSpace(connection.Host)
+	if host == "" {
+		return nil, fmt.Errorf("enter a server address")
+	}
+	if len(host) > 253 || strings.ContainsAny(host, " \t\r\n") {
+		return nil, fmt.Errorf("server address is not valid")
+	}
+	port, err := strconv.Atoi(strings.TrimSpace(connection.Port))
+	if err != nil || port < 1 || port > 65535 {
+		return nil, fmt.Errorf("port must be a number from 1 to 65535")
+	}
+	nickname := strings.TrimSpace(connection.Nickname)
+	if nickname == "" {
+		return nil, fmt.Errorf("enter a nickname")
+	}
+	if len(nickname) > 24 || strings.ContainsAny(nickname, "\r\n") {
+		return nil, fmt.Errorf("nickname must be at most 24 characters")
+	}
+	if strings.TrimSpace(gameDir) == "" {
+		return nil, fmt.Errorf("GTA directory is missing")
+	}
+	return []string{"-h", host, "-p", strconv.Itoa(port), "-n", nickname, "-g", gameDir}, nil
+}
+
+func OpenMPClientPath(environment Environment) (string, error) {
+	root := environment.LocalAppData
+	if root == "" {
+		var err error
+		root, err = os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("locate Local AppData: %w", err)
+		}
+	}
+	if root == "" {
+		return "", fmt.Errorf("Local AppData is unavailable")
+	}
+	return filepath.Join(root, "mp.open.launcher", "omp", "omp-client.dll"), nil
+}
+
+func ValidateOpenMPClient(path string) error {
+	if err := ValidateInstaller(path); err != nil {
+		return fmt.Errorf("open.mp command-line client is invalid: %w", err)
+	}
+	return nil
 }
 
 // LaunchSupport reports client restrictions that cannot be solved by changing

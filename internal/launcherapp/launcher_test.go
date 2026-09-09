@@ -121,6 +121,46 @@ func TestMTATemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 	}
 }
 
+func TestOpenMPUsesCommandLineConnection(t *testing.T) {
+	root := t.TempDir()
+	clientDir := filepath.Join(root, "clients")
+	client := filepath.Join(clientDir, "omp-launcher.exe")
+	for name, contents := range map[string]string{
+		"clients/omp-launcher.exe": "launcher",
+		multiplayer.ConfigPath:     `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	localAppData := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", localAppData)
+	support := filepath.Join(localAppData, "mp.open.launcher", "omp", "omp-client.dll")
+	if err := os.MkdirAll(filepath.Dir(support), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(support, []byte("MZclient"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, dir, exe string, args ...string) error {
+		got = append([]string{dir, exe}, args...)
+		return nil
+	}}
+	connection := multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: "Player"}
+	if err := runtime.OpenMP(context.Background(), connection); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{clientDir, client, "-h", "server.example", "-p", "7777", "-n", "Player", "-g", root}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("call = %#v, want %#v", got, want)
+	}
+}
+
 func TestSinglePlayerRecoversInterruptedSAMPCompatibilityMode(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, entrypoint.RealGameExecutable), []byte("game"), 0644); err != nil {

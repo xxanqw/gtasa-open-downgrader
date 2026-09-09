@@ -111,6 +111,12 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 				state = "Installed · " + client.Executable
 				action = "Reinstall"
 			}
+			if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
+				path, err := multiplayer.OpenMPClientPath(environment)
+				if err != nil || multiplayer.ValidateOpenMPClient(path) != nil {
+					state = "Installed · Linux support file missing · reinstall to repair"
+				}
+			}
 			label := widget.NewLabel(state)
 			label.Truncation = fyne.TextTruncateEllipsis
 			if (client.ID == multiplayer.ClientSAMP || client.ID == multiplayer.ClientMTA) && client.Installed {
@@ -160,7 +166,25 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			if err != nil {
 				return err
 			}
-			return multiplayer.InstallerResult(id, environment, runner.Run(ctx, path, arguments...))
+			if err := multiplayer.InstallerResult(id, environment, runner.Run(ctx, path, arguments...)); err != nil {
+				return err
+			}
+			if id == multiplayer.ClientOpenMP && runtime.GOOS == "linux" {
+				destination, err := multiplayer.OpenMPClientPath(environment)
+				if err != nil {
+					return err
+				}
+				if err := w.client.File(ctx, multiplayer.OpenMPClientURL, destination, func(done, total int64) {
+					w.report("Adding open.mp Linux support", done, total)
+				}); err != nil {
+					return fmt.Errorf("download open.mp command-line client: %w", err)
+				}
+				if err := multiplayer.ValidateOpenMPClient(destination); err != nil {
+					_ = os.Remove(destination)
+					return err
+				}
+			}
+			return nil
 		}, func(error) {
 			w.scan()
 		})

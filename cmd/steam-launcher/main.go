@@ -80,6 +80,49 @@ func main() {
 			})
 		}()
 	}
+	showOpenMP := func() {
+		host := widget.NewEntry()
+		host.SetPlaceHolder("play.example.com")
+		host.SetText(a.Preferences().String("openmp-host"))
+		host.Validator = func(value string) error {
+			_, err := (multiplayer.OpenMPConnection{Host: value, Port: "7777", Nickname: "Player"}).Arguments(gameDir)
+			return err
+		}
+		port := widget.NewEntry()
+		port.SetPlaceHolder("7777")
+		port.SetText(a.Preferences().StringWithFallback("openmp-port", "7777"))
+		port.Validator = func(value string) error {
+			_, err := (multiplayer.OpenMPConnection{Host: "server.example", Port: value, Nickname: "Player"}).Arguments(gameDir)
+			return err
+		}
+		nickname := widget.NewEntry()
+		nickname.SetPlaceHolder("Nickname")
+		nickname.SetText(a.Preferences().String("openmp-nickname"))
+		nickname.Validator = func(value string) error {
+			_, err := (multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: value}).Arguments(gameDir)
+			return err
+		}
+		form := dialog.NewForm("Join an open.mp server", "Connect", "Cancel", []*widget.FormItem{
+			widget.NewFormItem("Server", host),
+			widget.NewFormItem("Port", port),
+			widget.NewFormItem("Nickname", nickname),
+		}, func(confirmed bool) {
+			if !confirmed {
+				return
+			}
+			connection := multiplayer.OpenMPConnection{Host: host.Text, Port: port.Text, Nickname: nickname.Text}
+			if _, err := connection.Arguments(gameDir); err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			a.Preferences().SetString("openmp-host", host.Text)
+			a.Preferences().SetString("openmp-port", port.Text)
+			a.Preferences().SetString("openmp-nickname", nickname.Text)
+			launch(func(ctx context.Context) error { return launcher.OpenMP(ctx, connection) })
+		}, w)
+		form.Resize(fyne.NewSize(360, 230))
+		form.Show()
+	}
 	single := widget.NewButtonWithIcon("Single Player", theme.MediaPlayIcon(), func() {
 		launch(func(ctx context.Context) error { return launcher.SinglePlayer(ctx, os.Args[1:]...) })
 	})
@@ -94,6 +137,10 @@ func main() {
 	for _, client := range clients {
 		client := client
 		button := widget.NewButton(client.Name, func() {
+			if client.ID == multiplayer.ClientOpenMP && underProton {
+				showOpenMP()
+				return
+			}
 			launch(func(ctx context.Context) error { return launcher.Multiplayer(ctx, client.ID) })
 		})
 		supported, reason := multiplayer.LaunchSupport(client.ID, runtime.GOOS, underProton)
@@ -119,6 +166,13 @@ func main() {
 				if _, err := os.Stat(filepath.Join(gameDir, "modloader.asi")); err == nil {
 					multiplayerStatus = "SA-MP and MTA start with Mod Loader safely isolated."
 				}
+			}
+		}
+	}
+	if underProton {
+		for _, client := range clients {
+			if client.ID == multiplayer.ClientOpenMP && client.Installed {
+				multiplayerStatus = "open.mp connects through a compact server dialog under Proton."
 			}
 		}
 	}
