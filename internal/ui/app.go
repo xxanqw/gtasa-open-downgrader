@@ -31,6 +31,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/patch"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
@@ -51,8 +52,8 @@ type Window struct {
 	rows                                  []game.Row
 	checks                                map[string]*widget.Check
 	controls                              []fyne.Disableable
-	cancelButton                          *widget.Button
-	downgrade, install, reinstall         *widget.Button
+	cancelButton                          *appwidget.Button
+	downgrade, install, reinstall         *appwidget.Button
 	cancel                                context.CancelFunc
 	busy, closing, readonly, dependencies bool
 	generation                            int
@@ -61,11 +62,11 @@ type Window struct {
 	transferLabel                         string
 	transferStart                         time.Time
 	transferBase                          int64
-	updateButton                          *widget.Button
+	updateButton                          *appwidget.Button
 	modLabels                             map[string]*widget.Label
 	modPanel                              *fyne.Container
 	modsTitle                             *widget.Label
-	multiplayerButton                     *widget.Button
+	multiplayerButton                     *appwidget.Button
 }
 
 func Run(gamePath, patchPath string) {
@@ -134,13 +135,13 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.refreshEnabled()
 	}
 	w.path.OnSubmitted = func(string) { w.scan() }
-	browse := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
+	browse := appwidget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
 		w.chooseFolder("Select GTA San Andreas folder", w.path.Text, func(path string) {
 			w.path.SetText(path)
 			w.scan()
 		})
 	})
-	scan := widget.NewButtonWithIcon("Scan", theme.SearchIcon(), w.scan)
+	scan := appwidget.NewButtonWithIcon("Scan", theme.SearchIcon(), w.scan)
 	w.version = compactLabel("Select a game folder to get started.")
 	w.version.TextStyle = fyne.TextStyle{Bold: true}
 	w.status = compactLabel("Ready")
@@ -184,20 +185,20 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.modLabels[name] = state
 		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(c, state), modGridTheme{a.Settings().Theme()}))
 	}
-	w.downgrade = widget.NewButtonWithIcon("Downgrade game", theme.MediaPlayIcon(), w.apply)
+	w.downgrade = appwidget.NewButtonWithIcon("Downgrade game", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
-	w.install = widget.NewButtonWithIcon("Install mods only", theme.DownloadIcon(), func() { w.installMods(false) })
-	w.reinstall = widget.NewButtonWithIcon("Reinstall / update mods", theme.ViewRefreshIcon(), func() { w.installMods(true) })
-	tools := widget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
-	w.multiplayerButton = widget.NewButton("Multiplayer", w.multiplayer)
-	var more *widget.Button
-	more = widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {
+	w.install = appwidget.NewButtonWithIcon("Install mods only", theme.DownloadIcon(), func() { w.installMods(false) })
+	w.reinstall = appwidget.NewButtonWithIcon("Reinstall / update mods", theme.ViewRefreshIcon(), func() { w.installMods(true) })
+	tools := appwidget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
+	w.multiplayerButton = appwidget.NewButton("Multiplayer", w.multiplayer)
+	var more *appwidget.Button
+	more = appwidget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), func() {
 		menu := fyne.NewMenu("", fyne.NewMenuItem("Check app updates", func() { w.checkUpdates(true) }), fyne.NewMenuItem("About", w.showAbout))
 		pos := a.Driver().AbsolutePositionForObject(more).Add(fyne.NewPos(0, more.Size().Height))
 		widget.ShowPopUpMenuAtPosition(menu, w.window.Canvas(), pos)
 	})
 	w.updateButton = more
-	w.cancelButton = widget.NewButton("Cancel", func() {
+	w.cancelButton = appwidget.NewButton("Cancel", func() {
 		if w.cancel != nil {
 			w.cancel()
 			w.setStatus("Cancelling; waiting for the current operation to stop…")
@@ -218,7 +219,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	files := container.NewBorder(container.NewVBox(sectionHeader, w.modPanel), fileActions, nil, nil, table)
 
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan, w.multiplayerButton, tools, more), w.path), w.version)
-	statusDetails := widget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
+	statusDetails := appwidget.NewButtonWithIcon("", theme.InfoIcon(), w.showLogs)
 	bottom := container.New(statusLayout{}, w.status, w.progress, container.NewHBox(w.cancelButton, statusDetails))
 	w.window.SetContent(container.NewBorder(top, bottom, nil, nil, files))
 	w.refreshEnabled()
@@ -273,7 +274,7 @@ func (w *Window) refreshEnabled() {
 		}
 	}
 	ready := w.scanPath != "" && w.scanPath == w.path.Text && !w.readonly && !w.busy && !w.promptActive
-	for _, b := range []*widget.Button{w.downgrade, w.install, w.reinstall} {
+	for _, b := range []*appwidget.Button{w.downgrade, w.install, w.reinstall} {
 		if ready {
 			b.Enable()
 		} else {

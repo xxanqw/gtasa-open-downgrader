@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 func (w *Window) showLogs() {
@@ -26,8 +27,8 @@ func (w *Window) showLogs() {
 		body := container.NewBorder(note, follow, nil, nil, scroll)
 		var closePanel func()
 		exporting := false
-		export := widget.NewButtonWithIcon("Export…", theme.DocumentSaveIcon(), func() { exporting = true; closePanel() })
-		copy := widget.NewButtonWithIcon("Copy all", theme.ContentCopyIcon(), func() {
+		export := appwidget.NewButtonWithIcon("Export…", theme.DocumentSaveIcon(), func() { exporting = true; closePanel() })
+		copy := appwidget.NewButtonWithIcon("Copy all", theme.ContentCopyIcon(), func() {
 			snapshot, _ := w.logs.Snapshot()
 			w.window.Clipboard().SetContent(snapshot)
 		})

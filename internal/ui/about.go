@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
@@ -25,7 +26,7 @@ Adapted icons: [Font Awesome Free 6.7.2](https://fontawesome.com) by Fonticons, 
 func (w *Window) showAbout() {
 	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
 		body, licenses := aboutContent()
-		copyLicense := widget.NewButtonWithIcon("Copy license", theme.ContentCopyIcon(), func() {
+		copyLicense := appwidget.NewButtonWithIcon("Copy license", theme.ContentCopyIcon(), func() {
 			text := assets.AppLicense
 			if licenses.SelectedIndex() == 1 {
 				text = assets.XdeltaLicense

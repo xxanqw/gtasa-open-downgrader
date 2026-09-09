@@ -17,6 +17,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherapp"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 type monochrome struct{ fyne.Theme }
@@ -149,7 +150,7 @@ func main() {
 		form.Resize(fyne.NewSize(380, 300))
 		form.Show()
 	}
-	single := widget.NewButtonWithIcon("Single Player", theme.MediaPlayIcon(), func() {
+	single := appwidget.NewButtonWithIcon("Single Player", theme.MediaPlayIcon(), func() {
 		launch(func(ctx context.Context) error { return launcher.SinglePlayer(ctx, os.Args[1:]...) })
 	})
 	single.Importance = widget.HighImportance
@@ -162,7 +163,7 @@ func main() {
 	var unsupportedMessage string
 	for _, client := range clients {
 		client := client
-		button := widget.NewButton(client.Name, func() {
+		button := appwidget.NewButton(client.Name, func() {
 			if client.ID == multiplayer.ClientOpenMP && underProton {
 				showOpenMP()
 				return
@@ -208,7 +209,7 @@ func main() {
 	multiplayerLabel := widget.NewLabel(multiplayerStatus)
 	multiplayerLabel.Wrapping = fyne.TextWrapWord
 
-	downgrader := widget.NewButtonWithIcon("Open Downgrader", theme.SettingsIcon(), func() {
+	downgrader := appwidget.NewButtonWithIcon("Open Downgrader", theme.SettingsIcon(), func() {
 		if err := launcherapp.OpenDowngrader(gameDir); err != nil {
 			dialog.ShowError(err, w)
 		}
@@ -216,7 +217,7 @@ func main() {
 	if launcherapp.FindDowngrader(gameDir) == "" {
 		downgrader.Disable()
 	}
-	settings := widget.NewButton("Settings", func() {
+	settings := appwidget.NewButton("Settings", func() {
 		dialog.ShowInformation("Launcher settings", fmt.Sprintf("Game folder:\n%s\n\nClient paths are detected automatically. Manage installations with the downgrader, then reopen this launcher.", gameDir), w)
 	})
 	controls = append(controls, downgrader, settings)

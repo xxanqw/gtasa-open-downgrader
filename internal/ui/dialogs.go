@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 type promptKind int
@@ -97,15 +98,15 @@ func (w *Window) panel(title string, body fyne.CanvasObject, size fyne.Size, acc
 		}
 		done(ok)
 	}
-	closeButton := widget.NewButtonWithIcon("", theme.CancelIcon(), func() { finish(false) })
+	closeButton := appwidget.NewButtonWithIcon("", theme.CancelIcon(), func() { finish(false) })
 	closeButton.Importance = widget.LowImportance
 	heading := compactLabel(title)
 	heading.TextStyle.Bold = true
 	header := container.NewBorder(nil, nil, nil, closeButton, heading)
-	cancel := widget.NewButton(dismiss, func() { finish(false) })
+	cancel := appwidget.NewButton(dismiss, func() { finish(false) })
 	buttons := container.NewHBox(cancel)
 	if accept != "" {
-		confirm := widget.NewButton(accept, func() { finish(true) })
+		confirm := appwidget.NewButton(accept, func() { finish(true) })
 		confirm.Importance = widget.HighImportance
 		buttons.Add(confirm)
 	}

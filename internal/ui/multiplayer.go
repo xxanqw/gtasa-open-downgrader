@@ -16,6 +16,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 func (w *Window) multiplayer() {
@@ -56,7 +57,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 		} else if launcher.State == entrypoint.Replaced {
 			launcherAction = "Reinstall Steam launcher"
 		}
-		launcherButton := widget.NewButtonWithIcon(launcherAction, launcherIcon, func() {
+		launcherButton := appwidget.NewButtonWithIcon(launcherAction, launcherIcon, func() {
 			close()
 			if launcher.State == entrypoint.Installed {
 				w.confirm("Remove Steam launcher", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.", func(ok bool) {
@@ -133,11 +134,11 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			detailLabel.TextStyle.Italic = true
 			var actions *fyne.Container
 			if client.Installed {
-				repair := widget.NewButtonWithIcon("Repair", theme.ViewRefreshIcon(), func() {
+				repair := appwidget.NewButtonWithIcon("Repair", theme.ViewRefreshIcon(), func() {
 					close()
 					w.installMultiplayer(environment, runner, client.ID)
 				})
-				remove := widget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
+				remove := appwidget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
 					close()
 					w.uninstallMultiplayer(environment, runner, client)
 				})
@@ -149,7 +150,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 				}
 				actions = container.NewHBox(repair, remove)
 			} else {
-				install := widget.NewButtonWithIcon("Install", theme.DownloadIcon(), func() {
+				install := appwidget.NewButtonWithIcon("Install", theme.DownloadIcon(), func() {
 					close()
 					w.installMultiplayer(environment, runner, client.ID)
 				})

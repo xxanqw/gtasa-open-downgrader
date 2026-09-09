@@ -16,6 +16,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/patch"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 )
 
@@ -43,7 +44,7 @@ func (w *Window) tools() {
 		for _, action := range w.toolActions() {
 			action := action
 			group, label := toolPresentation(action.label)
-			button := widget.NewButton(label, func() { close(); action.run() })
+			button := appwidget.NewButton(label, func() { close(); action.run() })
 			groups[group].buttons = append(groups[group].buttons, button)
 		}
 		var sections []fyne.CanvasObject

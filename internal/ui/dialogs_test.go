@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 func walkObjects(o fyne.CanvasObject, visit func(fyne.CanvasObject) bool) bool {
@@ -34,10 +35,10 @@ func walkObjects(o fyne.CanvasObject, visit func(fyne.CanvasObject) bool) bool {
 	}
 	return false
 }
-func promptButton(o fyne.CanvasObject, text string) *widget.Button {
-	var button *widget.Button
+func promptButton(o fyne.CanvasObject, text string) *appwidget.Button {
+	var button *appwidget.Button
 	walkObjects(o, func(o fyne.CanvasObject) bool {
-		if b, ok := o.(*widget.Button); ok && b.Text == text {
+		if b, ok := o.(*appwidget.Button); ok && b.Text == text {
 			button = b
 			return true
 		}
