@@ -188,9 +188,9 @@ func main() {
 		multiplayerStatus = "No multiplayer clients detected. Install them with the downgrader."
 	} else {
 		for _, client := range clients {
-			if (client.ID == "samp" || client.ID == "mta") && client.Installed {
+			if client.ID == multiplayer.ClientMTA && client.Installed {
 				if _, err := os.Stat(filepath.Join(gameDir, "modloader.asi")); err == nil {
-					multiplayerStatus = "SA-MP and MTA start with Mod Loader safely isolated."
+					multiplayerStatus = "MTA starts with Mod Loader temporarily paused."
 				}
 			}
 		}

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
@@ -19,12 +18,9 @@ import (
 type Executor func(context.Context, string, string, ...string) error
 
 type Runtime struct {
-	GameDir                string
-	Execute                Executor
-	AfterCompatibilityExit func(context.Context) error
+	GameDir string
+	Execute Executor
 }
-
-const modLoaderRestoreDelay = 12 * time.Second
 
 func New(gameDir string) *Runtime {
 	return &Runtime{GameDir: gameDir, Execute: execute}
@@ -92,15 +88,7 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
 		return err
 	}
-	disabled, err := runtime.disableModLoader()
-	if err != nil {
-		return err
-	}
-	runErr := runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
-	if disabled && runErr == nil {
-		runtime.waitForClientStartup(ctx)
-	}
-	return errors.Join(runErr, runtime.restoreModLoader())
+	return runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
 }
 
 func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID, arguments ...string) error {
@@ -114,7 +102,7 @@ func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID
 	if err := multiplayer.ValidateExecutable(client); err != nil {
 		return err
 	}
-	if id == multiplayer.ClientSAMP || id == multiplayer.ClientMTA {
+	if id == multiplayer.ClientMTA {
 		return runtime.runWithoutModLoader(ctx, client)
 	}
 	return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
@@ -256,11 +244,9 @@ func (runtime *Runtime) installOpenMPSharedFiles(ctx context.Context, source str
 	return nil
 }
 
-// runWithoutModLoader keeps Mod Loader out of clients that reject or conflict
-// with injected ASI plugins. SA-MP R5 can crash inside Mod Loader during
-// initialization, while MTA warns about every ASI in the game directory. The
-// file is restored after the client exits and a short startup grace period,
-// and it is also recovered before every later launch.
+// runWithoutModLoader keeps Mod Loader out of MTA, which rejects game
+// installations containing ASI plugins. The file is restored after MTA exits
+// and is also recovered before every later launch.
 func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multiplayer.Client) error {
 	_, err := runtime.disableModLoader()
 	if err != nil {
@@ -269,21 +255,6 @@ func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multipla
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable)
 	restoreErr := runtime.restoreModLoader()
 	return errors.Join(runErr, restoreErr)
-}
-
-func (runtime *Runtime) waitForClientStartup(ctx context.Context) {
-	if runtime.AfterCompatibilityExit != nil {
-		_ = runtime.AfterCompatibilityExit(ctx)
-		return
-	}
-	timer := time.NewTimer(modLoaderRestoreDelay)
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-		if !timer.Stop() {
-			<-timer.C
-		}
-	}
 }
 
 func (runtime *Runtime) modLoaderPaths() (active, disabled string) {

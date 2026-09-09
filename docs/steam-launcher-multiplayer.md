@@ -38,7 +38,7 @@ MTA is a separate application and is not installed into the GTA directory. Its s
 
 Removal runs the detected installation's standard `Uninstall.exe`. The action remains available on Linux so an existing MTA installation can be removed even while installation, repair, and launch are disabled by the Wine/Proton integrity incompatibility.
 
-SA-MP R5 can crash while `modloader.asi` initializes, and MTA warns whenever an ASI is present in the GTA directory. The Steam launcher therefore moves only `modloader.asi` into `.downgrader/multiplayer` while either supported client runs, restores it afterward, and recovers an interrupted move before the next launch. Single-player continues to use the normal mod configuration.
+SA-MP and open.mp keep `modloader.asi` active so multiplayer uses the mods installed by the downgrader. MTA warns whenever an ASI is present in the GTA directory, so the Steam launcher moves only `modloader.asi` into `.downgrader/multiplayer` while MTA runs, restores it afterward, and recovers an interrupted move before the next launch. Single-player also uses the normal mod configuration.
 
 Current MTA production clients terminate during integrity initialization under Wine/Proton after the 2026 mandatory update; this is tracked in [upstream issue #4783](https://github.com/multitheftauto/mtasa-blue/issues/4783). The failure occurs before GTA starts and across multiple Wine runners, so changing the game files or Proton selection does not provide a reliable fix. MTA installation and launch are disabled on Linux while this upstream regression remains, but stay available on native Windows.
 

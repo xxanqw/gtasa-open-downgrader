@@ -138,7 +138,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 					repairRequired = true
 				}
 			}
-			if (client.ID == multiplayer.ClientSAMP || client.ID == multiplayer.ClientMTA) && client.Installed {
+			if client.ID == multiplayer.ClientMTA && client.Installed {
 				if _, err := os.Stat(filepath.Join(root, "modloader.asi")); err == nil {
 					detail += " · Mod Loader is paused while running"
 				}

@@ -53,7 +53,7 @@ func TestSinglePlayerNeverFallsBackToLauncher(t *testing.T) {
 	}
 }
 
-func TestSAMPTemporarilyDisablesAndRestoresModLoader(t *testing.T) {
+func TestSAMPKeepsModLoaderEnabled(t *testing.T) {
 	root := t.TempDir()
 	for _, name := range []string{"samp.exe", "samp.dll", "modloader.asi"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(name), 0644); err != nil {
@@ -64,15 +64,14 @@ func TestSAMPTemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 		GameDir: root,
 		Execute: func(_ context.Context, _, _ string, _ ...string) error {
 			active, disabled := runtimePaths(root)
-			if _, err := os.Stat(active); !os.IsNotExist(err) {
-				t.Fatalf("Mod Loader remained active during SA-MP launch: %v", err)
+			if data, err := os.ReadFile(active); err != nil || string(data) != "modloader.asi" {
+				t.Fatalf("Mod Loader was not active during SA-MP launch: %q, %v", data, err)
 			}
-			if _, err := os.Stat(disabled); err != nil {
-				t.Fatalf("disabled Mod Loader is missing: %v", err)
+			if _, err := os.Stat(disabled); !os.IsNotExist(err) {
+				t.Fatalf("SA-MP created a disabled Mod Loader copy: %v", err)
 			}
 			return nil
 		},
-		AfterCompatibilityExit: func(context.Context) error { return nil },
 	}
 	if err := runtime.Multiplayer(context.Background(), multiplayer.ClientSAMP); err != nil {
 		t.Fatal(err)
@@ -110,7 +109,6 @@ func TestMTATemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 			}
 			return nil
 		},
-		AfterCompatibilityExit: func(context.Context) error { return nil },
 	}
 	if err := runtime.Multiplayer(context.Background(), multiplayer.ClientMTA); err != nil {
 		t.Fatal(err)
@@ -128,6 +126,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	for name, contents := range map[string]string{
 		"clients/omp-launcher.exe": "launcher",
 		multiplayer.ConfigPath:     `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
+		"modloader.asi":            "loader",
 		"samp.dll":                 "MZoriginal",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
@@ -162,6 +161,9 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	}
 	var got []string
 	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, dir, exe string, args ...string) error {
+		if data, err := os.ReadFile(filepath.Join(root, "modloader.asi")); err != nil || string(data) != "loader" {
+			t.Fatalf("Mod Loader was not active during open.mp launch: %q, %v", data, err)
+		}
 		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
 			t.Fatalf("managed SA-MP client was not active during open.mp launch: %q, %v", data, err)
 		}
@@ -184,7 +186,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	}
 }
 
-func TestSinglePlayerRecoversInterruptedSAMPCompatibilityMode(t *testing.T) {
+func TestSinglePlayerRecoversInterruptedMTACompatibilityMode(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, entrypoint.RealGameExecutable), []byte("game"), 0644); err != nil {
 		t.Fatal(err)
