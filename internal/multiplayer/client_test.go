@@ -49,6 +49,90 @@ func TestSAMPRequiresDLLAndMissingExecutableIsRejected(t *testing.T) {
 	}
 }
 
+func TestClientUninstallerPaths(t *testing.T) {
+	game := t.TempDir()
+	clients := []struct {
+		client Client
+		want   string
+	}{
+		{Client{ID: ClientSAMP, Name: "SA-MP", Installed: true, WorkingDir: game}, filepath.Join(game, "SAMPUninstall.exe")},
+		{Client{ID: ClientOpenMP, Name: "open.mp", Installed: true, WorkingDir: filepath.Join(game, "openmp")}, filepath.Join(game, "openmp", "uninstall.exe")},
+		{Client{ID: ClientMTA, Name: "Multi Theft Auto", Installed: true, WorkingDir: filepath.Join(game, "mta")}, filepath.Join(game, "mta", "Uninstall.exe")},
+	}
+	for _, test := range clients {
+		file(t, test.want)
+		got, err := UninstallerPath(test.client, Environment{GameDir: game})
+		if err != nil || got != test.want {
+			t.Fatalf("%s uninstaller = %q, %v", test.client.ID, got, err)
+		}
+	}
+}
+
+func TestSAMPUninstallRemovesReleasedFonts(t *testing.T) {
+	game := t.TempDir()
+	for _, name := range []string{"samp.exe", "samp.dll", "SAMPUninstall.exe", "gtaweap3.ttf", "sampaux3.ttf"} {
+		file(t, filepath.Join(game, name))
+	}
+	runner := DirectRunner{Executor: CommandExecutorFunc(func(_ context.Context, _, executable string, _ ...string) error {
+		if executable != filepath.Join(game, "SAMPUninstall.exe") {
+			t.Fatalf("unexpected uninstaller: %s", executable)
+		}
+		if err := os.Remove(filepath.Join(game, "samp.exe")); err != nil {
+			return err
+		}
+		return os.Remove(filepath.Join(game, "samp.dll"))
+	})}
+	result, err := Uninstall(context.Background(), ClientSAMP, Environment{GameDir: game}, runner)
+	if err != nil || result.RestartRequired {
+		t.Fatalf("uninstall = %+v, %v", result, err)
+	}
+	for _, name := range SAMPFontFiles {
+		if _, err = os.Stat(filepath.Join(game, name)); !os.IsNotExist(err) {
+			t.Fatalf("font remains: %s", name)
+		}
+	}
+}
+
+func TestLockedSAMPFontIsScheduledForRestart(t *testing.T) {
+	var scheduled []string
+	locked := filepath.Join(t.TempDir(), "gtaweap3.ttf")
+	restart, err := cleanupSAMPFonts([]string{locked}, func(string) error { return os.ErrPermission }, func(path string) error {
+		scheduled = append(scheduled, path)
+		return nil
+	})
+	if err != nil || !restart || !reflect.DeepEqual(scheduled, []string{locked}) {
+		t.Fatalf("cleanup = restart %t, scheduled %#v, %v", restart, scheduled, err)
+	}
+}
+
+func TestOpenMPUninstallRemovesManagedData(t *testing.T) {
+	game, local := t.TempDir(), t.TempDir()
+	install := filepath.Join(game, "openmp")
+	file(t, filepath.Join(install, "omp-launcher.exe"))
+	file(t, filepath.Join(install, "uninstall.exe"))
+	dataRoot := filepath.Join(local, "mp.open.launcher")
+	file(t, filepath.Join(dataRoot, "omp", "omp-client.dll"))
+	environment := Environment{GameDir: game, LocalAppData: local}
+	runner := DirectRunner{Executor: CommandExecutorFunc(func(_ context.Context, _, _ string, _ ...string) error {
+		return os.Remove(filepath.Join(install, "omp-launcher.exe"))
+	})}
+	// A relative client entry models a portable installation without relying on
+	// host registry state.
+	configPath := filepath.Join(game, ConfigPath)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"schema_version":1,"clients":{"openmp":{"executable":"openmp/omp-launcher.exe"}}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Uninstall(context.Background(), ClientOpenMP, environment, runner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dataRoot); !os.IsNotExist(err) {
+		t.Fatal("managed open.mp data remains")
+	}
+}
+
 func TestMTAPlatformSupport(t *testing.T) {
 	if supported, _ := LaunchSupport(ClientMTA, "linux", false); supported {
 		t.Fatal("MTA was presented as supported by the Linux host")

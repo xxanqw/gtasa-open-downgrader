@@ -18,6 +18,8 @@ The assumptions below were checked against upstream pages and source in Septembe
 
 ### SA-MP
 
+The Multiplayer dialog runs `SAMPUninstall.exe` when removing SA-MP. On native Windows, it first releases registrations for `gtaweap3.ttf` and `sampaux3.ttf`, broadcasts the system font-table change, and deletes the font files after the uninstaller completes. If another process still holds a font open, Windows schedules that file for deletion at the next restart and the app tells the user a restart is required.
+
 The supported layout is game-local: `samp.exe` and `samp.dll` must both exist beside `gta_sa.exe`. The launcher runs `samp.exe` in that directory and waits for it. The [official successor download page](https://www.sa-mp.mp/downloads/) identifies 0.3.7-R5-2-MP as the current release and requires GTA SA 1.0, but it offers community-hosted mirrors rather than a stable first-party artifact URL. The downgrader therefore opens that page and asks the user to select the downloaded installer. It does not scrape the page or silently trust a mirror.
 
 ### open.mp
@@ -28,9 +30,13 @@ open.mp can use an existing SA-MP client or its own managed clients, so both lau
 
 Under Proton, the Steam launcher replaces the unsupported WebView window with a compact connection form that includes server, port, nickname, optional password, and managed SA-MP version. It copies the managed shared resources into the game and temporarily presents the selected managed DLL as `samp.dll` for open.mp's command-line injector. Wine keeps the loaded DLL locked while GTA runs, so the verified original and a small state record remain preserved until the next launcher start restores them after GTA exits. Native Windows continues to open the full upstream launcher and lets it manage clients normally.
 
+Removing open.mp runs its own `uninstall.exe` in the same environment and then removes the managed command-line launcher, SA-MP versions, and shared resources installed by the downgrader. It does not remove a separate game-folder SA-MP installation.
+
 ### Multi Theft Auto
 
 MTA is a separate application and is not installed into the GTA directory. Its standard executable is `Multi Theft Auto.exe`. Detection checks current 1.7, 1.6, and 1.5 Program Files layouts plus the `Multi Theft Auto: San Andreas All` registry keys used by the [upstream NSIS installer source](https://github.com/multitheftauto/mtasa-blue/blob/master/Shared/installer/nightly.nsi). The official [client manual](https://wiki.multitheftauto.com/wiki/Client_Manual) says the installer requests a GTA SA 1.0 installation and component choices. The downloader uses the stable 1.6 link published by the [official MTA site](https://multitheftauto.com/). Installation remains interactive so the user can choose those components and the intended separate MTA location.
+
+Removal runs the detected installation's standard `Uninstall.exe`. The action remains available on Linux so an existing MTA installation can be removed even while installation, repair, and launch are disabled by the Wine/Proton integrity incompatibility.
 
 SA-MP R5 can crash while `modloader.asi` initializes, and MTA warns whenever an ASI is present in the GTA directory. The Steam launcher therefore moves only `modloader.asi` into `.downgrader/multiplayer` while either supported client runs, restores it afterward, and recovers an interrupted move before the next launch. Single-player continues to use the normal mod configuration.
 

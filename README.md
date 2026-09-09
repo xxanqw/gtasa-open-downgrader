@@ -55,7 +55,7 @@ Contributions for other source versions are welcome through GitHub issues.
     - Create a desktop shortcut on Windows.
 - **Windows and Linux Builds:** Includes AppImage builds, common Steam/Flatpak path detection, read-only directory checks, and Proton launch-option guidance for ASI Loader.
 - **Steam Launcher:** Installs a compact Windows Fyne menu as Steam's `gta-sa.exe` while keeping the real downgraded game as `gta_sa.exe`. The operation preserves an existing entrypoint, verifies launcher ownership, supports safe removal, and detects Steam file verification replacing it.
-- **Multiplayer Management:** Detects SA-MP, open.mp, and Multi Theft Auto and offers supported installers from the Multiplayer dialog. Linux runs compatible clients in GTA SA's detected Steam Proton context; MTA remains available on native Windows but is currently disabled under Wine/Proton because its upstream integrity system terminates the client.
+- **Multiplayer Management:** Detects SA-MP, open.mp, and Multi Theft Auto and provides install, repair, and uninstall actions from a compact Multiplayer dialog. Linux runs compatible clients in GTA SA's detected Steam Proton context; MTA remains available on native Windows but is currently disabled under Wine/Proton because its upstream integrity system terminates the client.
 
 ## Distribution Variants
 
@@ -105,6 +105,8 @@ The app checks common native Steam and Flatpak Steam locations plus one common S
 Open **Multiplayer** after scanning the game to install or repair the Steam launcher and multiplayer clients. The launcher replaces Steam's `gta-sa.exe` entrypoint, preserves the previous file, and always starts the real game from `gta_sa.exe`. **Remove & restore** returns the preserved entrypoint without deleting the real game. If Steam file verification restores `gta-sa.exe`, the dialog reports the launcher as replaced and offers to reinstall it.
 
 SA-MP requires the user to download its installer from the official successor page because there is no stable first-party artifact URL. open.mp and MTA download from their official sources. Their normal Windows installer windows appear through the game's selected Proton version and prefix; the app never calls system Wine or protontricks. Hidden `.steam` directories do not need to be browsed manually: the game receives a visible path such as `G:\Grand Theft Auto San Andreas`, the SA-MP destination is prefilled, and the GTA path is registered for MTA. MTA keeps its normal separate installation directory. Because open.mp's WebView interface does not run under Wine, its Steam launcher button opens a compact connection form under Proton with the full open.mp-managed SA-MP client list, including R1 through R5 and 0.3.DL. See [the architecture and current upstream assumptions](docs/steam-launcher-multiplayer.md) for client-specific details and limitations.
+
+Installed clients can be repaired or removed from the same dialog. Removal opens each client's standard uninstaller in the detected Windows or Proton environment. The open.mp action also removes the managed command-line client files added by the downgrader. On Windows, SA-MP font registrations are released before cleanup; any font file still held by another process is scheduled for deletion at the next restart.
 
 ## Development
 
