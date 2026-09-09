@@ -48,19 +48,6 @@ func (w *Window) multiplayer() {
 func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client) {
 	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
 		var close func()
-		statusText := "Not installed"
-		switch launcher.State {
-		case entrypoint.Installed:
-			statusText = "Installed"
-		case entrypoint.Replaced:
-			statusText = "Replaced by Steam"
-		case entrypoint.Invalid:
-			statusText = "Needs repair"
-		}
-		launcherStatus := widget.NewLabel("· " + statusText)
-		if launcher.State == entrypoint.Installed {
-			launcherStatus.Importance = widget.SuccessImportance
-		}
 		launcherAction := "Install Steam launcher"
 		launcherIcon := theme.DownloadIcon()
 		if launcher.State == entrypoint.Installed {
@@ -96,7 +83,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 
 		launcherDetails := compactLabel("Steam entry point · real game remains gta_sa.exe")
 		launcherBody := container.NewBorder(nil, nil, nil, container.NewCenter(launcherButton), container.NewVBox(
-			container.NewHBox(widget.NewLabelWithStyle("Steam launcher", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), launcherStatus),
+			widget.NewLabelWithStyle("Steam launcher", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			launcherDetails,
 		))
 		sections := []fyne.CanvasObject{
@@ -116,11 +103,8 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 		}
 		for index, client := range clients {
 			client := client
-			state := "Not installed"
 			detail := "Ready to install"
-			repairRequired := false
 			if client.Installed {
-				state = "Installed"
 				switch client.ID {
 				case multiplayer.ClientSAMP:
 					detail = "Game-folder client"
@@ -133,9 +117,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
 				path, err := multiplayer.OpenMPClientPath(environment)
 				if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment) != nil {
-					state = "Repair required"
 					detail = "Managed SA-MP client files are incomplete"
-					repairRequired = true
 				}
 			}
 			if client.ID == multiplayer.ClientMTA && client.Installed {
@@ -146,12 +128,6 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 			supported, reason := multiplayer.LaunchSupport(client.ID, runtime.GOOS, false)
 			if !supported {
 				detail = reason
-			}
-			stateLabel := widget.NewLabel("· " + state)
-			if repairRequired {
-				stateLabel.Importance = widget.WarningImportance
-			} else if client.Installed {
-				stateLabel.Importance = widget.SuccessImportance
 			}
 			detailLabel := compactLabel(detail)
 			detailLabel.TextStyle.Italic = true
@@ -184,7 +160,7 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 				actions = container.NewHBox(install)
 			}
 			row := container.NewBorder(nil, nil, nil, container.NewCenter(actions), container.NewVBox(
-				container.NewHBox(widget.NewLabelWithStyle(client.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), stateLabel),
+				widget.NewLabelWithStyle(client.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 				detailLabel,
 			))
 			sections = append(sections, container.New(layout.NewCustomPaddedLayout(3, 5, 4, 4), row))
