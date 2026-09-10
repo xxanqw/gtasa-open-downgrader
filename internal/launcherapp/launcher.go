@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
@@ -89,7 +88,7 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
 		return err
 	}
-	return runtime.runWithModLoaderMenuDisabled(func() error {
+	return runtime.runWithMultiplayerMods(ctx, func() error {
 		return runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
 	})
 }
@@ -109,7 +108,7 @@ func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID
 		return runtime.runWithoutModLoader(ctx, client)
 	}
 	if id == multiplayer.ClientSAMP {
-		return runtime.runWithModLoaderMenuDisabled(func() error {
+		return runtime.runWithMultiplayerMods(ctx, func() error {
 			return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 		})
 	}
@@ -120,8 +119,6 @@ type openMPSAMPState struct {
 	ManagedSHA256 string `json:"managed_sha256"`
 	HadOriginal   bool   `json:"had_original"`
 }
-
-var modLoaderMenuSetting = regexp.MustCompile(`(?im)^(\s*EnableMenu\s*=\s*)true(\b[^\r\n]*)`)
 
 func (runtime *Runtime) openMPSAMPPaths() (active, backup, state string) {
 	directory := filepath.Join(runtime.GameDir, ".downgrader", "multiplayer")
@@ -176,89 +173,24 @@ func (runtime *Runtime) runWithOpenMPSAMP(ctx context.Context, client multiplaye
 }
 
 func (runtime *Runtime) restoreCompatibility() error {
-	return errors.Join(runtime.restoreOpenMPSAMP(false), runtime.restoreModLoader(), runtime.restoreModLoaderMenu())
+	return errors.Join(runtime.restoreMultiplayerOverlay(false), runtime.restoreOpenMPSAMP(false), runtime.restoreModLoader(), runtime.restoreLegacyModLoaderMenu())
 }
 
-// runWithModLoaderMenuDisabled keeps Mod Loader and its mods active while
-// avoiding the menu hook that crashes during SA-MP R5 startup. The original
-// config is restored exactly after the client exits. A preserved copy also
-// lets the next launcher invocation recover from an interrupted run.
-func (runtime *Runtime) runWithModLoaderMenuDisabled(run func() error) error {
-	changed, err := runtime.disableModLoaderMenu()
-	if err != nil {
-		return err
-	}
-	runErr := run()
-	if !changed {
-		return runErr
-	}
-	return errors.Join(runErr, runtime.restoreModLoaderMenu())
-}
-
-func (runtime *Runtime) modLoaderMenuPaths() (active, backup string) {
-	return filepath.Join(runtime.GameDir, "modloader", ".data", "config.ini"), filepath.Join(runtime.GameDir, ".downgrader", "multiplayer", "modloader-config.ini")
-}
-
-func (runtime *Runtime) disableModLoaderMenu() (bool, error) {
-	active, backup := runtime.modLoaderMenuPaths()
-	data, err := os.ReadFile(active)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read Mod Loader config: %w", err)
-	}
-	updated := modLoaderMenuSetting.ReplaceAll(data, []byte("${1}false${2}"))
-	if string(updated) == string(data) {
-		return false, nil
-	}
-	if _, err := os.Stat(backup); err == nil {
-		return false, fmt.Errorf("preserved Mod Loader config already exists at %s", backup)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return false, fmt.Errorf("inspect preserved Mod Loader config: %w", err)
-	}
-	info, err := os.Stat(active)
-	if err != nil {
-		return false, fmt.Errorf("inspect Mod Loader config: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(backup), 0700); err != nil {
-		return false, fmt.Errorf("prepare SA-MP compatibility mode: %w", err)
-	}
-	if err := os.Rename(active, backup); err != nil {
-		return false, fmt.Errorf("preserve Mod Loader config: %w", err)
-	}
-	if err := os.WriteFile(active, updated, info.Mode().Perm()); err != nil {
-		return false, errors.Join(fmt.Errorf("disable Mod Loader menu for SA-MP: %w", err), os.Rename(backup, active))
-	}
-	return true, nil
-}
-
-func (runtime *Runtime) restoreModLoaderMenu() error {
-	active, backup := runtime.modLoaderMenuPaths()
-	data, err := os.ReadFile(backup)
-	if errors.Is(err, os.ErrNotExist) {
+// restoreLegacyModLoaderMenu recovers the one config backup created by builds
+// that predate the direct multiplayer overlay. New launches never create it.
+func (runtime *Runtime) restoreLegacyModLoaderMenu() error {
+	active := filepath.Join(runtime.GameDir, "modloader", ".data", "config.ini")
+	backup := filepath.Join(runtime.GameDir, ".downgrader", "multiplayer", "modloader-config.ini")
+	if _, err := os.Stat(backup); errors.Is(err, os.ErrNotExist) {
 		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect legacy Mod Loader config backup: %w", err)
 	}
-	if err != nil {
-		return fmt.Errorf("read preserved Mod Loader config: %w", err)
-	}
-	info, err := os.Stat(backup)
-	if err != nil {
-		return fmt.Errorf("inspect preserved Mod Loader config: %w", err)
-	}
-	temporary := active + ".downgrader-restore.tmp"
-	if err := os.WriteFile(temporary, data, info.Mode().Perm()); err != nil {
-		return fmt.Errorf("prepare Mod Loader config restoration: %w", err)
-	}
-	if err := os.Remove(active); err != nil && !errors.Is(err, os.ErrNotExist) {
-		_ = os.Remove(temporary)
-		return fmt.Errorf("replace temporary Mod Loader config: %w", err)
-	}
-	if err := os.Rename(temporary, active); err != nil {
-		return fmt.Errorf("restore Mod Loader config: %w", err)
+	if err := fsutil.CopyFile(context.Background(), backup, active); err != nil {
+		return fmt.Errorf("restore legacy Mod Loader config backup: %w", err)
 	}
 	if err := os.Remove(backup); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("clear preserved Mod Loader config: %w", err)
+		return fmt.Errorf("clear legacy Mod Loader config backup: %w", err)
 	}
 	return nil
 }

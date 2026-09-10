@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
@@ -54,14 +53,17 @@ func TestSinglePlayerNeverFallsBackToLauncher(t *testing.T) {
 	}
 }
 
-func TestSAMPKeepsModLoaderEnabled(t *testing.T) {
+func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 	root := t.TempDir()
-	originalConfig := "[Config]\r\nEnableMenu = true ; keep this setting\r\nEnablePlugins = true\r\n"
 	for name, contents := range map[string]string{
-		"samp.exe":                   "samp.exe",
-		"samp.dll":                   "samp.dll",
-		"modloader.asi":              "modloader.asi",
-		"modloader/.data/config.ini": originalConfig,
+		"samp.exe":              "samp.exe",
+		"samp.dll":              "samp.dll",
+		"modloader.asi":         "modloader.asi",
+		"stream.ini":            "original stream",
+		"modloader/.downgrader": `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch","SkyGFX"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi": "silent patch",
+		"modloader/SilentPatch/ReadMe.txt":        "documentation",
+		"modloader/SkyGFX/stream.ini":             "mod stream",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -75,15 +77,20 @@ func TestSAMPKeepsModLoaderEnabled(t *testing.T) {
 		GameDir: root,
 		Execute: func(_ context.Context, _, _ string, _ ...string) error {
 			active, disabled := runtimePaths(root)
-			if data, err := os.ReadFile(active); err != nil || string(data) != "modloader.asi" {
-				t.Fatalf("Mod Loader was not active during SA-MP launch: %q, %v", data, err)
+			if _, err := os.Stat(active); !os.IsNotExist(err) {
+				t.Fatalf("Mod Loader remained active during SA-MP launch: %v", err)
 			}
-			if _, err := os.Stat(disabled); !os.IsNotExist(err) {
-				t.Fatalf("SA-MP created a disabled Mod Loader copy: %v", err)
+			if data, err := os.ReadFile(disabled); err != nil || string(data) != "modloader.asi" {
+				t.Fatalf("Mod Loader was not preserved: %q, %v", data, err)
 			}
-			config, err := os.ReadFile(filepath.Join(root, "modloader", ".data", "config.ini"))
-			if err != nil || !regexp.MustCompile(`(?im)^\s*EnableMenu\s*=\s*false\b`).Match(config) {
-				t.Fatalf("Mod Loader menu remained enabled during SA-MP launch: %q, %v", config, err)
+			if data, err := os.ReadFile(filepath.Join(root, "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
+				t.Fatalf("SilentPatch was not staged directly: %q, %v", data, err)
+			}
+			if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "mod stream" {
+				t.Fatalf("replacement file was not staged: %q, %v", data, err)
+			}
+			if _, err := os.Stat(filepath.Join(root, "ReadMe.txt")); !os.IsNotExist(err) {
+				t.Fatalf("documentation was staged into the game root: %v", err)
 			}
 			return nil
 		},
@@ -98,8 +105,11 @@ func TestSAMPKeepsModLoaderEnabled(t *testing.T) {
 	if _, err := os.Stat(disabled); !os.IsNotExist(err) {
 		t.Fatalf("disabled copy remained after launch: %v", err)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "modloader", ".data", "config.ini")); err != nil || string(data) != originalConfig {
-		t.Fatalf("Mod Loader config was not restored exactly: %q, %v", data, err)
+	if _, err := os.Stat(filepath.Join(root, "SilentPatchSA.asi")); !os.IsNotExist(err) {
+		t.Fatalf("temporary SilentPatch file remained after launch: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "original stream" {
+		t.Fatalf("overwritten file was not restored: %q, %v", data, err)
 	}
 }
 
@@ -142,11 +152,12 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	clientDir := filepath.Join(root, "clients")
 	client := filepath.Join(clientDir, "omp-launcher.exe")
 	for name, contents := range map[string]string{
-		"clients/omp-launcher.exe":   "launcher",
-		multiplayer.ConfigPath:       `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
-		"modloader.asi":              "loader",
-		"modloader/.data/config.ini": "[Config]\nEnableMenu = true\nEnablePlugins = true\n",
-		"samp.dll":                   "MZoriginal",
+		"clients/omp-launcher.exe":                "launcher",
+		multiplayer.ConfigPath:                    `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
+		"modloader.asi":                           "loader",
+		"modloader/.downgrader":                   `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi": "silent patch",
+		"samp.dll":                                "MZoriginal",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -180,15 +191,14 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	}
 	var got []string
 	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, dir, exe string, args ...string) error {
-		if data, err := os.ReadFile(filepath.Join(root, "modloader.asi")); err != nil || string(data) != "loader" {
-			t.Fatalf("Mod Loader was not active during open.mp launch: %q, %v", data, err)
+		if _, err := os.Stat(filepath.Join(root, "modloader.asi")); !os.IsNotExist(err) {
+			t.Fatalf("Mod Loader remained active during open.mp launch: %v", err)
 		}
 		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
 			t.Fatalf("managed SA-MP client was not active during open.mp launch: %q, %v", data, err)
 		}
-		config, err := os.ReadFile(filepath.Join(root, "modloader", ".data", "config.ini"))
-		if err != nil || !regexp.MustCompile(`(?im)^\s*EnableMenu\s*=\s*false\b`).Match(config) {
-			t.Fatalf("Mod Loader menu remained enabled during open.mp launch: %q, %v", config, err)
+		if data, err := os.ReadFile(filepath.Join(root, "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
+			t.Fatalf("SilentPatch was not staged directly: %q, %v", data, err)
 		}
 		got = append([]string{dir, exe}, args...)
 		return nil
@@ -207,17 +217,84 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	if data, err := os.ReadFile(filepath.Join(root, "bass.dll")); err != nil || string(data) != "shared" {
 		t.Fatalf("managed shared file was not installed: %q, %v", data, err)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "modloader", ".data", "config.ini")); err != nil || !regexp.MustCompile(`(?im)^\s*EnableMenu\s*=\s*true\b`).Match(data) {
-		t.Fatalf("Mod Loader menu setting was not restored: %q, %v", data, err)
+	if data, err := os.ReadFile(filepath.Join(root, "modloader.asi")); err != nil || string(data) != "loader" {
+		t.Fatalf("Mod Loader was not restored: %q, %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "SilentPatchSA.asi")); !os.IsNotExist(err) {
+		t.Fatalf("temporary SilentPatch file remained after open.mp launch: %v", err)
 	}
 }
 
-func TestSinglePlayerRecoversInterruptedModLoaderMenuChange(t *testing.T) {
+func TestSinglePlayerRecoversInterruptedMultiplayerOverlay(t *testing.T) {
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		entrypoint.RealGameExecutable:                    "game",
+		"modloader/.downgrader":                          `{"schema_version":2,"installed_mods":["SilentPatch"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi":        "silent patch",
+		".downgrader/multiplayer/modloader.asi.disabled": "loader",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stager := &Runtime{GameDir: root}
+	if err := stager.stageMultiplayerOverlay(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, _, _ string, _ ...string) error {
+		if _, err := os.Stat(filepath.Join(root, "SilentPatchSA.asi")); !os.IsNotExist(err) {
+			t.Fatalf("stale multiplayer overlay was not recovered before launch: %v", err)
+		}
+		if data, err := os.ReadFile(filepath.Join(root, "modloader.asi")); err != nil || string(data) != "loader" {
+			t.Fatalf("stale Mod Loader state was not recovered before launch: %q, %v", data, err)
+		}
+		return nil
+	}}
+	if err := runtime.SinglePlayer(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOverlayDoesNotOverwriteUnexpectedChanges(t *testing.T) {
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"modloader/.downgrader":                   `{"schema_version":2,"installed_mods":["SilentPatch"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi": "silent patch",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime := &Runtime{GameDir: root}
+	if err := runtime.stageMultiplayerOverlay(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "SilentPatchSA.asi")
+	if err := os.WriteFile(target, []byte("changed elsewhere"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.restoreMultiplayerOverlay(false); err == nil {
+		t.Fatal("unexpected file change was overwritten")
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "changed elsewhere" {
+		t.Fatalf("unexpected file change was not preserved: %q, %v", data, err)
+	}
+}
+
+func TestSinglePlayerRecoversLegacyMenuConfigBackup(t *testing.T) {
 	root := t.TempDir()
 	for name, contents := range map[string]string{
 		entrypoint.RealGameExecutable:                  "game",
-		"modloader/.data/config.ini":                   "[Config]\nEnableMenu = false\n",
-		".downgrader/multiplayer/modloader-config.ini": "[Config]\nEnableMenu = true\n",
+		"modloader/.data/config.ini":                   "EnableMenu = false\n",
+		".downgrader/multiplayer/modloader-config.ini": "EnableMenu = true\n",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -229,8 +306,8 @@ func TestSinglePlayerRecoversInterruptedModLoaderMenuChange(t *testing.T) {
 	}
 	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, _, _ string, _ ...string) error {
 		data, err := os.ReadFile(filepath.Join(root, "modloader", ".data", "config.ini"))
-		if err != nil || string(data) != "[Config]\nEnableMenu = true\n" {
-			t.Fatalf("stale Mod Loader menu setting was not recovered before launch: %q, %v", data, err)
+		if err != nil || string(data) != "EnableMenu = true\n" {
+			t.Fatalf("legacy Mod Loader config was not recovered: %q, %v", data, err)
 		}
 		return nil
 	}}
