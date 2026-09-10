@@ -139,8 +139,15 @@ func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
 		if !tracker.Has(candidate.name) {
 			continue
 		}
+		// Current Widescreen Fix builds overflow GTA's stack under Proton when
+		// SA-MP is injected alongside either GInput or Framerate Vigilante.
+		// Keep it in Mod Loader for single-player and retain the other selected
+		// modifications in SA-MP/open.mp. Native Windows does not use this filter.
+		if candidate.name == "Widescreen Fixes" && RunningUnderProton() {
+			continue
+		}
 		root := filepath.Join(runtime.GameDir, "modloader", candidate.directory)
-		if err := runtime.collectMultiplayerMod(ctx, candidate.name, root, sources); err != nil {
+		if err := runtime.collectMultiplayerMod(ctx, root, sources); err != nil {
 			return fmt.Errorf("prepare %s for multiplayer: %w", candidate.name, err)
 		}
 	}
@@ -190,7 +197,7 @@ func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
 	return nil
 }
 
-func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, modName, root string, sources map[string]multiplayerOverlayEntry) error {
+func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, root string, sources map[string]multiplayerOverlayEntry) error {
 	info, err := os.Stat(root)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -235,18 +242,10 @@ func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, modName, root
 		if err != nil {
 			return err
 		}
-		destination := relative
-		if modName == "Widescreen Fixes" && strings.EqualFold(relative, "GTASA.WidescreenFix.asi") {
-			// Root ASI loading under Wine is alphabetical. Project2DFX and
-			// SkyGFX expect Widescreen Fix to install its hooks after theirs,
-			// which was also the effective order inside the curated Mod Loader
-			// directories. Keep the INI at its original name and order only the ASI.
-			destination = "zz_GTASA.WidescreenFix.asi"
-		}
 		// Later catalog entries take precedence, matching their installation
 		// order when two curated packages intentionally target the same file.
-		sources[strings.ToLower(destination)] = multiplayerOverlayEntry{
-			Path:         destination,
+		sources[strings.ToLower(relative)] = multiplayerOverlayEntry{
+			Path:         relative,
 			Source:       path,
 			StagedSHA256: digest,
 		}

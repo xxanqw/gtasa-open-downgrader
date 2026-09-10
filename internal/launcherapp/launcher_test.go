@@ -56,6 +56,7 @@ func TestSinglePlayerNeverFallsBackToLauncher(t *testing.T) {
 
 func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("STEAM_COMPAT_DATA_PATH", filepath.Join(root, "prefix"))
 	for name, contents := range map[string]string{
 		"samp.exe":              "samp.exe",
 		"samp.dll":              "samp.dll",
@@ -110,14 +111,11 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 			if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "mod stream" {
 				t.Fatalf("replacement file was not staged: %q, %v", data, err)
 			}
-			if data, err := os.ReadFile(filepath.Join(root, "zz_GTASA.WidescreenFix.asi")); err != nil || string(data) != "widescreen" {
-				t.Fatalf("Widescreen Fix was not ordered after the other ASI plugins: %q, %v", data, err)
-			}
 			if _, err := os.Stat(filepath.Join(root, "GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
-				t.Fatalf("unordered Widescreen Fix ASI was staged: %v", err)
+				t.Fatalf("Proton-incompatible Widescreen Fix ASI was staged: %v", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(root, "GTASA.WidescreenFix.ini")); err != nil || string(data) != "settings" {
-				t.Fatalf("Widescreen Fix settings changed names: %q, %v", data, err)
+			if _, err := os.Stat(filepath.Join(root, "GTASA.WidescreenFix.ini")); !os.IsNotExist(err) {
+				t.Fatalf("Proton-incompatible Widescreen Fix settings were staged: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(root, "ReadMe.txt")); !os.IsNotExist(err) {
 				t.Fatalf("documentation was staged into the game root: %v", err)
@@ -138,11 +136,37 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "SilentPatchSA.asi")); !os.IsNotExist(err) {
 		t.Fatalf("temporary SilentPatch file remained after launch: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "zz_GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
-		t.Fatalf("ordered Widescreen Fix ASI remained after launch: %v", err)
-	}
 	if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "original stream" {
 		t.Fatalf("overwritten file was not restored: %q, %v", data, err)
+	}
+}
+
+func TestNativeOverlayKeepsWidescreenFix(t *testing.T) {
+	t.Setenv("STEAM_COMPAT_DATA_PATH", "")
+	t.Setenv("STEAM_COMPAT_CLIENT_INSTALL_PATH", "")
+	t.Setenv("PROTON_VERSION", "")
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"modloader/.downgrader":                           `{"schema_version":2,"installed_mods":["Widescreen Fixes"]}`,
+		"modloader/WidescreenFix/GTASA.WidescreenFix.asi": "widescreen",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime := New(root)
+	if err := runtime.stageMultiplayerOverlay(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "GTASA.WidescreenFix.asi")); err != nil || string(data) != "widescreen" {
+		t.Fatalf("native Widescreen Fix was not staged: %q, %v", data, err)
+	}
+	if err := runtime.restoreMultiplayerOverlay(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -182,6 +206,7 @@ func TestMTATemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 
 func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("STEAM_COMPAT_DATA_PATH", filepath.Join(root, "prefix"))
 	clientDir := filepath.Join(root, "clients")
 	client := filepath.Join(clientDir, "omp-launcher.exe")
 	for name, contents := range map[string]string{
