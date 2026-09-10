@@ -2,6 +2,7 @@ package launcherapp
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -60,10 +61,12 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 		"samp.dll":              "samp.dll",
 		"modloader.asi":         "modloader.asi",
 		"stream.ini":            "original stream",
-		"modloader/.downgrader": `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch","SkyGFX"]}`,
-		"modloader/SilentPatch/SilentPatchSA.asi": "silent patch",
-		"modloader/SilentPatch/ReadMe.txt":        "documentation",
-		"modloader/SkyGFX/stream.ini":             "mod stream",
+		"modloader/.downgrader": `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch","Widescreen Fixes","SkyGFX"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi":         "silent patch",
+		"modloader/SilentPatch/ReadMe.txt":                "documentation",
+		"modloader/WidescreenFix/GTASA.WidescreenFix.asi": "widescreen",
+		"modloader/WidescreenFix/GTASA.WidescreenFix.ini": "settings",
+		"modloader/SkyGFX/stream.ini":                     "mod stream",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -73,8 +76,26 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	snapshotCalls := 0
 	runtime := &Runtime{
 		GameDir: root,
+		snapshotGameProcesses: func() (gameProcessSet, error) {
+			snapshotCalls++
+			if snapshotCalls == 1 {
+				return gameProcessSet{}, nil
+			}
+			return gameProcessSet{41: {}}, nil
+		},
+		waitForGameProcess: func(_ context.Context, before gameProcessSet, launcherDone <-chan struct{}) (bool, error) {
+			<-launcherDone
+			if _, ok := before[41]; !ok {
+				t.Fatal("pre-launch GTA process snapshot was not passed to waiter")
+			}
+			if data, err := os.ReadFile(filepath.Join(root, "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
+				t.Fatalf("multiplayer overlay was removed before GTA exited: %q, %v", data, err)
+			}
+			return true, nil
+		},
 		Execute: func(_ context.Context, _, _ string, _ ...string) error {
 			active, disabled := runtimePaths(root)
 			if _, err := os.Stat(active); !os.IsNotExist(err) {
@@ -88,6 +109,15 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 			}
 			if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "mod stream" {
 				t.Fatalf("replacement file was not staged: %q, %v", data, err)
+			}
+			if data, err := os.ReadFile(filepath.Join(root, "zz_GTASA.WidescreenFix.asi")); err != nil || string(data) != "widescreen" {
+				t.Fatalf("Widescreen Fix was not ordered after the other ASI plugins: %q, %v", data, err)
+			}
+			if _, err := os.Stat(filepath.Join(root, "GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
+				t.Fatalf("unordered Widescreen Fix ASI was staged: %v", err)
+			}
+			if data, err := os.ReadFile(filepath.Join(root, "GTASA.WidescreenFix.ini")); err != nil || string(data) != "settings" {
+				t.Fatalf("Widescreen Fix settings changed names: %q, %v", data, err)
 			}
 			if _, err := os.Stat(filepath.Join(root, "ReadMe.txt")); !os.IsNotExist(err) {
 				t.Fatalf("documentation was staged into the game root: %v", err)
@@ -107,6 +137,9 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "SilentPatchSA.asi")); !os.IsNotExist(err) {
 		t.Fatalf("temporary SilentPatch file remained after launch: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "zz_GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
+		t.Fatalf("ordered Widescreen Fix ASI remained after launch: %v", err)
 	}
 	if data, err := os.ReadFile(filepath.Join(root, "stream.ini")); err != nil || string(data) != "original stream" {
 		t.Fatalf("overwritten file was not restored: %q, %v", data, err)
@@ -190,7 +223,15 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 		}
 	}
 	var got []string
-	runtime := &Runtime{GameDir: root, Execute: func(_ context.Context, dir, exe string, args ...string) error {
+	runtime := &Runtime{GameDir: root, snapshotGameProcesses: func() (gameProcessSet, error) {
+		return gameProcessSet{}, nil
+	}, waitForGameProcess: func(_ context.Context, _ gameProcessSet, launcherDone <-chan struct{}) (bool, error) {
+		<-launcherDone
+		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
+			t.Fatalf("open.mp samp.dll was restored before GTA exited: %q, %v", data, err)
+		}
+		return true, nil
+	}, Execute: func(_ context.Context, dir, exe string, args ...string) error {
 		if _, err := os.Stat(filepath.Join(root, "modloader.asi")); !os.IsNotExist(err) {
 			t.Fatalf("Mod Loader remained active during open.mp launch: %v", err)
 		}
@@ -201,7 +242,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 			t.Fatalf("SilentPatch was not staged directly: %q, %v", data, err)
 		}
 		got = append([]string{dir, exe}, args...)
-		return nil
+		return errors.New("bootstrap returned a Wine status after starting GTA")
 	}}
 	connection := multiplayer.OpenMPConnection{Host: "server.example", Port: "7777", Nickname: "Player", Password: "secret", ClientVersion: "037R5"}
 	if err := runtime.OpenMP(context.Background(), connection); err != nil {
@@ -281,7 +322,7 @@ func TestOverlayDoesNotOverwriteUnexpectedChanges(t *testing.T) {
 	if err := os.WriteFile(target, []byte("changed elsewhere"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.restoreMultiplayerOverlay(false); err == nil {
+	if err := runtime.restoreMultiplayerOverlay(); err == nil {
 		t.Fatal("unexpected file change was overwritten")
 	}
 	if data, err := os.ReadFile(target); err != nil || string(data) != "changed elsewhere" {

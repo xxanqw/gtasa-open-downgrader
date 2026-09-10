@@ -17,13 +17,22 @@ import (
 
 type Executor func(context.Context, string, string, ...string) error
 
+type gameProcessSet map[uint32]struct{}
+
 type Runtime struct {
-	GameDir string
-	Execute Executor
+	GameDir               string
+	Execute               Executor
+	snapshotGameProcesses func() (gameProcessSet, error)
+	waitForGameProcess    func(context.Context, gameProcessSet, <-chan struct{}) (bool, error)
 }
 
 func New(gameDir string) *Runtime {
-	return &Runtime{GameDir: gameDir, Execute: execute}
+	return &Runtime{
+		GameDir:               gameDir,
+		Execute:               execute,
+		snapshotGameProcesses: snapshotGameProcesses,
+		waitForGameProcess:    waitForSpawnedGame,
+	}
 }
 
 func RunningUnderProton() bool {
@@ -88,8 +97,10 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
 		return err
 	}
-	return runtime.runWithMultiplayerMods(ctx, func() error {
+	return runtime.runWithMultiplayerModsAndCleanup(ctx, func() error {
 		return runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
+	}, func() error {
+		return runtime.restoreOpenMPSAMP()
 	})
 }
 
@@ -161,19 +172,25 @@ func (runtime *Runtime) runWithOpenMPSAMP(ctx context.Context, client multiplaye
 	}
 	if hadOriginal {
 		if err := os.Rename(active, backup); err != nil {
-			_ = runtime.restoreOpenMPSAMP(false)
+			_ = runtime.restoreOpenMPSAMP()
 			return fmt.Errorf("preserve existing samp.dll: %w", err)
 		}
 	}
 	if err := fsutil.CopyFile(ctx, managed, active); err != nil {
-		return errors.Join(fmt.Errorf("install selected open.mp SA-MP client: %w", err), runtime.restoreOpenMPSAMP(false))
+		return errors.Join(fmt.Errorf("install selected open.mp SA-MP client: %w", err), runtime.restoreOpenMPSAMP())
 	}
-	runErr := runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
-	return errors.Join(runErr, runtime.restoreOpenMPSAMP(runErr == nil))
+	return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 }
 
 func (runtime *Runtime) restoreCompatibility() error {
-	return errors.Join(runtime.restoreMultiplayerOverlay(false), runtime.restoreOpenMPSAMP(false), runtime.restoreModLoader(), runtime.restoreLegacyModLoaderMenu())
+	processes, err := runtime.gameProcessSnapshot()
+	if err != nil {
+		return fmt.Errorf("inspect running GTA processes: %w", err)
+	}
+	if len(processes) != 0 {
+		return fmt.Errorf("Grand Theft Auto: San Andreas is already running")
+	}
+	return errors.Join(runtime.restoreMultiplayerOverlay(), runtime.restoreOpenMPSAMP(), runtime.restoreModLoader(), runtime.restoreLegacyModLoaderMenu())
 }
 
 // restoreLegacyModLoaderMenu recovers the one config backup created by builds
@@ -195,11 +212,10 @@ func (runtime *Runtime) restoreLegacyModLoaderMenu() error {
 	return nil
 }
 
-// restoreOpenMPSAMP restores the game-local client before a new launch. After
-// open.mp successfully injects the managed DLL, Wine keeps that file locked
-// until GTA exits. In that one case, leave the verified state and backup in
-// place; the next launcher start performs the strict restoration.
-func (runtime *Runtime) restoreOpenMPSAMP(allowDeferred bool) error {
+// restoreOpenMPSAMP restores the game-local client before a new launch or after
+// the launched GTA process has exited. Older launcher builds attempted this as
+// soon as the open.mp bootstrap returned, while GTA still had the DLL loaded.
+func (runtime *Runtime) restoreOpenMPSAMP() error {
 	active, backup, statePath := runtime.openMPSAMPPaths()
 	data, err := os.ReadFile(statePath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -228,9 +244,6 @@ func (runtime *Runtime) restoreOpenMPSAMP(allowDeferred bool) error {
 		}
 		if digest == state.ManagedSHA256 {
 			if err := os.Remove(active); err != nil {
-				if allowDeferred {
-					return nil
-				}
 				return fmt.Errorf("remove temporary open.mp samp.dll: %w", err)
 			}
 		} else if backupExists {

@@ -57,18 +57,69 @@ func (runtime *Runtime) multiplayerOverlayPaths() (state, backup string) {
 // each tracked mod directory are staged directly into the game directory, where
 // Silent ASI Loader and the game can load them without Mod Loader's hooks.
 func (runtime *Runtime) runWithMultiplayerMods(ctx context.Context, run func() error) error {
+	return runtime.runWithMultiplayerModsAndCleanup(ctx, run, nil)
+}
+
+func (runtime *Runtime) runWithMultiplayerModsAndCleanup(ctx context.Context, run func() error, cleanup func() error) error {
+	before, err := runtime.gameProcessSnapshot()
+	if err != nil {
+		return fmt.Errorf("inspect running GTA processes: %w", err)
+	}
 	if _, err := runtime.disableModLoader(); err != nil {
 		return err
 	}
 	if err := runtime.stageMultiplayerOverlay(ctx); err != nil {
 		return errors.Join(err, runtime.restoreModLoader())
 	}
-	runErr := run()
-	// Wine can keep loaded DLLs open briefly after a launcher process exits.
-	// Retain the verified state in that case and restore it strictly next time.
-	restoreErr := runtime.restoreMultiplayerOverlay(true)
+	runDone := make(chan error, 1)
+	launcherDone := make(chan struct{})
+	go func() {
+		runDone <- run()
+		close(launcherDone)
+	}()
+	started, waitErr := runtime.waitForSpawnedGame(ctx, before, launcherDone)
+	if waitErr != nil {
+		// The game may still have these files mapped. Preserve the complete
+		// transaction for restoreCompatibility on the next safe launcher run.
+		var runErr error
+		select {
+		case runErr = <-runDone:
+		default:
+		}
+		return errors.Join(runErr, fmt.Errorf("wait for GTA to exit: %w", waitErr))
+	}
+	var runErr error
+	if started {
+		// Bootstrap programs can outlive GTA or return a Wine status even though
+		// they started it successfully. Observing GTA is authoritative.
+		select {
+		case <-runDone:
+		default:
+		}
+	} else {
+		runErr = <-runDone
+	}
+	var cleanupErr error
+	if cleanup != nil {
+		cleanupErr = cleanup()
+	}
+	restoreErr := runtime.restoreMultiplayerOverlay()
 	loaderErr := runtime.restoreModLoader()
-	return errors.Join(runErr, restoreErr, loaderErr)
+	return errors.Join(runErr, cleanupErr, restoreErr, loaderErr)
+}
+
+func (runtime *Runtime) gameProcessSnapshot() (gameProcessSet, error) {
+	if runtime.snapshotGameProcesses == nil {
+		return snapshotGameProcesses()
+	}
+	return runtime.snapshotGameProcesses()
+}
+
+func (runtime *Runtime) waitForSpawnedGame(ctx context.Context, before gameProcessSet, launcherDone <-chan struct{}) (bool, error) {
+	if runtime.waitForGameProcess == nil {
+		return waitForSpawnedGame(ctx, before, launcherDone)
+	}
+	return runtime.waitForGameProcess(ctx, before, launcherDone)
 }
 
 func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
@@ -89,7 +140,7 @@ func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
 			continue
 		}
 		root := filepath.Join(runtime.GameDir, "modloader", candidate.directory)
-		if err := runtime.collectMultiplayerMod(ctx, root, sources); err != nil {
+		if err := runtime.collectMultiplayerMod(ctx, candidate.name, root, sources); err != nil {
 			return fmt.Errorf("prepare %s for multiplayer: %w", candidate.name, err)
 		}
 	}
@@ -133,13 +184,13 @@ func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
 	for _, entry := range state.Entries {
 		target, _ := fsutil.Join(runtime.GameDir, entry.Path)
 		if err := fsutil.CopyFile(ctx, entry.Source, target); err != nil {
-			return errors.Join(fmt.Errorf("stage %s for multiplayer: %w", entry.Path, err), runtime.restoreMultiplayerOverlay(false))
+			return errors.Join(fmt.Errorf("stage %s for multiplayer: %w", entry.Path, err), runtime.restoreMultiplayerOverlay())
 		}
 	}
 	return nil
 }
 
-func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, root string, sources map[string]multiplayerOverlayEntry) error {
+func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, modName, root string, sources map[string]multiplayerOverlayEntry) error {
 	info, err := os.Stat(root)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -184,10 +235,18 @@ func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, root string, 
 		if err != nil {
 			return err
 		}
+		destination := relative
+		if modName == "Widescreen Fixes" && strings.EqualFold(relative, "GTASA.WidescreenFix.asi") {
+			// Root ASI loading under Wine is alphabetical. Project2DFX and
+			// SkyGFX expect Widescreen Fix to install its hooks after theirs,
+			// which was also the effective order inside the curated Mod Loader
+			// directories. Keep the INI at its original name and order only the ASI.
+			destination = "zz_GTASA.WidescreenFix.asi"
+		}
 		// Later catalog entries take precedence, matching their installation
 		// order when two curated packages intentionally target the same file.
-		sources[strings.ToLower(relative)] = multiplayerOverlayEntry{
-			Path:         relative,
+		sources[strings.ToLower(destination)] = multiplayerOverlayEntry{
+			Path:         destination,
 			Source:       path,
 			StagedSHA256: digest,
 		}
@@ -195,7 +254,7 @@ func (runtime *Runtime) collectMultiplayerMod(ctx context.Context, root string, 
 	})
 }
 
-func (runtime *Runtime) restoreMultiplayerOverlay(allowDeferred bool) error {
+func (runtime *Runtime) restoreMultiplayerOverlay() error {
 	statePath, backupRoot := runtime.multiplayerOverlayPaths()
 	data, err := os.ReadFile(statePath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -243,15 +302,9 @@ func (runtime *Runtime) restoreMultiplayerOverlay(allowDeferred bool) error {
 		if entry.HadOriginal {
 			backup := filepath.Join(backupRoot, filepath.FromSlash(entry.Path))
 			if restoreErr := fsutil.CopyFile(context.Background(), backup, target); restoreErr != nil {
-				if allowDeferred {
-					return nil
-				}
 				return fmt.Errorf("restore %s after multiplayer: %w", entry.Path, restoreErr)
 			}
 		} else if removeErr := os.Remove(target); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			if allowDeferred {
-				return nil
-			}
 			return fmt.Errorf("remove temporary multiplayer mod %s: %w", entry.Path, removeErr)
 		}
 	}
