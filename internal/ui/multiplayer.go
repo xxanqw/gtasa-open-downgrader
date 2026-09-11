@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,51 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
+
+const (
+	linuxMultiplayerNotice   = "Linux multiplayer support is experimental and not considered stable. It exists to make Windows multiplayer clients easier to install and run through Proton. The Steam launcher must be enabled for SA-MP and open.mp to work correctly."
+	windowsMultiplayerNotice = "The Steam launcher is optional on Windows. It provides one easy place to start single-player or multiplayer, and Steam counts the multiplayer session toward your playtime."
+)
+
+type multiplayerNoticeTheme struct{ fyne.Theme }
+
+func (t multiplayerNoticeTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if name == theme.ColorNameWarning {
+		if variant == theme.VariantLight {
+			return color.NRGBA{R: 130, G: 86, B: 0, A: 255}
+		}
+		return color.NRGBA{R: 246, G: 194, B: 66, A: 255}
+	}
+	return t.Theme.Color(name, variant)
+}
+
+func multiplayerPlatformNotice(goos string) (string, bool) {
+	if goos == "linux" {
+		return linuxMultiplayerNotice, true
+	}
+	if goos == "windows" {
+		return windowsMultiplayerNotice, false
+	}
+	return "", false
+}
+
+func (w *Window) multiplayerNotice(goos string) fyne.CanvasObject {
+	text, warning := multiplayerPlatformNotice(goos)
+	if text == "" {
+		return nil
+	}
+	label := widget.NewLabel(text)
+	label.Wrapping = fyne.TextWrapWord
+	if !warning {
+		return container.New(layout.NewCustomPaddedLayout(4, 6, 4, 4), label)
+	}
+	label.Importance = widget.WarningImportance
+	note := container.NewBorder(nil, nil, widget.NewIcon(theme.WarningIcon()), nil, label)
+	return container.NewThemeOverride(
+		container.New(layout.NewCustomPaddedLayout(5, 7, 4, 4), note),
+		multiplayerNoticeTheme{Theme: w.app.Settings().Theme()},
+	)
+}
 
 func (w *Window) multiplayer() {
 	root := w.scanPath
@@ -91,8 +137,11 @@ func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, enviro
 		))
 		sections := []fyne.CanvasObject{
 			container.New(layout.NewCustomPaddedLayout(2, 5, 4, 4), launcherBody),
-			widget.NewSeparator(),
 		}
+		if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
+			sections = append(sections, notice)
+		}
+		sections = append(sections, widget.NewSeparator())
 		clientHeading := container.NewHBox(widget.NewLabelWithStyle("Multiplayer clients", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 		if compatibility != "" {
 			clientHeading.Add(widget.NewLabel("· " + compatibility))

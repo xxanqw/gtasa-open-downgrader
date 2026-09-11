@@ -1,16 +1,50 @@
 package ui
 
 import (
+	"image/color"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 )
+
+func TestMultiplayerPlatformNoticeExplainsLauncherBehavior(t *testing.T) {
+	linux, warning := multiplayerPlatformNotice("linux")
+	for _, want := range []string{"experimental", "not considered stable", "must be enabled"} {
+		if !strings.Contains(linux, want) {
+			t.Errorf("Linux notice does not explain %q", want)
+		}
+	}
+	if !warning {
+		t.Error("Linux notice is not marked as a warning")
+	}
+
+	windows, warning := multiplayerPlatformNotice("windows")
+	for _, want := range []string{"optional on Windows", "Steam counts", "playtime"} {
+		if !strings.Contains(windows, want) {
+			t.Errorf("Windows notice does not explain %q", want)
+		}
+	}
+	if warning {
+		t.Error("Windows convenience note is marked as a warning")
+	}
+	if text, _ := multiplayerPlatformNotice("darwin"); text != "" {
+		t.Errorf("unexpected notice on unsupported platform: %q", text)
+	}
+}
+
+func TestMultiplayerWarningUsesYellowAccent(t *testing.T) {
+	accent := color.NRGBAModel.Convert(multiplayerNoticeTheme{Theme: theme.DefaultTheme()}.Color(theme.ColorNameWarning, theme.VariantDark)).(color.NRGBA)
+	if accent.R <= accent.B || accent.G <= accent.B {
+		t.Fatalf("warning accent is not yellow: %#v", accent)
+	}
+}
 
 func TestMultiplayerDialogKeepsClientActionsCompact(t *testing.T) {
 	a := test.NewApp()
