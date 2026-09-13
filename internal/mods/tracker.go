@@ -23,8 +23,9 @@ type Tracker struct {
 
 func (t Tracker) Legacy() bool { return t.Exists && t.Schema < 2 }
 func (t Tracker) Has(name string) bool {
+	name = canonicalModName(name)
 	for _, n := range t.Installed {
-		if n == name {
+		if canonicalModName(n) == name {
 			return true
 		}
 	}
@@ -53,9 +54,11 @@ func LoadTracker(root string) (Tracker, error) {
 	if t.Versions == nil {
 		t.Versions = map[string]Release{}
 	}
+	t.normalizeNames()
 	return t, nil
 }
 func (t *Tracker) Save(ctx context.Context, root, version string) error {
+	t.normalizeNames()
 	if t.Extra == nil {
 		t.Extra = map[string]json.RawMessage{}
 	}
@@ -78,16 +81,47 @@ func (t *Tracker) Save(ctx context.Context, root, version string) error {
 	return fsutil.Write(ctx, p, 0644, func(w io.Writer) error { _, e := w.Write(b); return e })
 }
 
+func canonicalModName(name string) string {
+	if name == legacySALtdRussian {
+		return SanLtdRussian
+	}
+	return name
+}
+
+func (t *Tracker) normalizeNames() {
+	seen := map[string]bool{}
+	names := make([]string, 0, len(t.Installed))
+	for _, name := range t.Installed {
+		name = canonicalModName(name)
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	t.Installed = names
+	if t.Versions == nil {
+		t.Versions = map[string]Release{}
+	}
+	if old, ok := t.Versions[legacySALtdRussian]; ok {
+		if _, current := t.Versions[SanLtdRussian]; !current {
+			t.Versions[SanLtdRussian] = old
+		}
+		delete(t.Versions, legacySALtdRussian)
+	}
+}
+
 // Selection is ordered so loaders are installed before dependent packages.
 func Selection(selected []string, t Tracker) []string {
 	wanted := map[string]bool{}
 	for _, n := range selected {
+		n = canonicalModName(n)
 		if Supported(n) {
 			wanted[n] = true
 		}
 	}
 	if t.Legacy() {
 		for _, n := range t.Installed {
+			n = canonicalModName(n)
 			if Supported(n) {
 				wanted[n] = true
 			}

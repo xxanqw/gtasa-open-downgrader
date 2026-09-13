@@ -25,9 +25,13 @@ func TestControlsRequireCurrentWritableScanAndLoaders(t *testing.T) {
 		t.Fatal("update enabled without installed mods")
 	}
 	w.installedModCount = 1
+	w.installedMods["SilentPatch"] = true
 	w.refreshEnabled()
 	if w.updateModsButton.Disabled() {
 		t.Fatal("update disabled for an installed mod")
+	}
+	if !w.uninstallButtons["SilentPatch"].Visible() || w.uninstallButtons["SilentPatch"].Disabled() || w.uninstallButtons["SkyGFX"].Visible() {
+		t.Fatal("uninstall icons do not reflect installed mods")
 	}
 	w.checks["SilentPatch"].SetChecked(true)
 	for _, name := range []string{"ASI Loader", "ModLoader"} {
@@ -37,7 +41,7 @@ func TestControlsRequireCurrentWritableScanAndLoaders(t *testing.T) {
 	}
 	w.readonly = true
 	w.refreshEnabled()
-	if !w.install.Disabled() || !w.downgrade.Disabled() {
+	if !w.install.Disabled() || !w.downgrade.Disabled() || !w.uninstallButtons["SilentPatch"].Disabled() {
 		t.Fatal("read-only mutation enabled")
 	}
 	w.readonly = false
@@ -64,6 +68,35 @@ func TestWindowLayout(t *testing.T) {
 		defer f.Close()
 		if e = png.Encode(f, w.window.Canvas().Capture()); e != nil {
 			t.Fatal(e)
+		}
+	}
+}
+
+func TestInstalledModActionsFitCompactWindow(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+	w := New(a)
+	defer w.jobs.Close()
+	w.window.Resize(fyne.NewSize(840, 560))
+	w.window.Show()
+	for name := range w.uninstallButtons {
+		w.installedMods[name] = true
+	}
+	w.refreshEnabled()
+	if w.modPanel.Size().Width > w.window.Canvas().Size().Width {
+		t.Fatal("mod actions overflow the compact window")
+	}
+	if w.uninstallButtons["ASI Loader"].Position().X < 100 {
+		t.Fatal("uninstall icon overlaps the mod name")
+	}
+	if path := os.Getenv("GTASA_MOD_UNINSTALL_SNAPSHOT"); path != "" {
+		file, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		if err := png.Encode(file, w.window.Canvas().Capture()); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

@@ -43,9 +43,10 @@ Contributions for other source versions are welcome through GitHub issues.
     - SkyGFX
     - Framerate Vigilante (60fps fix, using the current official ZIP package)
     - Frontend Mods
-    - SALtd Russian (SanLtd Team 0.56, installed from the manual ZIP without its executable or intro videos)
+    - SanLtd Russian (SanLtd Team 0.56, installed from the manual ZIP without its executable or intro videos)
 - **Mod Selection:** An always-visible compact panel above the file table lets you choose mods, check installed versions, and install or reinstall selected packages.
 - **Mod Updates:** **Update mods** checks installed packages and applies only packages whose release fingerprint has changed. Existing INI values and comments are retained while new upstream keys are added; other existing config formats are left untouched. Mods without a recorded release fingerprint need an explicit **Reinstall selected**. Updates leave files removed from an upstream archive in place, since older installations have no file manifest.
+- **Mod Uninstall:** Use the small remove icon beside an installed mod. Its known mod folder is moved to a dated directory under `backups/mods` before its tracker entry is removed. ASI Loader and ModLoader binaries can be removed only after dependent mods; shared configuration folders stay in place.
 - **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.
 - **Downgrader Tools:**
     - Apply the 4GB/Large Address Aware flag.

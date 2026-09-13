@@ -25,7 +25,7 @@ Baseline: Python v0.2.2, commit `cee6363`. All 21 existing unittest cases passed
 - Corrupt mod trackers produce an actionable error instead of silently forgetting installed state.
 - TLS certificate validation stays enabled. ShareMods anti-bot challenges are reported; use the official browser download and **Import mod archive** when challenged. Manual imports record an unknown upstream fingerprint until a normal reinstall.
 - Native binaries remain linked to platform graphics libraries. Fyne uses CGO; setting `GOOS` alone is not sufficient for a native cross-build. The bundled xdelta3 binaries are amd64 only.
-- SALtd Russian uses SanLtd Team 0.56 from a manual-install ZIP mirror because the project's own download links are temporarily disabled. It is isolated under ModLoader; the executable readme and translated intro videos are excluded for safety and startup compatibility.
+- SanLtd Russian uses SanLtd Team 0.56 from a manual-install ZIP mirror because the project's own download links are temporarily disabled. It is isolated under ModLoader; the executable readme and translated intro videos are excluded for safety and startup compatibility.
 - Mod installation can overwrite customized INI files, as before. Forced reinstall and legacy migration display explicit warnings. Mods are not removed by reverting the downgrade.
 - Individual files/packages are committed independently. Cancellation preserves completed work; reverting backups restores game files. The new package rollback is for runtime errors/cancellation, not a crash-safe multi-file transaction.
 - App updates do not silently choose another distribution variant. Unsigned upstream assets have transport/size checks but no independent signature; GitHub's SHA-256 digest is verified when present. Failed helper updates are logged next to the executable.
@@ -42,7 +42,7 @@ A real licensed game installation is still required for a complete downgrade-and
 - Go unit/integration fixtures: `go test ./...`, `go test -race ./...` and `go vet ./...` passed.
 - Native Linux Fyne window rendered under an isolated Xvfb display, scanned disposable files and exited cleanly after cancellation/shutdown. The actual offline binary also extracted its embedded patch set successfully.
 - The official iCloud archive downloaded and validated: 17 manifest files (one executable copy, 16 xdelta patches), approximately 847 MiB extracted.
-- All ten curated mod packages resolved, downloaded and installed into disposable directories successfully, including ShareMods and the SALtd manual ZIP mirror, using the opt-in live test below.
+- All ten curated mod packages resolved, downloaded and installed into disposable directories successfully, including ShareMods and the SanLtd manual ZIP mirror, using the opt-in live test below.
 - Windows amd64 online/offline GUI cross-builds succeeded with icon/manifest resources. Both online/offline AppImages packaged successfully; the online AppImage extraction launcher also ran successfully. Runtime Windows acceptance is still pending; cross-compilation does not validate Registry access, shortcuts, drivers or restart behavior.
 
 To repeat the live upstream check (downloads current packages into test temporary directories):

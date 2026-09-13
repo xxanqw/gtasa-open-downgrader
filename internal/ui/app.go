@@ -65,6 +65,8 @@ type Window struct {
 	transferLabel                                   string
 	updateButton                                    *appwidget.Button
 	modLabels                                       map[string]*widget.Label
+	uninstallButtons                                map[string]*appwidget.Button
+	installedMods                                   map[string]bool
 	modPanel                                        *fyne.Container
 	modsTitle                                       *widget.Label
 	multiplayerButton                               *appwidget.Button
@@ -118,7 +120,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		cache = os.TempDir()
 	}
 	cache = filepath.Join(cache, "gtasa-open-downgrader")
-	w := &Window{logs: journal, app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, warned: map[string]bool{}}
+	w := &Window{logs: journal, app: a, window: a.NewWindow("GTA SA Open Downgrader · " + updater.Version), jobs: jobs.New(), client: download.New(), cache: cache, checks: map[string]*widget.Check{}, modLabels: map[string]*widget.Label{}, uninstallButtons: map[string]*appwidget.Button{}, installedMods: map[string]bool{}, warned: map[string]bool{}}
 	if _, ok := w.window.(driver.NativeWindow); ok {
 		w.pickers = pickerBackend{available: zenity.IsAvailable, show: systemPicker}
 	}
@@ -131,6 +133,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.path.OnChanged = func(string) {
 		w.scanPath = ""
 		w.installedModCount = 0
+		w.installedMods = map[string]bool{}
 		w.generation++
 		w.rows = nil
 		if w.table != nil {
@@ -190,7 +193,11 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		state := compactLabel("Not installed")
 		state.Importance = widget.LowImportance
 		w.modLabels[name] = state
-		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(c, state), modGridTheme{a.Settings().Theme()}))
+		remove := appwidget.NewButtonWithIcon("", theme.DeleteIcon(), func() { w.uninstallMod(name) })
+		remove.Importance = widget.LowImportance
+		remove.Hide()
+		w.uninstallButtons[name] = remove
+		checkObjects = append(checkObjects, container.NewThemeOverride(container.NewVBox(container.NewBorder(nil, nil, nil, remove, c), state), modGridTheme{a.Settings().Theme()}))
 	}
 	w.downgrade = appwidget.NewButtonWithIcon("Downgrade game", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
@@ -295,6 +302,21 @@ func (w *Window) refreshEnabled() {
 	}
 	if w.installedModCount == 0 {
 		w.updateModsButton.Disable()
+	}
+	for name, button := range w.uninstallButtons {
+		if w.installedMods[name] {
+			button.Show()
+			if ready {
+				button.Enable()
+			} else {
+				button.Disable()
+			}
+		} else {
+			button.Hide()
+		}
+	}
+	if w.modPanel != nil {
+		w.modPanel.Refresh()
 	}
 	for _, c := range w.checks {
 		if ready {
@@ -472,9 +494,11 @@ func (w *Window) scan() {
 		w.logs.Record("INFO", fmt.Sprintf("Game scan: %s · %s · read-only=%t", root, result.Version, result.ReadOnly))
 		w.scanPath = root
 		w.installedModCount = 0
+		w.installedMods = map[string]bool{}
 		for _, name := range tracker.Installed {
 			if mods.Supported(name) {
 				w.installedModCount++
+				w.installedMods[name] = true
 			}
 		}
 		w.readonly = result.ReadOnly
@@ -605,6 +629,37 @@ func (w *Window) updateMods() {
 			}
 			w.info("No mod updates", message)
 		}
+	})
+}
+
+func (w *Window) uninstallMod(name string) {
+	root := w.scanPath
+	if root == "" || !w.installedMods[name] {
+		return
+	}
+	message := "Remove " + name + " from this game? Its known files will be moved into backups/mods before the installation record is removed. Files you added inside its mod folder will be backed up too."
+	if name == "ASI Loader" || name == "ModLoader" {
+		message = "Remove " + name + " from this game? Its loader binaries will be backed up. Shared mod folders and configuration files will stay in place. Remove dependent mods first."
+	}
+	w.confirm("Uninstall "+name, message, func(ok bool) {
+		if !ok {
+			return
+		}
+		var result mods.UninstallResult
+		w.run("Uninstalling "+name, func(ctx context.Context) error {
+			var err error
+			result, err = mods.Uninstall(ctx, root, name, updater.Version)
+			return err
+		}, func(err error) {
+			if err == nil {
+				if result.BackupDir != "" {
+					w.logs.Record("INFO", name+" uninstall backup: "+result.BackupDir)
+				} else {
+					w.logs.Record("INFO", name+" uninstall: known files already absent")
+				}
+			}
+			w.scan()
+		})
 	})
 }
 func (w *Window) modInstaller() mods.Installer {

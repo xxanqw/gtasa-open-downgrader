@@ -15,6 +15,7 @@ import (
 )
 
 func layout(mod, name string) string {
+	mod = canonicalModName(mod)
 	switch mod {
 	case "ASI Loader":
 		if name == "vorbisFile.dll" || name == "vorbisHooked.dll" || strings.HasPrefix(name, "scripts/") {
@@ -51,7 +52,7 @@ func layout(mod, name string) string {
 		}
 	case "Project 2DFX":
 		return "modloader/Project2DFX/" + name
-	case SALtdRussian:
+	case SanLtdRussian:
 		const prefix = "00 - Copy to game folder/"
 		if !strings.HasPrefix(name, prefix) {
 			return ""

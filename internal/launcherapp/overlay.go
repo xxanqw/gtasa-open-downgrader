@@ -31,7 +31,7 @@ var multiplayerModDirectories = []struct {
 	{mods.Framerate, "FramerateVigilante"},
 	{"GInput", "GInput"},
 	{"Project 2DFX", "Project2DFX"},
-	{mods.SALtdRussian, "SALtdRussian"},
+	{mods.SanLtdRussian, "SALtdRussian"},
 }
 
 type multiplayerOverlayEntry struct {
