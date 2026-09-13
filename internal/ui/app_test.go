@@ -14,13 +14,21 @@ func TestControlsRequireCurrentWritableScanAndLoaders(t *testing.T) {
 	defer a.Quit()
 	w := New(a)
 	defer w.jobs.Close()
-	if !w.downgrade.Disabled() || !w.install.Disabled() {
+	if !w.downgrade.Disabled() || !w.install.Disabled() || !w.updateModsButton.Disabled() {
 		t.Fatal("mutation enabled before scan")
 	}
 	w.path.SetText(t.TempDir())
 	w.scanPath = w.path.Text
 	w.patchDir = t.TempDir()
 	w.refreshEnabled()
+	if !w.updateModsButton.Disabled() {
+		t.Fatal("update enabled without installed mods")
+	}
+	w.installedModCount = 1
+	w.refreshEnabled()
+	if w.updateModsButton.Disabled() {
+		t.Fatal("update disabled for an installed mod")
+	}
 	w.checks["SilentPatch"].SetChecked(true)
 	for _, name := range []string{"ASI Loader", "ModLoader"} {
 		if !w.checks[name].Checked || !w.checks[name].Disabled() {

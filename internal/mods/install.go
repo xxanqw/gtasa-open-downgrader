@@ -75,6 +75,17 @@ func layout(mod, name string) string {
 // Extract stages and validates the whole package, then rolls back the overlay if
 // any write fails or is cancelled. A mod is tracked only after all writes succeed.
 func Extract(ctx context.Context, root, mod, archive, kind string) error {
+	return extract(ctx, root, mod, archive, kind, false)
+}
+
+// ExtractUpdate replaces package files in place while preserving existing
+// configuration. Supported INI files gain new upstream keys without losing
+// local values; unknown configuration formats are left untouched.
+func ExtractUpdate(ctx context.Context, root, mod, archive, kind string) error {
+	return extract(ctx, root, mod, archive, kind, true)
+}
+
+func extract(ctx context.Context, root, mod, archive, kind string, update bool) error {
 	if !Supported(mod) {
 		return fmt.Errorf("unknown mod %q", mod)
 	}
@@ -118,6 +129,7 @@ func Extract(ctx context.Context, root, mod, archive, kind string) error {
 		return fmt.Errorf("package contains no files for %s", mod)
 	}
 	existed := map[string]bool{}
+	var writes []string
 	for _, rel := range files {
 		dst, e := fsutil.Join(root, rel)
 		if e != nil {
@@ -125,15 +137,26 @@ func Extract(ctx context.Context, root, mod, archive, kind string) error {
 		}
 		if _, e = os.Stat(dst); e == nil {
 			existed[rel] = true
+			if update {
+				stage := filepath.Join(staged, filepath.FromSlash(rel))
+				write, err := prepareUpdateFile(ctx, dst, stage)
+				if err != nil {
+					return err
+				}
+				if !write {
+					continue
+				}
+			}
 			if e = fsutil.CopyFile(ctx, dst, filepath.Join(old, filepath.FromSlash(rel))); e != nil {
 				return e
 			}
 		} else if !os.IsNotExist(e) {
 			return e
 		}
+		writes = append(writes, rel)
 	}
 	var applied []string
-	for _, rel := range files {
+	for _, rel := range writes {
 		dst, err := fsutil.Join(root, rel)
 		if err == nil {
 			err = fsutil.CopyFile(ctx, filepath.Join(staged, filepath.FromSlash(rel)), dst)
@@ -176,6 +199,91 @@ type Installer struct {
 }
 type Event func(name, status string, done, total int64)
 
+type UpdateResult struct {
+	Updated, Current, Untracked int
+}
+
+// UpdateInstalled checks only recorded installations. Packages without a
+// fingerprint cannot be classified safely and require an explicit reinstall.
+func (i Installer) UpdateInstalled(ctx context.Context, root string, event Event) (UpdateResult, error) {
+	var result UpdateResult
+	tracker, err := LoadTracker(root)
+	if err != nil {
+		return result, err
+	}
+	resolver := NewResolver(i.Client)
+	resolve := i.Resolve
+	if resolve == nil {
+		resolve = resolver.Resolve
+	}
+	var failures []error
+	for _, name := range tracker.Installed {
+		if err = ctx.Err(); err != nil {
+			return result, err
+		}
+		if !Supported(name) {
+			continue
+		}
+		installed := tracker.Versions[name]
+		if installed.Fingerprint == "" {
+			result.Untracked++
+			if event != nil {
+				event(name, "Version untracked; reinstall manually", 0, 0)
+			}
+			continue
+		}
+		if event != nil {
+			event(name, "Checking for updates", 0, 0)
+		}
+		latest, resolveErr := resolve(ctx, name)
+		if resolveErr != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			failures = append(failures, fmt.Errorf("%s: %w", name, resolveErr))
+			if event != nil {
+				event(name, "Update check unavailable", 0, 0)
+			}
+			continue
+		}
+		if latest.Fingerprint == "" {
+			result.Untracked++
+			if event != nil {
+				event(name, "Release version untracked", 0, 0)
+			}
+			continue
+		}
+		if installed.Fingerprint == latest.Fingerprint {
+			result.Current++
+			if event != nil {
+				event(name, "Already up to date", 0, 0)
+			}
+			continue
+		}
+		if i.Install != nil {
+			err = i.Install(ctx, root, name, latest)
+		} else {
+			err = i.install(ctx, resolver, root, name, latest, event, true)
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			return result, errors.Join(append(failures, fmt.Errorf("%s: %w", name, err))...)
+		}
+		latest.InstalledAt = time.Now().UTC().Format(time.RFC3339)
+		tracker.Versions[name] = latest
+		if err = tracker.Save(context.Background(), root, i.AppVersion); err != nil {
+			return result, fmt.Errorf("record %s update: %w", name, err)
+		}
+		result.Updated++
+		if event != nil {
+			event(name, "Updated", 1, 1)
+		}
+	}
+	return result, errors.Join(failures...)
+}
+
 func (i Installer) InstallSelected(ctx context.Context, root string, selected []string, force bool, event Event) error {
 	tracker, e := LoadTracker(root)
 	if e != nil {
@@ -208,7 +316,7 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		if i.Install != nil {
 			err = i.Install(ctx, root, name, rel)
 		} else {
-			err = i.install(ctx, resolver, root, name, rel, event)
+			err = i.install(ctx, resolver, root, name, rel, event, false)
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
@@ -236,7 +344,7 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 	tracker.Schema = 2
 	return tracker.Save(context.Background(), root, i.AppVersion)
 }
-func (i Installer) install(ctx context.Context, r *Resolver, root, name string, rel Release, event Event) error {
+func (i Installer) install(ctx context.Context, r *Resolver, root, name string, rel Release, event Event, update bool) error {
 	raw, e := r.DownloadURL(ctx, rel)
 	if e != nil {
 		return e
@@ -257,6 +365,9 @@ func (i Installer) install(ctx context.Context, r *Resolver, root, name string, 
 	}
 	if event != nil {
 		event(name, "Installing", 0, 0)
+	}
+	if update {
+		return ExtractUpdate(ctx, root, name, archive, rel.ArchiveType)
 	}
 	return Extract(ctx, root, name, archive, rel.ArchiveType)
 }

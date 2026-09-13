@@ -37,36 +37,37 @@ import (
 )
 
 type Window struct {
-	logs                                  *applog.Journal
-	pickers                               pickerBackend
-	activePrompt                          func()
-	prompts                               []promptRequest
-	promptActive                          bool
-	app                                   fyne.App
-	window                                fyne.Window
-	jobs                                  *jobs.Group
-	client                                *download.Client
-	cache, patchDir                       string
-	path                                  *widget.Entry
-	status, version, modStatus            *widget.Label
-	progress                              *thinProgress
-	table                                 *readOnlyTable
-	rows                                  []game.Row
-	checks                                map[string]*widget.Check
-	controls                              []fyne.Disableable
-	cancelButton                          *appwidget.Button
-	downgrade, install, reinstall         *appwidget.Button
-	cancel                                context.CancelFunc
-	busy, closing, readonly, dependencies bool
-	generation                            int
-	warned                                map[string]bool
-	scanPath                              string
-	transferLabel                         string
-	updateButton                          *appwidget.Button
-	modLabels                             map[string]*widget.Label
-	modPanel                              *fyne.Container
-	modsTitle                             *widget.Label
-	multiplayerButton                     *appwidget.Button
+	logs                                            *applog.Journal
+	pickers                                         pickerBackend
+	activePrompt                                    func()
+	prompts                                         []promptRequest
+	promptActive                                    bool
+	app                                             fyne.App
+	window                                          fyne.Window
+	jobs                                            *jobs.Group
+	client                                          *download.Client
+	cache, patchDir                                 string
+	path                                            *widget.Entry
+	status, version, modStatus                      *widget.Label
+	progress                                        *thinProgress
+	table                                           *readOnlyTable
+	rows                                            []game.Row
+	checks                                          map[string]*widget.Check
+	controls                                        []fyne.Disableable
+	cancelButton                                    *appwidget.Button
+	downgrade, install, updateModsButton, reinstall *appwidget.Button
+	cancel                                          context.CancelFunc
+	busy, closing, readonly, dependencies           bool
+	generation                                      int
+	installedModCount                               int
+	warned                                          map[string]bool
+	scanPath                                        string
+	transferLabel                                   string
+	updateButton                                    *appwidget.Button
+	modLabels                                       map[string]*widget.Label
+	modPanel                                        *fyne.Container
+	modsTitle                                       *widget.Label
+	multiplayerButton                               *appwidget.Button
 }
 
 func Run(gamePath, patchPath string) {
@@ -129,6 +130,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.path.SetText(a.Preferences().String("game-path"))
 	w.path.OnChanged = func(string) {
 		w.scanPath = ""
+		w.installedModCount = 0
 		w.generation++
 		w.rows = nil
 		if w.table != nil {
@@ -193,7 +195,8 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.downgrade = appwidget.NewButtonWithIcon("Downgrade game", theme.MediaPlayIcon(), w.apply)
 	w.downgrade.Importance = widget.HighImportance
 	w.install = appwidget.NewButtonWithIcon("Install mods only", theme.DownloadIcon(), func() { w.installMods(false) })
-	w.reinstall = appwidget.NewButtonWithIcon("Reinstall / update mods", theme.ViewRefreshIcon(), func() { w.installMods(true) })
+	w.updateModsButton = appwidget.NewButtonWithIcon("Update mods", theme.ViewRefreshIcon(), w.updateMods)
+	w.reinstall = appwidget.NewButton("Reinstall selected", func() { w.installMods(true) })
 	tools := appwidget.NewButtonWithIcon("Tools", theme.SettingsIcon(), w.tools)
 	w.multiplayerButton = appwidget.NewButton("Multiplayer", w.multiplayer)
 	var more *appwidget.Button
@@ -217,7 +220,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.modsTitle.Importance = widget.HighImportance
 	table := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table}, w.table), fileTableTheme{a.Settings().Theme()})
 	fileActions := container.NewBorder(nil, nil, nil, w.downgrade, nil)
-	buttons := container.NewThemeOverride(container.NewHBox(w.install, w.reinstall), modActionTheme{a.Settings().Theme()})
+	buttons := container.NewThemeOverride(container.NewHBox(w.install, w.updateModsButton, w.reinstall), modActionTheme{a.Settings().Theme()})
 	modActions := container.NewBorder(nil, nil, nil, buttons, nil)
 	modMessage := container.NewThemeOverride(w.modStatus, modGridTheme{a.Settings().Theme()})
 	w.modPanel = newModPanel(container.NewVBox(container.NewGridWithColumns(5, checkObjects...), modMessage, modActions))
@@ -280,7 +283,7 @@ func (w *Window) refreshEnabled() {
 		}
 	}
 	ready := w.scanPath != "" && w.scanPath == w.path.Text && !w.readonly && !w.busy && !w.promptActive
-	for _, b := range []*appwidget.Button{w.downgrade, w.install, w.reinstall} {
+	for _, b := range []*appwidget.Button{w.downgrade, w.install, w.updateModsButton, w.reinstall} {
 		if ready {
 			b.Enable()
 		} else {
@@ -289,6 +292,9 @@ func (w *Window) refreshEnabled() {
 	}
 	if w.patchDir == "" {
 		w.downgrade.Disable()
+	}
+	if w.installedModCount == 0 {
+		w.updateModsButton.Disable()
 	}
 	for _, c := range w.checks {
 		if ready {
@@ -465,6 +471,12 @@ func (w *Window) scan() {
 		}
 		w.logs.Record("INFO", fmt.Sprintf("Game scan: %s · %s · read-only=%t", root, result.Version, result.ReadOnly))
 		w.scanPath = root
+		w.installedModCount = 0
+		for _, name := range tracker.Installed {
+			if mods.Supported(name) {
+				w.installedModCount++
+			}
+		}
 		w.readonly = result.ReadOnly
 		w.rows = result.Rows
 		w.table.Refresh()
@@ -521,7 +533,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 				continue
 			}
 			switch {
-			case installed.Fingerprint == "":
+			case installed.Fingerprint == "" || latest.Fingerprint == "":
 				unknown++
 			case installed.Fingerprint != latest.Fingerprint:
 				updates++
@@ -570,6 +582,29 @@ func (w *Window) installMods(force bool) {
 			}
 			w.scan()
 		})
+	})
+}
+
+func (w *Window) updateMods() {
+	root := w.scanPath
+	if root == "" || w.installedModCount == 0 {
+		return
+	}
+	var result mods.UpdateResult
+	w.run("Updating installed mods", func(ctx context.Context) error {
+		var err error
+		result, err = w.modInstaller().UpdateInstalled(ctx, root, w.modEvent)
+		return err
+	}, func(err error) {
+		w.logs.Record("INFO", fmt.Sprintf("Mod updates: %d updated, %d current, %d untracked", result.Updated, result.Current, result.Untracked))
+		w.scan()
+		if err == nil && result.Updated == 0 {
+			message := "All tracked installed mods are already current."
+			if result.Untracked > 0 {
+				message = fmt.Sprintf("No tracked updates found. %d mod(s) have no recorded version; use Reinstall selected if you want to refresh them.", result.Untracked)
+			}
+			w.info("No mod updates", message)
+		}
 	})
 }
 func (w *Window) modInstaller() mods.Installer {

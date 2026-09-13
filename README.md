@@ -45,7 +45,7 @@ Contributions for other source versions are welcome through GitHub issues.
     - Frontend Mods
     - SALtd Russian (SanLtd Team 0.56, installed from the manual ZIP without its executable or intro videos)
 - **Mod Selection:** An always-visible compact panel above the file table lets you choose mods, check installed versions, and install or reinstall selected packages.
-- **Mod Updates:** Records installed package versions and checks upstream releases in the background. The UI marks available updates and can force reinstall selected mods.
+- **Mod Updates:** **Update mods** checks installed packages and applies only packages whose release fingerprint has changed. Existing INI values and comments are retained while new upstream keys are added; other existing config formats are left untouched. Mods without a recorded release fingerprint need an explicit **Reinstall selected**. Updates leave files removed from an upstream archive in place, since older installations have no file manifest.
 - **Legacy Tracker Migration:** Older `.downgrader` files trigger a configuration-backup warning. Every recorded mod is reinstalled once so version tracking can be migrated to the current format.
 - **Downgrader Tools:**
     - Apply the 4GB/Large Address Aware flag.

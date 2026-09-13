@@ -19,6 +19,7 @@ func TestUpdateChecksPreserveInstalledState(t *testing.T) {
 		{name: "update", installed: mods.Release{Version: "v1.0", Fingerprint: "old"}, latest: mods.Release{Version: "v2.0", Fingerprint: "new"}, detail: "Update available: v2.0"},
 		{name: "offline", installed: mods.Release{Version: "v1.0"}, err: errors.New("offline"), detail: "Check unavailable"},
 		{name: "untracked", installed: mods.Release{Version: "v1.0"}, latest: mods.Release{Version: "v2.0", Fingerprint: "new"}, detail: "Version untracked"},
+		{name: "upstream untracked", installed: mods.Release{Version: "v1.0", Fingerprint: "old"}, latest: mods.Release{Version: "v2.0"}, detail: "Version untracked"},
 		{name: "legacy", detail: "version unknown"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

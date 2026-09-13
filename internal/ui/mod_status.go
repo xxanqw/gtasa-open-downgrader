@@ -16,7 +16,7 @@ func modUpdateLabel(installed, latest mods.Release, err error) string {
 	switch {
 	case err != nil:
 		return label + " · Check unavailable"
-	case installed.Fingerprint == "":
+	case installed.Fingerprint == "" || latest.Fingerprint == "":
 		if installed.Version != "" {
 			return label + " · Version untracked"
 		}
