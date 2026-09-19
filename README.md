@@ -10,21 +10,22 @@
 
 GTA SA Open Downgrader is an open-source tool inspired by the original RockstarNexus Downgrader. It converts a supported GTA San Andreas installation to v1.0 US and can install a curated set of community fixes and enhancements.
 
-The current patch set converts the **NewSteam R2 Global** release to **v1.0 US (Hoodlum)**. The app can identify several other executable versions, but identification does not mean that a downgrade patch is available for them.
+The current patch set converts the **NewSteam R2 (Global & German)** releases to **v1.0 US (Hoodlum)**. The app can identify several other executable versions, but identification does not mean that a downgrade patch is available for them.
+
+> [!NOTE]
+> **Final 0.2.x Release:** This is the last release of the legacy 0.2.x branch and will soon be replaced with a full Go rewrite in the 0.3.x branch.
 
 > [!WARNING]
-> I am looking for someone who has the **German NewSteam R2 release** of GTA San Andreas and can help add and verify support for it.
->
-> If you can help, please contact me at **[private@xxanqw.pp.ua](mailto:private@xxanqw.pp.ua)**.
+> Versions prior to v0.2.2 (`<0.2.2`) are discontinued entirely.
 
 Contributions for other source versions are welcome through GitHub issues.
 
 ## Patches
 
-- **Source Version:** NewSteam R2 Global
+- **Source Versions:** NewSteam R2 (Global & German)
 - **Target Version:** v1.0 US (Hoodlum)
-- **Download:** [Patches.zip (iCloud)](https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches)
-- **Resolver:** Downloads use the published [`icloud-resolver`](https://pypi.org/project/icloud-resolver/) package. The archive is validated and replaces existing patch assets only after successful extraction.
+- **Download:** [Patches_v2.zip](https://files.xxanqw.me/s/6jhSHGdr8N)
+- **Direct Download:** Downloads use direct HTTP streaming with server-provided metadata (following redirects and extracting filename/size from headers). The archive is validated and replaces existing patch assets only after successful extraction.
 
 ## Features
 
@@ -58,7 +59,7 @@ Release builds are provided in online and offline variants.
 - `gtasa-open-downgrader-windows.exe`
 - `gtasa-open-downgrader-linux.AppImage`
 
-When patch assets are missing, the app asks whether it should download them from iCloud. Internet access is also required for mod installation, mod update checks, and application updates.
+When patch assets are missing, the app asks whether it should download them. Internet access is also required for mod installation, mod update checks, and application updates.
 
 ### Offline
 

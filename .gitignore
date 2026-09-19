@@ -19,15 +19,18 @@ build/
 offline_build_linux/
 offline_build_win/
 *.AppImage
+AppDir*/
+runtime-x86_64
 *-installer.exe
 *-offline.zip
 update.ps1
 update.sh
 sfx_config.txt
-tmp_archive.7z
+*.7z
 
 # GTA SA Specific (Source and Target directories for patch generation)
 SA_STEAM/
+SA_STEAM_GERMAN/
 SA_10US/
 
 # OS specific

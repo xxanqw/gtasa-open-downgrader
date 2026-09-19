@@ -18,6 +18,9 @@ import mod_manager
 import patch_manager
 import updater
 
+PATCHES_URL = "https://files.xxanqw.me/s/6jhSHGdr8N"
+PATCHES_ICLOUD_URL = PATCHES_URL
+
 class DownloadThread(QThread):
     progress = Signal(int, int, float, float)
     completed = Signal(bool, str)
@@ -536,9 +539,9 @@ class ToolsDialog(QDialog):
             return
 
         self.accept()
-        icloud_url = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
+        patches_url = PATCHES_URL
         target_dir = os.path.abspath("Patches")
-        dlg = DownloadDialog(icloud_url, target_dir, self.parent)
+        dlg = DownloadDialog(patches_url, target_dir, self.parent)
         dlg.exec()
         if dlg.success:
             QMessageBox.information(self, "Success", "Patches downloaded successfully.")
@@ -686,11 +689,13 @@ def find_game_path():
 VERSION_HASHES = {
     "170b3a9108687b26da2d8901c6948a18": "v1.0 US (Hoodlum)",
     "2b5066bd4097ac2944ce6a9cf8fe5677": "v1.0 US (Hoodlum + LAA Patch)",
+    "4e99d762f44b1d5e7652dfa7e73d6b6f": "v1.0 US (Clean)",
     "667f799c4ba8c9e1054fccaea6d4259b": "v1.0 US (Compact)",
     "6c6160da9b175b66cf9127c86be57bf7": "v1.0 EU",
     "49dd417760484a18017805df46b308b8": "v1.0 EU (Alt)",
     "9f2d711dbf1fbbcda5ff9418a2cc1ef5": "v1.01 US",
     "25405921d1c47747fd01fd0bfe0a05ae": "v1.01 EU",
+    "d9cb35c898d3298ca904a63e10ee18d7": "NewSteam R2 (German)",
     "d9cb35c898d3298ca904a63e10ee18d9": "NewSteam R2 (German)",
     "5bfd4dd83989a8264de4b8e771f237fd": "NewSteam R2",
 }
@@ -719,7 +724,7 @@ class ScannerThread(QThread):
         except Exception:
             is_readonly = True
 
-        for exe_name in ["gta_sa.exe", "gta-sa.exe"]:
+        for exe_name in ["gta-sa.exe", "gta_sa.exe"]:
             if self.isInterruptionRequested():
                 return
             exe_path = os.path.join(self.path, exe_name)
@@ -761,13 +766,21 @@ class ScannerThread(QThread):
             current_hash = calculate_md5(full_path, self.isInterruptionRequested)
             if self.isInterruptionRequested():
                 return
-            target_hash = file_info["target_hash"]
-            source_hash = file_info["source_hash"]
+            target_hash = file_info.get("target_hash")
+            source_hash = file_info.get("source_hash")
+            sources = file_info.get("sources", [])
+
+            known_source_hashes = set()
+            if source_hash:
+                known_source_hashes.add(source_hash)
+            for s in sources:
+                if isinstance(s, dict) and "hash" in s and s["hash"]:
+                    known_source_hashes.add(s["hash"])
 
             status = "Ready"
             needs_patch = "No"
 
-            is_already_patched = (current_hash == target_hash)
+            is_already_patched = bool(target_hash and current_hash == target_hash)
             is_laa = (rel_path in ["gta_sa.exe", "gta-sa.exe"] and current_hash == "2b5066bd4097ac2944ce6a9cf8fe5677")
 
             if is_already_patched or is_laa:
@@ -775,7 +788,7 @@ class ScannerThread(QThread):
                 if is_laa:
                     status += " (LAA)"
                 needs_patch = "No"
-            elif current_hash == source_hash:
+            elif current_hash in known_source_hashes:
                 status = "Original (Needs Patch)"
                 needs_patch = "Yes"
             elif current_hash is None:
@@ -841,7 +854,7 @@ class PatchThread(QThread):
             current_hash = calculate_md5(target_file)
             is_laa = (rel_path in ["gta_sa.exe", "gta-sa.exe"] and current_hash == "2b5066bd4097ac2944ce6a9cf8fe5677")
             
-            if current_hash == target_hash or is_laa:
+            if (target_hash and current_hash == target_hash) or is_laa:
                 self.file_progress.emit(i, "Already Patched", "")
                 
                 if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
@@ -863,7 +876,13 @@ class PatchThread(QThread):
                     shutil.copy2(target_file, os.path.join(backup_dir, rel_path))
 
                 if action == "copy":
-                    source_patch = os.path.join(self.patches_dir, "gta_sa.exe")
+                    payload = file_info.get("payload", "gta_sa.exe")
+                    source_patch = os.path.join(self.patches_dir, payload)
+                    if not os.path.exists(source_patch):
+                        self.file_progress.emit(i, "Failed", "Payload file missing")
+                        fail_count += 1
+                        continue
+
                     shutil.copy2(source_patch, target_file)
                     
                     if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
@@ -874,9 +893,40 @@ class PatchThread(QThread):
                     success_count += 1
                     self.file_progress.emit(i, "Success (Copy)", "")
                 else:
-                    patch_file = os.path.join(self.patches_dir, f"{rel_path}.xdelta")
+                    sources = file_info.get("sources")
+                    source = None
+                    if sources:
+                        source = next(
+                            (
+                                candidate
+                                for candidate in sources
+                                if candidate.get("hash") == current_hash
+                            ),
+                            None,
+                        )
+                    else:
+                        # v1 manifest compatibility
+                        source = {
+                            "hash": file_info.get("source_hash"),
+                            "patch": f"{rel_path}.xdelta",
+                        } if current_hash == file_info.get("source_hash") else None
+
+                    if source and "patch" in source:
+                        patch_rel = source["patch"]
+                    elif sources and "patch" in sources[0]:
+                        # Fallback for modified files or default source
+                        patch_rel = sources[0]["patch"]
+                    else:
+                        patch_rel = f"{rel_path}.xdelta"
+
+                    patch_file = os.path.join(self.patches_dir, patch_rel)
                     if not os.path.exists(patch_file):
                         self.file_progress.emit(i, "Failed", "Patch file missing")
+                        fail_count += 1
+                        continue
+
+                    if not os.path.exists(target_file):
+                        self.file_progress.emit(i, "Failed", "Source file missing")
                         fail_count += 1
                         continue
                     
@@ -885,6 +935,14 @@ class PatchThread(QThread):
                     result = subprocess.run(cmd, capture_output=True, text=True, creationflags=creationflags)
                     
                     if result.returncode == 0:
+                        output_hash = calculate_md5(temp_output)
+                        if target_hash and output_hash != target_hash:
+                            if os.path.exists(temp_output):
+                                os.remove(temp_output)
+                            fail_count += 1
+                            self.file_progress.emit(i, "Failed", "Verification failed")
+                            continue
+
                         os.replace(temp_output, target_file)
                         
                         if rel_path in ["gta_sa.exe", "gta-sa.exe"]:
@@ -1032,14 +1090,14 @@ class DowngraderApp(QMainWindow):
 
             self.close_startup_splash()
             reply = QMessageBox.question(self, "Patches Missing", 
-                "Patches folder not found. Would you like to download them from iCloud?",
+                "Patches folder not found. Would you like to download them?",
                 QMessageBox.Yes | QMessageBox.No)
             
             if reply == QMessageBox.Yes:
-                icloud_url = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
+                patches_url = PATCHES_URL
                 target_dir = os.path.abspath("Patches")
                 
-                dlg = DownloadDialog(icloud_url, target_dir, self)
+                dlg = DownloadDialog(patches_url, target_dir, self)
                 dlg.exec()
                 
                 if dlg.success:
@@ -1271,6 +1329,22 @@ class DowngraderApp(QMainWindow):
                         
                         os.makedirs(os.path.dirname(target_file), exist_ok=True)
                         shutil.copy2(backup_file, target_file)
+
+                # Clean up twin/alternative executable created during downgrade if it was not in original backup
+                if os.path.exists(os.path.join(backup_dir, "gta-sa.exe")) and not os.path.exists(os.path.join(backup_dir, "gta_sa.exe")):
+                    orphan_exe = os.path.join(path, "gta_sa.exe")
+                    if os.path.exists(orphan_exe):
+                        try:
+                            os.remove(orphan_exe)
+                        except Exception:
+                            pass
+                elif os.path.exists(os.path.join(backup_dir, "gta_sa.exe")) and not os.path.exists(os.path.join(backup_dir, "gta-sa.exe")):
+                    orphan_exe = os.path.join(path, "gta-sa.exe")
+                    if os.path.exists(orphan_exe):
+                        try:
+                            os.remove(orphan_exe)
+                        except Exception:
+                            pass
                 
                 QMessageBox.information(self, "Success", "Revert complete!")
                 self.scan_directory(path)

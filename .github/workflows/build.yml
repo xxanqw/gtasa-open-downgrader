@@ -31,7 +31,7 @@ jobs:
           sudo apt-get install -y tk
           uv sync --frozen --project downgrader --python "$pythonLocation" --group build
           cd downgrader
-          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
+          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://files.xxanqw.me/s/6jhSHGdr8N', 'Patches')"
           
           uv run pyinstaller --onefile --windowed \
             --splash "assets/splash.png" \
@@ -122,7 +122,7 @@ jobs:
         run: |
           uv sync --frozen --project downgrader --python "$env:pythonLocation" --group build
           cd downgrader
-          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches', 'Patches')"
+          uv run python -c "import patch_manager; patch_manager.download_and_extract_patches('https://files.xxanqw.me/s/6jhSHGdr8N', 'Patches')"
           
           uv run pyinstaller --onefile --windowed `
             --splash "assets/splash.png" `
@@ -172,14 +172,7 @@ jobs:
             gtasa-open-downgrader-linux-offline.AppImage
             gtasa-open-downgrader-windows.exe
             gtasa-open-downgrader-windows-offline.exe
-          body: |
-            GTA SA Open Downgrader v0.2.2
-
-            ## Bug fixes
-            - Fixed the application aborting with `QThread: Destroyed while thread is still running` when closing during background work
-            - Added cooperative cancellation and graceful waiting for scans, downloads, mod checks, mod installations, and patching
-            - Kept download and mod-install dialogs alive until their native worker threads have fully stopped
-            - Preserved tracking data for mods installed before a cancellation
+          generate_release_notes: true
           draft: false
           prerelease: false
         env:

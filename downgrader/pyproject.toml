@@ -1,12 +1,11 @@
 [project]
 name = "downgrader"
-version = "0.2.2"
+version = "0.2.3"
 description = "An open-source replication of the RockstarNexus GTA SA Downgrader, providing automated downgrading and mod installation."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cloudscraper>=1.2.71",
-    "icloud-resolver>=0.1.0",
     "packaging>=26.3",
     "pyside6>=6.11.2",
     "py7zr>=1.1.3",

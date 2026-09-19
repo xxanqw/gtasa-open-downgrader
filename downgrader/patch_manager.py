@@ -1,11 +1,73 @@
 import os
 import posixpath
+import re
 import shutil
 import stat
 import tempfile
+from urllib.parse import unquote, urlparse
 import zipfile
 
-from icloud_resolver import download_file
+import requests
+
+
+def parse_content_disposition_filename(header_value):
+    """Extract filename from Content-Disposition header if present."""
+    if not header_value:
+        return None
+    # RFC 5987 / RFC 6266: filename*=UTF-8''filename.ext
+    match = re.search(r"filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)", header_value)
+    if match:
+        return unquote(match.group(1).strip("\"'"))
+    # Standard: filename="filename.ext"
+    match = re.search(r'filename\s*=\s*"([^"]+)"', header_value)
+    if match:
+        return match.group(1)
+    # Standard unquoted: filename=filename.ext
+    match = re.search(r'filename\s*=\s*([^;]+)', header_value)
+    if match:
+        return match.group(1).strip("\"' ")
+    return None
+
+
+def download_file(url, destination_path, progress_callback=None, chunk_size=65536, timeout=(15, 60)):
+    """
+    Downloads a file directly from a URL, following redirects and reading metadata
+    (Content-Disposition for filename, Content-Length for size), similar to curl -L -O -J.
+
+    If destination_path is an existing directory, the filename from the server metadata
+    (or URL fallback) is appended.
+    Returns the absolute path to the downloaded file.
+    """
+    with requests.get(url, stream=True, allow_redirects=True, timeout=timeout) as response:
+        response.raise_for_status()
+
+        content_length = response.headers.get("Content-Length")
+        total_size = int(content_length) if content_length and content_length.isdigit() else 0
+
+        cd_header = response.headers.get("Content-Disposition", "")
+        filename = parse_content_disposition_filename(cd_header)
+        if not filename:
+            parsed_path = urlparse(response.url).path
+            filename = posixpath.basename(parsed_path) or "download.zip"
+
+        if os.path.isdir(destination_path):
+            final_path = os.path.join(destination_path, filename)
+        else:
+            final_path = destination_path
+
+        final_path = os.path.abspath(final_path)
+        os.makedirs(os.path.dirname(final_path), exist_ok=True)
+
+        downloaded = 0
+        with open(final_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback:
+                        progress_callback(downloaded, total_size)
+
+        return final_path
 
 
 def _safe_extract(archive_path, destination):
@@ -46,12 +108,17 @@ def _safe_extract(archive_path, destination):
 
 def _patch_root(extracted_dir):
     direct_manifest = os.path.join(extracted_dir, "manifest.json")
-    nested_root = os.path.join(extracted_dir, "Patches")
-    nested_manifest = os.path.join(nested_root, "manifest.json")
     if os.path.isfile(direct_manifest):
         return extracted_dir
-    if os.path.isfile(nested_manifest):
+    nested_root = os.path.join(extracted_dir, "Patches")
+    if os.path.isfile(os.path.join(nested_root, "manifest.json")):
         return nested_root
+    with os.scandir(extracted_dir) as it:
+        for entry in it:
+            if entry.is_dir():
+                candidate = os.path.join(entry.path, "manifest.json")
+                if os.path.isfile(candidate):
+                    return entry.path
     raise ValueError("The downloaded patches archive does not contain manifest.json.")
 
 
