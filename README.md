@@ -58,7 +58,7 @@ Mod removals are backed up under `backups/mods/`. Reinstallation can overwrite c
 
 ## Multiplayer and Steam Deck
 
-Use **Multiplayer** to manage SA-MP, open.mp, MTA, and the optional Steam launcher. The launcher adds a mode chooser to Steam while keeping the real game executable intact. Use **Remove & restore** to undo its installation.
+Use **Multiplayer** to manage SA-MP, open.mp, MTA, and the optional Steam launcher. The launcher adds a mode chooser to Steam while keeping the real game executable intact. Use **Check updates** to download a verified launcher release, or **Remove & restore** to undo its installation. Close GTA and the launcher before updating. The launcher's **Settings** menu also offers an update check; installation is handled by the downgrader.
 
 On Linux and Steam Deck, clients use the game's detected Steam Proton installation and prefix. Follow the launch options and setup instructions shown in the app. open.mp uses a built-in server browser under Proton.
 
@@ -111,6 +111,16 @@ go run ./cmd/patch-assets
 On Windows, use `.\scripts\build.ps1 offline` for the second command. To import a local patch ZIP instead, run `go run ./cmd/patch-assets -archive "/path/to/Patches.zip"`. Allow several GiB of free disk space.
 
 To generate patches from your own clean game copies, use [generate_patches.sh](generate_patches.sh) or [generate_patches.ps1](generate_patches.ps1). Do not commit game files or generated patches.
+
+### Release channels
+
+Release builds run only on tag pushes, not branch pushes or manual dispatch:
+
+- `v0.3.0-rc.1`: downgrader prerelease; never becomes Latest or an automatic update.
+- `v0.3.0`: stable downgrader release.
+- `launcher-1`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
+
+Launcher update checks use only `launcher-N` releases; downgrader checks use only stable `vX.Y.Z` releases. `LAUNCHER_VERSION` controls launcher stamping independently of the downgrader's `VERSION`.
 
 ### Checks
 

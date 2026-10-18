@@ -1,12 +1,54 @@
-name: Build Go releases
+name: Build tagged releases
+
 on:
   push:
-    tags: ['v*']
-  workflow_dispatch:
+    tags:
+      - 'v*'
+      - 'launcher-*'
+
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  metadata:
+    runs-on: ubuntu-22.04
+    outputs:
+      kind: ${{ steps.tag.outputs.kind }}
+      launcher_version: ${{ steps.tag.outputs.launcher_version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate release channel and version
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          launcher_version=$(tr -d '\r\n' < internal/launcherversion/VERSION)
+          [[ "$launcher_version" =~ ^[1-9][0-9]{0,19}$ ]] || { echo 'Invalid launcher VERSION file'; exit 1; }
+          echo "launcher_version=$launcher_version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_NAME" =~ ^launcher-([1-9][0-9]{0,19})$ ]]; then
+            [[ "${BASH_REMATCH[1]}" == "$launcher_version" ]] || { echo 'Launcher tag must match internal/launcherversion/VERSION'; exit 1; }
+            echo 'kind=launcher' >> "$GITHUB_OUTPUT"
+            echo 'prerelease=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo 'kind=downgrader' >> "$GITHUB_OUTPUT"
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              echo 'prerelease=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'prerelease=false' >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo 'Use vX.Y.Z[-rc.N] for the downgrader or launcher-N for the launcher.'
+            exit 1
+          fi
+
   patches:
+    needs: metadata
+    if: needs.metadata.outputs.kind == 'downgrader'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7.0.1
@@ -14,7 +56,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Download and verify pinned patch archive
+      - name: Download and validate official Global/German patches
         env:
           PATCH_ARCHIVE_SHA256: bb974902ba4c8e188c38e25009112299b52ef63df5493c41ab6592971947e243
         run: |
@@ -25,34 +67,44 @@ jobs:
         with:
           name: validated-patches
           path: internal/assets/Patches
+          compression-level: 0
           retention-days: 1
+          if-no-files-found: error
+
   linux:
-    needs: patches
+    needs: [metadata, patches]
     runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ github.ref_name }}
+      LAUNCHER_VERSION: ${{ needs.metadata.outputs.launcher_version }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5 mingw-w64
-      - run: go test -race ./... && go vet ./...
-      - run: bash scripts/test-patch-generator.sh
+      - name: Install desktop and cross-compilation dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5 mingw-w64 python3
+      - name: Check Linux code and patch generator
+        run: |
+          test -z "$(gofmt -l cmd internal)"
+          go test -race ./...
+          go vet ./...
+          bash scripts/test-patch-generator.sh
       - uses: actions/download-artifact@v8.0.1
         with:
           name: validated-patches
           path: internal/assets/Patches
-      - name: Build online and offline
+      - name: Build Linux online/offline binaries and bundled Windows launcher
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then export VERSION="$GITHUB_REF_NAME"; fi
           ./scripts/build.sh online
           ./scripts/build.sh offline
           ./scripts/build-launcher.sh
-      - name: Package AppImages
+      - name: Package online/offline AppImages
         run: |
-          curl --fail -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl --fail --location --retry 3 -o appimagetool https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool' | sha256sum -c -
-          curl --fail -L -o runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          curl --fail --location --retry 3 -o runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
           echo '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64' | sha256sum -c -
           chmod +x appimagetool
           export APPIMAGETOOL="$PWD/appimagetool" APPIMAGE_RUNTIME="$PWD/runtime-x86_64"
@@ -60,15 +112,25 @@ jobs:
           ./scripts/appimage.sh offline
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: linux-releases
+          name: downgrader-linux
           path: |
             dist/gtasa-open-downgrader-linux
             dist/gtasa-open-downgrader-linux-offline
             dist/*.AppImage
             dist/THIRD-PARTY-NOTICES.zip
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
   windows:
-    needs: patches
+    needs: [metadata, patches]
     runs-on: windows-latest
+    env:
+      VERSION: ${{ github.ref_name }}
+      LAUNCHER_VERSION: ${{ needs.metadata.outputs.launcher_version }}
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v6
@@ -81,8 +143,7 @@ jobs:
           update: true
           path-type: inherit
           install: mingw-w64-x86_64-gcc python
-      - name: Test
-        shell: msys2 {0}
+      - name: Check Windows code
         run: |
           export CGO_ENABLED=1 CC=gcc
           go test ./...
@@ -91,40 +152,116 @@ jobs:
         with:
           name: validated-patches
           path: internal/assets/Patches
-      - name: Build online and offline
-        shell: msys2 {0}
+      - name: Build Windows online/offline executables and bundled launcher
         run: |
           export CGO_ENABLED=1 CC=gcc WINDRES=windres
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then export VERSION="$GITHUB_REF_NAME"; fi
           ./scripts/build.sh online
           ./scripts/build.sh offline
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: windows-releases
+          name: downgrader-windows
           path: |
             dist/gtasa-open-downgrader-windows*.exe
             dist/gta-sa.exe
             dist/THIRD-PARTY-NOTICES.zip
-  release:
-    needs: [linux, windows]
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+  launcher:
+    needs: metadata
+    if: needs.metadata.outputs.kind == 'launcher'
+    runs-on: windows-latest
+    env:
+      LAUNCHER_VERSION: ${{ needs.metadata.outputs.launcher_version }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: mingw-w64-x86_64-gcc python
+      - name: Check launcher runtime and updater
+        run: |
+          export CGO_ENABLED=1 CC=gcc
+          go test ./internal/entrypoint ./internal/launcherapp ./internal/launcherprefs ./internal/launcherversion ./internal/launcherupdate
+          go vet ./cmd/steam-launcher ./internal/entrypoint ./internal/launcherapp ./internal/launcherversion ./internal/launcherupdate
+      - name: Build Windows/Proton launcher only
+        run: |
+          export CC=gcc WINDRES=windres
+          ./scripts/build-launcher.sh
+          cd dist
+          sha256sum gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: steam-launcher
+          path: |
+            dist/gta-sa.exe
+            dist/THIRD-PARTY-NOTICES.zip
+            dist/SHA256SUMS
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-downgrader:
+    needs: [metadata, linux, windows]
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8.0.1
         with:
-          pattern: '*-releases'
+          pattern: downgrader-*
           merge-multiple: true
           path: dist
-      - name: Checksums
+      - name: Checksum all release files
         run: cd dist && sha256sum gtasa-open-downgrader-* gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS
       - uses: softprops/action-gh-release@v3.0.2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: GTA SA Open Downgrader ${{ github.ref_name }}
+          prerelease: ${{ needs.metadata.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.metadata.outputs.prerelease == 'true' && 'false' || 'true' }}
           files: |
             dist/gtasa-open-downgrader-*
             dist/gta-sa.exe
             dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  publish-launcher:
+    needs: [metadata, launcher]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: steam-launcher
+          path: dist
+      - uses: softprops/action-gh-release@v3.0.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Steam launcher ${{ needs.metadata.outputs.launcher_version }}
+          # GitHub prerelease + explicit make_latest=false isolates this channel.
+          # The first-party launcher updater intentionally accepts launcher-N tags.
+          prerelease: true
+          make_latest: 'false'
+          files: |
+            dist/gta-sa.exe
+            dist/THIRD-PARTY-NOTICES.zip
+            dist/SHA256SUMS
+          body: |
+            Standalone Windows/Proton Steam launcher ${{ needs.metadata.outputs.launcher_version }}.
+            Install or update through Multiplayer → Steam launcher → Check updates in the downgrader.
+            This launcher-only release does not change the latest downgrader release.
           generate_release_notes: true
           fail_on_unmatched_files: true

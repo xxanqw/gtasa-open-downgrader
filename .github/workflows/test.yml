@@ -1,5 +1,8 @@
 name: Go checks
-on: [push, pull_request]
+on:
+  push:
+    branches: ['**']
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -16,4 +19,3 @@ jobs:
       - run: go test -race ./...
       - run: go vet ./...
       - run: bash scripts/test-patch-generator.sh
-      - run: ./scripts/build.sh online

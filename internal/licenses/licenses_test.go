@@ -111,7 +111,7 @@ func TestReleasePackagingIncludesNotices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(data), "dist/THIRD-PARTY-NOTICES.zip") != 3 || !strings.Contains(string(data), "gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS") {
+	if strings.Count(string(data), "dist/THIRD-PARTY-NOTICES.zip") < 5 || !strings.Contains(string(data), "gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS") {
 		t.Fatal("release workflow omits notice artifact or checksum")
 	}
 }

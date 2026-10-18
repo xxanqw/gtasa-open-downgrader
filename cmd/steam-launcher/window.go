@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherprefs"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherversion"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
@@ -33,6 +34,9 @@ type launcherWindow struct {
 	buttons         map[string]*appwidget.Button
 	available       map[*appwidget.Button]bool
 	busy            bool
+	closed          bool
+	checkingUpdates bool
+	updateCancel    context.CancelFunc
 	browser         *serverBrowser
 	dispatch        func(func())
 	cards           []*appwidget.ActionCard
@@ -73,7 +77,7 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 	if underProton {
 		platform = "Linux / Proton | multiplayer experimental"
 	}
-	ui.details = fmt.Sprintf("%s\n\nGame folder:\n%s\n\n", platform, gameDir)
+	ui.details = fmt.Sprintf("Steam launcher %s\n%s\n\nGame folder:\n%s\n\n", launcherversion.Version(), platform, gameDir)
 	mtaWarning := ""
 	if underProton || hostOS == "linux" {
 		mtaWarning = multiplayer.MTAProtonWarning(multiplayer.RunningProtonTool())
@@ -139,6 +143,7 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 		appwidget.ShowMessage(w, "Launcher details", ui.details)
 	})
 	ui.button("licenses", "Licenses", true, func() { showLauncherLicenses(w) })
+	ui.button("updates", "Check for launcher updates", true, ui.checkUpdates)
 	settings := ui.button("settings", "Settings", true, ui.showSettings)
 	settings.SetIcon(theme.SettingsIcon())
 	top := container.NewHBox(heading, layout.NewSpacer(), settings)
@@ -162,6 +167,10 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 	}
 	w.SetCloseIntercept(ui.requestClose)
 	w.SetOnClosed(func() {
+		ui.closed = true
+		if ui.updateCancel != nil {
+			ui.updateCancel()
+		}
 		if ui.browser != nil {
 			ui.browser.close()
 		}
@@ -221,7 +230,7 @@ func (ui *launcherWindow) showSettings() {
 		ui.settingsPopup.Hide()
 	}
 	items := []*fyne.MenuItem{}
-	for _, key := range []string{"downgrader", "mta-help", "details", "licenses"} {
+	for _, key := range []string{"downgrader", "updates", "mta-help", "details", "licenses"} {
 		button := ui.buttons[key]
 		if button == nil {
 			continue
@@ -268,6 +277,9 @@ func (ui *launcherWindow) button(key, text string, available bool, tap func()) *
 }
 func (ui *launcherWindow) setBusy(busy bool) {
 	ui.busy = busy
+	if busy && ui.updateCancel != nil {
+		ui.updateCancel()
+	}
 	if ui.settingsPopup != nil {
 		ui.settingsPopup.Hide()
 	}

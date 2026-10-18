@@ -19,6 +19,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherprefs"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherversion"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/mtainstall"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
@@ -130,22 +131,26 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		if launcher.State == entrypoint.Installed {
 			w.confirm("Remove Steam launcher", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.", func(ok bool) {
 				if ok {
-					w.run("Removing Steam launcher", func(ctx context.Context) error { return entrypoint.Remove(ctx, root) }, func(error) { w.scan() })
+					w.run("Removing Steam launcher", func(ctx context.Context) error {
+						if err := platform.RequireGameClosed(); err != nil {
+							return err
+						}
+						return entrypoint.Remove(ctx, root)
+					}, func(error) { w.scan() })
 				}
 			})
 			return
 		}
 		source, err := launcherBinary()
 		if err != nil {
-			w.error(err)
+			w.checkSteamLauncher(root)
 			return
 		}
 		w.run("Installing Steam launcher", func(ctx context.Context) error {
-			downgrader := ""
-			if runtime.GOOS == "windows" {
-				downgrader, _ = os.Executable()
+			if err := platform.RequireGameClosed(); err != nil {
+				return err
 			}
-			_, err := entrypoint.InstallWithDowngrader(ctx, root, source, downgrader)
+			_, err := entrypoint.InstallWithDowngrader(ctx, root, source, nativeDowngraderPath())
 			return err
 		}, func(error) { w.scan() })
 	})
@@ -178,8 +183,20 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 	if choice == launcherprefs.None && choiceError == nil {
 		resetChoice.Disable()
 	}
-	launcherActions := container.NewHBox(launcherButton, resetChoice)
-	sections := []fyne.CanvasObject{newMultiplayerCard("Steam launcher", "Steam entrypoint and multiplayer launch integration", launcherState, launcherImportance, launcherCardIcon(), launcherActions, choiceDetail)}
+	checkUpdates := appwidget.NewButton("Check updates", func() { w.checkSteamLauncher(root) })
+	if launcher.State == entrypoint.Invalid {
+		checkUpdates.Disable()
+	}
+	launcherPurpose := "Steam entrypoint and multiplayer launch integration"
+	if launcher.State == entrypoint.Installed {
+		if launcher.Version != "" {
+			launcherPurpose = "Installed version: " + launcher.Version
+		} else {
+			launcherPurpose = "Installed version: legacy / unknown"
+		}
+	}
+	launcherActions := container.NewVBox(container.NewHBox(launcherButton, checkUpdates), container.NewHBox(layout.NewSpacer(), resetChoice))
+	sections := []fyne.CanvasObject{newMultiplayerCard("Steam launcher", launcherPurpose, launcherState, launcherImportance, launcherCardIcon(), launcherActions, choiceDetail)}
 	if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
 		sections = append(sections, notice)
 	}
@@ -542,7 +559,9 @@ func launcherBinary() (string, error) {
 	for _, candidate := range candidates {
 		info, statErr := os.Stat(candidate)
 		if statErr == nil && info.Mode().IsRegular() {
-			return candidate, nil
+			if _, err := launcherversion.ReadFile(candidate); err == nil {
+				return candidate, nil
+			}
 		}
 	}
 	platformName := strings.Title(runtime.GOOS)

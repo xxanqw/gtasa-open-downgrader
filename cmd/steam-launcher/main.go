@@ -12,11 +12,16 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherapp"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherversion"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println(launcherversion.Version())
+		return
+	}
 	if handled, err := winedrive.HandleHelper(os.Args[1:]); handled {
 		if err != nil {
 			fmt.Fprintln(os.Stdout, "GTASA-DRIVE-ERROR:", err)

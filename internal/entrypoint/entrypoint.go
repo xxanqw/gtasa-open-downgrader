@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherversion"
 )
 
 const (
@@ -46,9 +47,10 @@ const (
 )
 
 type Status struct {
-	State  State
-	Config Config
-	Detail string
+	State   State
+	Config  Config
+	Detail  string
+	Version string
 }
 
 func metadata(root string) (string, error) { return fsutil.Join(root, MetadataPath) }
@@ -151,7 +153,8 @@ func Inspect(ctx context.Context, root string) Status {
 	if digest != config.LauncherSHA256 {
 		return Status{State: Replaced, Config: config, Detail: "Steam entrypoint no longer matches the installed launcher"}
 	}
-	return Status{State: Installed, Config: config}
+	version, _ := launcherversion.ReadFile(path)
+	return Status{State: Installed, Config: config, Version: version}
 }
 
 // MetadataPresent reports whether the Steam entrypoint name is reserved for a

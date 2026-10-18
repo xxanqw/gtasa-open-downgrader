@@ -2,8 +2,9 @@
 package service
 
 const (
-	BaseURL           = "https://dwngrdr.xxanqw.me"
-	HealthURL         = BaseURL + "/api/v1/health"
-	LatestReleaseURL  = BaseURL + "/api/v1/releases/latest"
-	GitHubMetadataURL = BaseURL + "/api/v1/github/repos"
+	BaseURL            = "https://dwngrdr.xxanqw.me"
+	HealthURL          = BaseURL + "/api/v1/health"
+	LatestReleaseURL   = BaseURL + "/api/v1/releases/latest"
+	LauncherReleaseURL = BaseURL + "/api/v1/launcher/latest"
+	GitHubMetadataURL  = BaseURL + "/api/v1/github/repos"
 )
