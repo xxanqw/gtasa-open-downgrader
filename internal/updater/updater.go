@@ -21,7 +21,7 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-var Version = "v0.2.2"
+var Version = "v0.3.0"
 
 type Asset struct {
 	Name   string `json:"name"`

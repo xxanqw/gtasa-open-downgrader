@@ -82,6 +82,9 @@ func (t *Tracker) Save(ctx context.Context, root, version string) error {
 }
 
 func canonicalModName(name string) string {
+	if name == legacySVGRadarMap {
+		return HDRadarMap
+	}
 	if name == legacySALtdRussian {
 		return SanLtdRussian
 	}
@@ -101,6 +104,12 @@ func (t *Tracker) normalizeNames() {
 	t.Installed = names
 	if t.Versions == nil {
 		t.Versions = map[string]Release{}
+	}
+	if old, ok := t.Versions[legacySVGRadarMap]; ok {
+		if _, current := t.Versions[HDRadarMap]; !current {
+			t.Versions[HDRadarMap] = old
+		}
+		delete(t.Versions, legacySVGRadarMap)
 	}
 	if old, ok := t.Versions[legacySALtdRussian]; ok {
 		if _, current := t.Versions[SanLtdRussian]; !current {
@@ -124,6 +133,17 @@ func Selection(selected []string, t Tracker) []string {
 			n = canonicalModName(n)
 			if Supported(n) {
 				wanted[n] = true
+			}
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for n := range wanted {
+			for _, dep := range RequiredMods(n) {
+				if !wanted[dep] {
+					wanted[dep] = true
+					changed = true
+				}
 			}
 		}
 	}

@@ -1,0 +1,2 @@
+# Generated notices/hashes must stay identical across Linux and Windows builds.
+internal/licenses/** -text

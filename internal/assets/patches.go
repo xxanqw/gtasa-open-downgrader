@@ -17,12 +17,12 @@ import (
 func PatchDirectory(ctx context.Context, cache string) (string, error) {
 	exe, _ := os.Executable()
 	for _, p := range []string{"Patches", filepath.Join(filepath.Dir(exe), "Patches"), filepath.Join(cache, "Patches")} {
-		if _, e := patch.ValidateAssets(p); e == nil {
+		if _, e := patch.ValidateReleaseAssets(p); e == nil {
 			return filepath.Abs(p)
 		}
 	}
 	if !Offline {
-		return "", fmt.Errorf("patch assets are missing; download or import Patches.zip")
+		return "", fmt.Errorf("current patch assets are missing; download Patches_v2.1.zip or import a local archive")
 	}
 	dst := filepath.Join(cache, "Patches")
 	if e := os.MkdirAll(cache, 0755); e != nil {
@@ -58,7 +58,7 @@ func PatchDirectory(ctx context.Context, cache string) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	if _, e = patch.ValidateAssets(work); e != nil {
+	if _, e = patch.ValidateReleaseAssets(work); e != nil {
 		return "", fmt.Errorf("offline build has invalid embedded patches: %w", e)
 	}
 	// A malformed cache is kept aside until the valid embedded copy is installed.

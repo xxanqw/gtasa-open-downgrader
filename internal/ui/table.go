@@ -33,8 +33,8 @@ func (*readOnlyTable) Disabled() bool                 { return true }
 func (*readOnlyTable) Disable()                       {}
 func (*readOnlyTable) Enable()                        {}
 
-// A quiet progress track for the footer’s reserved middle lane. The operation text conveys the task;
-// the bar shows progress without a second, button-shaped percentage readout.
+// A thin progress track for the footer. Operation guidance remains in the
+// Downgrade panel; the bar has no separate percentage label.
 type thinProgress struct{ widget.ProgressBar }
 
 func newThinProgress() *thinProgress {

@@ -18,25 +18,25 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherprefs"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/mtainstall"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 const (
-	linuxMultiplayerNotice   = "Linux multiplayer support is experimental and not considered stable. It exists to make Windows multiplayer clients easier to install and run through Proton. The Steam launcher must be enabled for SA-MP and open.mp to work correctly."
-	windowsMultiplayerNotice = "The Steam launcher is optional on Windows. It provides one easy place to start single-player or multiplayer, and Steam counts the multiplayer session toward your playtime."
+	linuxMultiplayerNotice   = "SA-MP / open.mp / MTA via Proton is experimental. Install the Steam launcher first."
+	windowsMultiplayerNotice = "Steam launcher optional; multiplayer counts toward Steam playtime when used."
 )
 
 type multiplayerNoticeTheme struct{ fyne.Theme }
 
 func (t multiplayerNoticeTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
 	if name == theme.ColorNameWarning {
-		if variant == theme.VariantLight {
-			return color.NRGBA{R: 130, G: 86, B: 0, A: 255}
-		}
 		return color.NRGBA{R: 246, G: 194, B: 66, A: 255}
 	}
-	return t.Theme.Color(name, variant)
+	return t.Theme.Color(name, theme.VariantDark)
 }
 
 func multiplayerPlatformNotice(goos string) (string, bool) {
@@ -68,10 +68,18 @@ func (w *Window) multiplayerNotice(goos string) fyne.CanvasObject {
 }
 
 func (w *Window) multiplayer() {
+	if !w.downgradeComplete() {
+		w.info("Downgrade required", "Finish downgrading and scan the game before managing multiplayer.")
+		return
+	}
 	root := w.scanPath
 	if root == "" || !game.HasEXE(root) {
 		w.error(fmt.Errorf("scan a game directory first"))
 		return
+	}
+	if w.multiplayerBody != nil {
+		w.multiplayerBody.Objects = []fyne.CanvasObject{hubText("Checking Steam launcher and installed clients…")}
+		w.multiplayerBody.Refresh()
 	}
 	var environment multiplayer.Environment
 	var runner multiplayer.Runner
@@ -89,143 +97,208 @@ func (w *Window) multiplayer() {
 		return ctx.Err()
 	}, func(err error) {
 		if err == nil {
-			w.showMultiplayer(root, launcher, environment, runner, compatibility, environmentError, clients)
+			w.showMultiplayerInline(root, launcher, environment, runner, compatibility, environmentError, clients)
+		} else if w.multiplayerBody != nil {
+			w.multiplayerBody.Objects = []fyne.CanvasObject{hubText("Could not inspect multiplayer clients: " + err.Error())}
+			w.multiplayerBody.Refresh()
 		}
 	})
 }
 
-func (w *Window) showMultiplayer(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client) {
-	w.prompt(promptRequest{present: func(done func(string, bool)) func() {
-		var close func()
-		launcherAction := "Install Steam launcher"
-		launcherIcon := theme.DownloadIcon()
-		if launcher.State == entrypoint.Installed {
-			launcherAction = "Remove & restore"
-			launcherIcon = theme.DeleteIcon()
-		} else if launcher.State == entrypoint.Replaced {
-			launcherAction = "Reinstall Steam launcher"
-		}
-		launcherButton := appwidget.NewButtonWithIcon(launcherAction, launcherIcon, func() {
-			close()
-			if launcher.State == entrypoint.Installed {
-				w.confirm("Remove Steam launcher", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.", func(ok bool) {
-					if ok {
-						w.run("Removing Steam launcher", func(ctx context.Context) error { return entrypoint.Remove(ctx, root) }, func(error) { w.scan() })
-					}
-				})
-				return
-			}
-			source, err := launcherBinary()
-			if err != nil {
-				w.error(err)
-				return
-			}
-			w.run("Installing Steam launcher", func(ctx context.Context) error {
-				downgrader := ""
-				if runtime.GOOS == "windows" {
-					downgrader, _ = os.Executable()
-				}
-				_, err := entrypoint.InstallWithDowngrader(ctx, root, source, downgrader)
-				return err
-			}, func(error) { w.scan() })
-		})
+func (w *Window) showMultiplayerInline(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client) {
+	if w.multiplayerBody == nil {
+		return
+	}
+	w.multiplayerBody.Objects = []fyne.CanvasObject{w.multiplayerSections(root, launcher, environment, runner, compatibility, environmentError, clients, func() {
+		w.multiplayerBody.Objects = []fyne.CanvasObject{hubText("Operation started. Completed changes and backups are preserved; refresh after it finishes.")}
+		w.multiplayerBody.Refresh()
+	})}
+	w.multiplayerBody.Refresh()
+}
 
-		launcherDetails := compactLabel("Steam entry point · real game remains gta_sa.exe")
-		launcherBody := container.NewBorder(nil, nil, nil, container.NewCenter(launcherButton), container.NewVBox(
-			widget.NewLabelWithStyle("Steam launcher", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			launcherDetails,
-		))
-		sections := []fyne.CanvasObject{
-			container.New(layout.NewCustomPaddedLayout(2, 5, 4, 4), launcherBody),
+func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client, dismiss func()) fyne.CanvasObject {
+	launcherAction := "Install"
+	launcherIcon := theme.DownloadIcon()
+	if launcher.State == entrypoint.Installed {
+		launcherAction = "Remove & restore"
+		launcherIcon = theme.DeleteIcon()
+	} else if launcher.State == entrypoint.Replaced {
+		launcherAction = "Reinstall"
+	}
+	launcherButton := appwidget.NewButtonWithIcon(launcherAction, launcherIcon, func() {
+		dismiss()
+		if launcher.State == entrypoint.Installed {
+			w.confirm("Remove Steam launcher", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.", func(ok bool) {
+				if ok {
+					w.run("Removing Steam launcher", func(ctx context.Context) error { return entrypoint.Remove(ctx, root) }, func(error) { w.scan() })
+				}
+			})
+			return
 		}
-		if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
-			sections = append(sections, notice)
+		source, err := launcherBinary()
+		if err != nil {
+			w.error(err)
+			return
 		}
-		sections = append(sections, widget.NewSeparator())
-		clientHeading := container.NewHBox(widget.NewLabelWithStyle("Multiplayer clients", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		if compatibility != "" {
-			clientHeading.Add(widget.NewLabel("· " + compatibility))
+		w.run("Installing Steam launcher", func(ctx context.Context) error {
+			downgrader := ""
+			if runtime.GOOS == "windows" {
+				downgrader, _ = os.Executable()
+			}
+			_, err := entrypoint.InstallWithDowngrader(ctx, root, source, downgrader)
+			return err
+		}, func(error) { w.scan() })
+	})
+
+	launcherState, launcherImportance := "Not installed", widget.DangerImportance
+	if launcher.State == entrypoint.Installed {
+		launcherState, launcherImportance = "Installed", widget.SuccessImportance
+	}
+	if launcher.State == entrypoint.Replaced {
+		launcherState, launcherImportance = "Needs reinstall", widget.WarningImportance
+	}
+	choice, choiceError := launcherprefs.Load(root)
+	choiceDetail := ""
+	if choice != launcherprefs.None {
+		choiceDetail = "Remembered: " + choice.Name() + ". Reset choice to show the launcher again."
+	}
+	if choiceError != nil {
+		choiceDetail = "Remembered choice is invalid. Reset choice to repair it."
+	}
+	resetChoice := appwidget.NewButton("Reset choice", func() {
+		dismiss()
+		w.run("Resetting launcher choice", func(ctx context.Context) error {
+			return resetLauncherChoice(root, platform.RequireGameClosed)
+		}, func(err error) {
+			if err == nil {
+				w.multiplayer()
+			}
+		})
+	})
+	if choice == launcherprefs.None && choiceError == nil {
+		resetChoice.Disable()
+	}
+	launcherActions := container.NewHBox(launcherButton, resetChoice)
+	sections := []fyne.CanvasObject{newMultiplayerCard("Steam launcher", "Steam entrypoint and multiplayer launch integration", launcherState, launcherImportance, launcherCardIcon(), launcherActions, choiceDetail)}
+	if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
+		sections = append(sections, notice)
+	}
+	clientHeading := container.NewHBox(widget.NewLabelWithStyle("Clients", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+	if environmentError == nil && compatibility != "" && compatibility != "Windows" {
+		clientHeading.Add(widget.NewLabel("· " + compatibility))
+	}
+	sections = append(sections, clientHeading)
+	if environmentError != nil {
+		message := widget.NewLabel("Client installation is unavailable: " + environmentError.Error())
+		message.Wrapping = fyne.TextWrapWord
+		message.Importance = widget.WarningImportance
+		sections = append(sections, message)
+	}
+	for _, client := range clients {
+		client := client
+		// The action already communicates installed vs. available; show a
+		// secondary line only for a compatibility or repair concern.
+		detail := ""
+		if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
+			path, err := multiplayer.OpenMPClientPath(environment)
+			if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment) != nil {
+				detail = "Managed SA-MP client files are incomplete"
+			}
 		}
-		sections = append(sections, clientHeading)
-		if environmentError != nil {
-			message := widget.NewLabel("Client installation is unavailable: " + environmentError.Error())
-			message.Wrapping = fyne.TextWrapWord
-			message.Importance = widget.WarningImportance
-			sections = append(sections, message)
-		}
-		for index, client := range clients {
-			client := client
-			detail := "Ready to install"
+		if client.ID == multiplayer.ClientMTA {
 			if client.Installed {
-				switch client.ID {
-				case multiplayer.ClientSAMP:
-					detail = "Game-folder client"
-				case multiplayer.ClientOpenMP:
-					detail = "Launcher and managed client versions"
-				case multiplayer.ClientMTA:
-					detail = "Separate client installation"
-				}
-			}
-			if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
-				path, err := multiplayer.OpenMPClientPath(environment)
-				if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment) != nil {
-					detail = "Managed SA-MP client files are incomplete"
-				}
-			}
-			if client.ID == multiplayer.ClientMTA && client.Installed {
 				if _, err := os.Stat(filepath.Join(root, "modloader.asi")); err == nil {
-					detail += " · Mod Loader is paused while running"
+					detail = "Mod Loader is paused while running"
 				}
 			}
-			supported, reason := multiplayer.LaunchSupport(client.ID, runtime.GOOS, false)
-			if !supported {
-				detail = reason
-			}
-			detailLabel := compactLabel(detail)
-			detailLabel.TextStyle.Italic = true
-			var actions *fyne.Container
-			if client.Installed {
-				repair := appwidget.NewButtonWithIcon("Repair", theme.ViewRefreshIcon(), func() {
-					close()
-					w.installMultiplayer(environment, runner, client.ID)
-				})
-				remove := appwidget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
-					close()
-					w.uninstallMultiplayer(environment, runner, client)
-				})
-				if runner == nil || !supported {
-					repair.Disable()
+			if runtime.GOOS == "linux" {
+				tool := environment.CompatibilityTool
+				if tool == "" {
+					tool = compatibility
 				}
-				if runner == nil {
-					remove.Disable()
+				if warning := multiplayer.MTAProtonWarning(tool); warning != "" {
+					if detail != "" {
+						detail += "\n"
+					}
+					detail += warning
 				}
-				actions = container.NewHBox(repair, remove)
-			} else {
-				install := appwidget.NewButtonWithIcon("Install", theme.DownloadIcon(), func() {
-					close()
-					w.installMultiplayer(environment, runner, client.ID)
-				})
-				install.Importance = widget.HighImportance
-				if runner == nil || !supported {
-					install.Disable()
+				if missing, err := multiplayer.MissingMTAFonts(environment); err == nil && len(missing) > 0 {
+					if detail != "" {
+						detail += "\n"
+					}
+					detail += "Install / Repair will automatically add missing fonts from SourceForge: " + strings.Join(missing, ", ")
 				}
-				actions = container.NewHBox(install)
-			}
-			row := container.NewBorder(nil, nil, nil, container.NewCenter(actions), container.NewVBox(
-				widget.NewLabelWithStyle(client.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-				detailLabel,
-			))
-			sections = append(sections, container.New(layout.NewCustomPaddedLayout(3, 5, 4, 4), row))
-			if index < len(clients)-1 {
-				sections = append(sections, widget.NewSeparator())
 			}
 		}
-		close = w.panel("Multiplayer & Steam", container.NewVScroll(container.NewVBox(sections...)), fyne.NewSize(690, 430), "", "Close", nil, func(bool) { done("", false) })
-		return close
-	}})
+		supported, reason := multiplayer.LaunchSupport(client.ID, runtime.GOOS, false)
+		if !supported {
+			detail = reason
+		}
+		state, importance := "Not installed", widget.DangerImportance
+		if client.Installed {
+			state, importance = "Installed", widget.SuccessImportance
+		}
+		var actions *fyne.Container
+		if client.Installed {
+			repair := appwidget.NewButtonWithIcon("Repair", theme.ViewRefreshIcon(), func() {
+				dismiss()
+				w.installMultiplayer(environment, runner, client.ID)
+			})
+			remove := appwidget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
+				dismiss()
+				w.uninstallMultiplayer(environment, runner, client)
+			})
+			if runner == nil || !supported {
+				repair.Disable()
+			}
+			if runner == nil {
+				remove.Disable()
+			}
+			actions = container.NewHBox(repair, remove)
+		} else {
+			install := appwidget.NewButtonWithIcon("Install", theme.DownloadIcon(), func() {
+				dismiss()
+				w.installMultiplayer(environment, runner, client.ID)
+			})
+			install.Importance = widget.HighImportance
+			if runner == nil || !supported {
+				install.Disable()
+			}
+			actions = container.NewHBox(install)
+		}
+		if client.ID == multiplayer.ClientMTA {
+			manage := appwidget.NewButton("Manage…", func() {
+				if w.promptActive {
+					dismiss()
+				}
+				w.showMTAManager(environment, runner)
+			})
+			actions = container.NewHBox(manage)
+			if client.Installed {
+				state = "Active " + client.Version
+				if client.Version == "1.7" {
+					importance = widget.WarningImportance
+				}
+			} else if client.Detail != "" {
+				state = "Choose version"
+				importance = widget.WarningImportance
+			}
+			if client.Detail != "" {
+				detail = client.Detail + "\n" + detail
+			}
+		}
+		sections = append(sections, newMultiplayerCard(client.Name, multiplayerPurpose(client.ID), state, importance, multiplayerCardIcon(client.ID), actions, detail))
+	}
+	return container.NewVBox(sections...)
 }
 
 func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runner multiplayer.Runner, client multiplayer.Client) {
+	if client.ID == multiplayer.ClientMTA && runtime.GOOS == "linux" {
+		if err := w.requireMTAEnvironment(environment); err != nil {
+			w.error(err)
+			return
+		}
+	}
 	message := "Open the " + client.Name + " uninstaller and remove this client? The game and other multiplayer clients will remain installed."
 	if client.ID == multiplayer.ClientOpenMP {
 		message = "Open the open.mp uninstaller and remove its managed client files? The game and standalone SA-MP installation will remain installed."
@@ -236,6 +309,11 @@ func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runne
 		}
 		var result multiplayer.UninstallResult
 		w.run("Uninstalling "+client.Name, func(ctx context.Context) error {
+			if client.ID == multiplayer.ClientMTA {
+				if err := platform.RequireGameClosed(); err != nil {
+					return err
+				}
+			}
 			var err error
 			result, err = multiplayer.Uninstall(ctx, client.ID, environment, runner)
 			return err
@@ -248,7 +326,11 @@ func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runne
 	})
 }
 
-func (w *Window) installMultiplayer(environment multiplayer.Environment, runner multiplayer.Runner, id multiplayer.ClientID) {
+func (w *Window) installMultiplayer(environment multiplayer.Environment, runner multiplayer.Runner, id multiplayer.ClientID, versions ...string) {
+	if id == multiplayer.ClientMTA && len(versions) == 0 {
+		w.showMTAManager(environment, runner)
+		return
+	}
 	if supported, reason := multiplayer.LaunchSupport(id, runtime.GOOS, false); !supported {
 		w.error(fmt.Errorf("%s", reason))
 		return
@@ -258,12 +340,41 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		w.error(fmt.Errorf("unsupported multiplayer client %q", id))
 		return
 	}
+	var mtaRelease *multiplayer.MTARelease
+	if id == multiplayer.ClientMTA {
+		if len(versions) != 1 {
+			w.error(fmt.Errorf("choose one reviewed MTA version"))
+			return
+		}
+		release, found := multiplayer.FindMTARelease(versions[0])
+		if !found {
+			w.error(fmt.Errorf("unsupported MTA release"))
+			return
+		}
+		mtaRelease = &release
+		installer = release.Installer
+		if err := w.mtaManagerGuard(environment); err != nil {
+			w.error(err)
+			return
+		}
+	}
 	if runner == nil {
 		w.error(fmt.Errorf("installer execution is unavailable"))
 		return
 	}
 	run := func(path string) {
+		if id == multiplayer.ClientMTA && runtime.GOOS == "linux" {
+			if err := w.requireMTAEnvironment(environment); err != nil {
+				w.error(err)
+				return
+			}
+		}
 		w.run("Installing "+installer.Name, func(ctx context.Context) error {
+			if id == multiplayer.ClientMTA {
+				if err := platform.RequireGameClosed(); err != nil {
+					return err
+				}
+			}
 			if err := multiplayer.ValidateInstaller(path); err != nil {
 				return err
 			}
@@ -271,7 +382,17 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			if err != nil {
 				return err
 			}
-			if err := multiplayer.InstallerResult(id, environment, runner.Run(ctx, path, arguments...)); err != nil {
+			if mtaRelease != nil {
+				if err := multiplayer.ValidateMTAInstaller(ctx, path, *mtaRelease); err != nil {
+					return err
+				}
+			}
+			runErr := runner.Run(ctx, path, arguments...)
+			if mtaRelease != nil {
+				if err := multiplayer.MTAInstallerResult(mtaRelease.Version, environment, runErr); err != nil {
+					return err
+				}
+			} else if err := multiplayer.InstallerResult(id, environment, runErr); err != nil {
 				return err
 			}
 			if id == multiplayer.ClientOpenMP && runtime.GOOS == "linux" {
@@ -305,11 +426,28 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		})
 	}
 	start := func(path string) {
+		if id == multiplayer.ClientMTA && runtime.GOOS == "linux" {
+			w.showMTAInstallerGuideFor(environment, runner, func() { run(path) }, mtaRelease.Version)
+			return
+		}
 		if id == multiplayer.ClientSAMP && runtime.GOOS == "linux" {
 			w.showSAMPInstallerGuide(environment, func() { run(path) })
 			return
 		}
 		run(path)
+	}
+	if mtaRelease != nil {
+		var destination string
+		w.run("Downloading reviewed MTA "+mtaRelease.Version, func(ctx context.Context) error {
+			var err error
+			destination, err = mtainstall.Ensure(ctx, w.client.HTTP, w.cache, *mtaRelease, func(done, total int64) { w.report("Downloading MTA "+mtaRelease.Version, done, total) })
+			return err
+		}, func(err error) {
+			if err == nil {
+				start(destination)
+			}
+		})
+		return
 	}
 	if installer.Manual {
 		w.info("Download SA-MP installer", "SA-MP does not publish a stable first-party installer URL. Its official page will open; download the current client from a listed source, then select the installer here. The installer will use the detected Steam environment automatically.")
@@ -336,7 +474,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		return nil
 	}, func(err error) {
 		if err == nil {
-			run(destination)
+			start(destination)
 		}
 	})
 }
@@ -352,7 +490,7 @@ func (w *Window) showSAMPInstallerGuide(environment multiplayer.Environment, sta
 			drive = strings.ToUpper(windowsPath[:2])
 		}
 
-		intro := widget.NewLabel("The Steam library containing GTA San Andreas is mounted inside the Windows installer as drive " + drive + ".")
+		intro := widget.NewLabel("A dedicated drive showing only the selected GTA San Andreas folder is available inside the Windows installer as drive " + drive + ".")
 		intro.Wrapping = fyne.TextWrapWord
 		guide := canvas.NewImageFromResource(fyne.NewStaticResource("samp-drive-guide.png", assets.SAMPDriveGuide))
 		guide.FillMode = canvas.ImageFillContain
@@ -370,13 +508,20 @@ func (w *Window) showSAMPInstallerGuide(environment multiplayer.Environment, sta
 			path,
 			steps,
 		)
-		return w.panel("Before SA-MP setup opens", body, fyne.NewSize(540, 390), "Open installer", "Cancel", nil, func(ok bool) {
+		return w.panel("Before SA-MP setup opens", container.NewVScroll(body), fyne.NewSize(540, 390), "Open installer", "Cancel", nil, func(ok bool) {
 			done("", ok)
 			if ok {
 				start()
 			}
 		})
 	}})
+}
+
+func resetLauncherChoice(root string, closed func() error) error {
+	if err := closed(); err != nil {
+		return err
+	}
+	return launcherprefs.Reset(root)
 }
 
 func launcherBinary() (string, error) {

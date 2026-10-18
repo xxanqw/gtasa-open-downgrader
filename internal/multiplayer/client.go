@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 	"net/url"
 	"os"
 	"os/exec"
@@ -38,13 +39,15 @@ type Client struct {
 	Executable string
 	WorkingDir string
 	Detail     string
+	Version    string
 }
 
 type Environment struct {
-	GameDir        string
-	WindowsGameDir string
-	PrefixDriveC   string
-	LocalAppData   string
+	GameDir           string
+	WindowsGameDir    string
+	PrefixDriveC      string
+	LocalAppData      string
+	CompatibilityTool string
 }
 
 func (connection OpenMPConnection) Arguments(gameDir string) ([]string, error) {
@@ -97,13 +100,9 @@ func ValidateOpenMPClient(path string) error {
 	return nil
 }
 
-// LaunchSupport reports client restrictions that cannot be solved by changing
-// the GTA installation. Current MTA production clients terminate in their
-// integrity initialization under Wine/Proton (upstream issue #4783).
+// Linux/Wine compatibility is best-effort, not a blanket launch restriction.
+// MTA's older GE-Proton HTTP concern is an advisory handled by the UI.
 func LaunchSupport(id ClientID, hostOS string, underProton bool) (bool, string) {
-	if id == ClientMTA && (hostOS == "linux" || underProton) {
-		return false, "MTA is currently unavailable on Linux because its integrity system terminates under Wine/Proton"
-	}
 	return true, ""
 }
 
@@ -145,7 +144,13 @@ func Detect(environment Environment) []Client {
 	for id, values := range registryCandidates() {
 		configured[id] = append(configured[id], values...)
 	}
-	return detect(environment, configured)
+	clients := detect(environment, configured)
+	for i := range clients {
+		if clients[i].ID == ClientMTA {
+			clients[i] = SelectedMTAClient(environment)
+		}
+	}
+	return clients
 }
 
 func detect(environment Environment, registry map[ClientID][]string) []Client {
@@ -170,7 +175,7 @@ func detect(environment Environment, registry map[ClientID][]string) []Client {
 				`users/steamuser/AppData/Local/Open Multiplayer Launcher/omp-launcher.exe`,
 			})...)
 		case ClientMTA:
-			for _, version := range []string{"1.7", "1.6", "1.5"} {
+			for _, version := range []string{"1.6", "1.7", "1.5"} {
 				candidates = append(candidates, prefixCandidates(environment.PrefixDriveC, []string{
 					"Program Files (x86)/MTA San Andreas " + version + "/Multi Theft Auto.exe",
 					"Program Files/MTA San Andreas " + version + "/Multi Theft Auto.exe",
@@ -257,9 +262,27 @@ func (f CommandExecutorFunc) Execute(ctx context.Context, directory, executable 
 	return f(ctx, directory, executable, arguments...)
 }
 
-type DirectRunner struct{ Executor CommandExecutor }
+type DirectRunner struct {
+	Executor CommandExecutor
+	GameDir  string
+}
 
-func (runner DirectRunner) Prepare(_ context.Context, id ClientID, environment Environment) ([]string, error) {
+func (runner DirectRunner) Prepare(ctx context.Context, id ClientID, environment Environment) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if runner.GameDir != "" {
+		mapped, err := winedrive.EnsureWineGameDrive(runner.GameDir)
+		if err != nil {
+			return nil, err
+		}
+		if mapped != environment.WindowsGameDir {
+			return nil, fmt.Errorf("Wine game drive changed; refresh Multiplayer")
+		}
+		if err := ConfigureWineGamePath(id, mapped); err != nil {
+			return nil, err
+		}
+	}
 	if id == ClientSAMP && environment.WindowsGameDir != "" {
 		return []string{"/D=" + environment.WindowsGameDir}, nil
 	}
@@ -267,6 +290,14 @@ func (runner DirectRunner) Prepare(_ context.Context, id ClientID, environment E
 }
 
 func (runner DirectRunner) Run(ctx context.Context, executable string, arguments ...string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if runner.GameDir != "" {
+		if _, err := winedrive.EnsureWineGameDrive(runner.GameDir); err != nil {
+			return err
+		}
+	}
 	if runner.Executor == nil {
 		runner.Executor = CommandExecutorFunc(func(ctx context.Context, directory, executable string, arguments ...string) error {
 			command := exec.CommandContext(ctx, executable, arguments...)

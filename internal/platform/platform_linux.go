@@ -8,16 +8,21 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/steam"
 )
 
 func HideConsole(cmd *exec.Cmd) {}
 func Candidates() []string {
-	home, _ := os.UserHomeDir()
-	var paths []string
-	for _, rel := range []string{".local/share/Steam", ".steam/steam", ".steam/root", ".var/app/com.valvesoftware.Steam/data/Steam"} {
-		paths = append(paths, SteamLibraries(filepath.Join(home, rel))...)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
 	}
-	return append(paths, "/run/media/mmcblk0p1/steamapps/common/Grand Theft Auto San Andreas")
+	var paths []string
+	for _, root := range steam.FindSteamRoots(home) {
+		paths = append(paths, SteamGameDirs(root)...)
+	}
+	return paths
 }
 func UserData(game string) string {
 	p := filepath.Join(filepath.Dir(filepath.Dir(game)), "compatdata", "12120", "pfx", "drive_c", "users", "steamuser", "Documents", "GTA San Andreas User Files")

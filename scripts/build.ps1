@@ -10,7 +10,7 @@ if ($Variant -eq 'offline') {
     $Tags += ',offline'
     $Name += '-offline'
 }
-$Version = if ($env:VERSION) { $env:VERSION } else { 'v0.2.2' }
+$Version = if ($env:VERSION) { $env:VERSION } else { 'v0.3.0' }
 $Resource = 'cmd/downgrader/resources_windows_amd64.syso'
 $LauncherResource = 'cmd/steam-launcher/resources_windows_amd64.syso'
 $Windres = if ($env:WINDRES) { $env:WINDRES } else { 'windres' }

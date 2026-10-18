@@ -14,7 +14,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go run ./cmd/patch-assets
+      - name: Download and verify pinned patch archive
+        env:
+          PATCH_ARCHIVE_SHA256: bb974902ba4c8e188c38e25009112299b52ef63df5493c41ab6592971947e243
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/Patches_v2.1.zip" https://files.xxanqw.me/s/ARC9NX3rm5
+          echo "$PATCH_ARCHIVE_SHA256  $RUNNER_TEMP/Patches_v2.1.zip" | sha256sum --check --status
+          go run ./cmd/patch-assets -archive "$RUNNER_TEMP/Patches_v2.1.zip" -release
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: validated-patches
@@ -31,6 +37,7 @@ jobs:
           cache: true
       - run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5 mingw-w64
       - run: go test -race ./... && go vet ./...
+      - run: bash scripts/test-patch-generator.sh
       - uses: actions/download-artifact@v8.0.1
         with:
           name: validated-patches
@@ -58,6 +65,7 @@ jobs:
             dist/gtasa-open-downgrader-linux
             dist/gtasa-open-downgrader-linux-offline
             dist/*.AppImage
+            dist/THIRD-PARTY-NOTICES.zip
   windows:
     needs: patches
     runs-on: windows-latest
@@ -72,7 +80,7 @@ jobs:
           msystem: MINGW64
           update: true
           path-type: inherit
-          install: mingw-w64-x86_64-gcc
+          install: mingw-w64-x86_64-gcc python
       - name: Test
         shell: msys2 {0}
         run: |
@@ -96,6 +104,7 @@ jobs:
           path: |
             dist/gtasa-open-downgrader-windows*.exe
             dist/gta-sa.exe
+            dist/THIRD-PARTY-NOTICES.zip
   release:
     needs: [linux, windows]
     if: startsWith(github.ref, 'refs/tags/')
@@ -109,12 +118,13 @@ jobs:
           merge-multiple: true
           path: dist
       - name: Checksums
-        run: cd dist && sha256sum gtasa-open-downgrader-* gta-sa.exe > SHA256SUMS
+        run: cd dist && sha256sum gtasa-open-downgrader-* gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS
       - uses: softprops/action-gh-release@v3.0.2
         with:
           files: |
             dist/gtasa-open-downgrader-*
             dist/gta-sa.exe
+            dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
           generate_release_notes: true
           fail_on_unmatched_files: true

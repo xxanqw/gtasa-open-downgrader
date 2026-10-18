@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -24,16 +23,13 @@ func Detect() string {
 	}
 	return ""
 }
-func SteamLibraries(root string) []string {
-	libraries, err := steam.LibraryRoots(root)
-	if err != nil {
-		libraries = []string{root}
-	}
-	paths := make([]string, 0, len(libraries))
-	for _, library := range libraries {
-		paths = append(paths, filepath.Join(library, "steamapps", "common", "Grand Theft Auto San Andreas"))
-	}
-	return paths
+
+// SteamGameDirs follows Steam's AppID 12120 manifests rather than assuming a
+// game folder name or library location. Manual selection remains available
+// for standalone installations and invalid or missing Steam metadata.
+func SteamGameDirs(root string) []string {
+	games, _ := steam.NewDetector(root).FindGameInstallDirs(12120)
+	return games
 }
 
 // ApplyLAA validates the DOS and PE signatures before modifying characteristics.

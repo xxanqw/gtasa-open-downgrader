@@ -39,13 +39,20 @@ func TestLAAValidatesPEAndIsIdempotent(t *testing.T) {
 		t.Fatal("not idempotent")
 	}
 }
-func TestSteamLibraryDiscovery(t *testing.T) {
+func TestSteamGameDiscoveryFollowsAppManifest(t *testing.T) {
 	root := t.TempDir()
 	extra := t.TempDir()
 	testutil.Write(t, root, "steamapps/libraryfolders.vdf", `"libraryfolders" { "1" { "path" "`+filepath.ToSlash(extra)+`" } }`)
-	paths := SteamLibraries(root)
-	want := filepath.Join(extra, "steamapps", "common", "Grand Theft Auto San Andreas")
-	if len(paths) != 2 || paths[1] != want {
-		t.Fatal(paths)
+	game := filepath.Join(extra, "steamapps", "common", "My Custom GTA Folder")
+	testutil.Write(t, game, "gta-sa.exe", "game")
+	testutil.Write(t, extra, "steamapps/appmanifest_12120.acf", `"AppState" { "appid" "12120" "installdir" "My Custom GTA Folder" }`)
+	if paths := SteamGameDirs(root); len(paths) != 1 || paths[0] != game {
+		t.Fatalf("appmanifest discovery: %q, want %q", paths, game)
+	}
+	// An executable in the old default path is not evidence of a Steam install.
+	orphan := t.TempDir()
+	testutil.Write(t, orphan, "steamapps/common/Grand Theft Auto San Andreas/gta-sa.exe", "game")
+	if paths := SteamGameDirs(orphan); len(paths) != 0 {
+		t.Fatalf("guessed Steam game directory without metadata: %q", paths)
 	}
 }

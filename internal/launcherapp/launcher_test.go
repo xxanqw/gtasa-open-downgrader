@@ -82,15 +82,12 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 		GameDir: root,
 		snapshotGameProcesses: func() (gameProcessSet, error) {
 			snapshotCalls++
-			if snapshotCalls == 1 {
-				return gameProcessSet{}, nil
-			}
-			return gameProcessSet{41: {}}, nil
+			return gameProcessSet{}, nil
 		},
 		waitForGameProcess: func(_ context.Context, before gameProcessSet, launcherDone <-chan struct{}) (bool, error) {
 			<-launcherDone
-			if _, ok := before[41]; !ok {
-				t.Fatal("pre-launch GTA process snapshot was not passed to waiter")
+			if len(before) != 0 {
+				t.Fatal("a pre-existing GTA process must prevent preparation")
 			}
 			if data, err := os.ReadFile(filepath.Join(root, "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
 				t.Fatalf("multiplayer overlay was removed before GTA exited: %q, %v", data, err)
@@ -141,7 +138,7 @@ func TestSAMPStagesModsWithoutModLoader(t *testing.T) {
 	}
 }
 
-func TestNativeOverlayKeepsWidescreenFix(t *testing.T) {
+func TestNativeOverlaySkipsWidescreenFix(t *testing.T) {
 	t.Setenv("STEAM_COMPAT_DATA_PATH", "")
 	t.Setenv("STEAM_COMPAT_CLIENT_INSTALL_PATH", "")
 	t.Setenv("PROTON_VERSION", "")
@@ -162,8 +159,8 @@ func TestNativeOverlayKeepsWidescreenFix(t *testing.T) {
 	if err := runtime.stageMultiplayerOverlay(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if data, err := os.ReadFile(filepath.Join(root, "GTASA.WidescreenFix.asi")); err != nil || string(data) != "widescreen" {
-		t.Fatalf("native Widescreen Fix was not staged: %q, %v", data, err)
+	if _, err := os.Stat(filepath.Join(root, "GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
+		t.Fatalf("native multiplayer staged Widescreen Fix: %v", err)
 	}
 	if err := runtime.restoreMultiplayerOverlay(); err != nil {
 		t.Fatal(err)
@@ -210,12 +207,23 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	clientDir := filepath.Join(root, "clients")
 	client := filepath.Join(clientDir, "omp-launcher.exe")
 	for name, contents := range map[string]string{
-		"clients/omp-launcher.exe":                "launcher",
-		multiplayer.ConfigPath:                    `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
-		"modloader.asi":                           "loader",
-		"modloader/.downgrader":                   `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch"]}`,
-		"modloader/SilentPatch/SilentPatchSA.asi": "silent patch",
-		"samp.dll":                                "MZoriginal",
+		"clients/omp-launcher.exe":                                          "launcher",
+		multiplayer.ConfigPath:                                              `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
+		"modloader.asi":                                                     "loader",
+		"modloader/.downgrader":                                             `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch"]}`,
+		"modloader/SilentPatch/SilentPatchSA.asi":                           "silent patch",
+		"modloader/WidescreenFix/GTASA.WidescreenFix.asi":                   "widescreen",
+		"modloader/FramerateVigilante/FramerateVigilante.asi":               "framerate",
+		"modloader/GInput/GInputSA.asi":                                     "ginput",
+		"modloader/ExtendedLanguageLoader/ExtendedLanguageLoader.asi":       "ell",
+		"modloader/ExtendedLanguageLoader/language-fonts/package/fonts.txd": "ell fonts",
+		"modloader/HDRadarMap/radar00.txd":                                  "radar",
+		"modloader/OriginalHQRadarIcons/hud.txd":                            "hud",
+		"modloader/NadalaoWeaponIcons/weaponicons.txd":                      "weapon icons",
+		"modloader/.data/config.ini":                                        "EnableMenu = true\n",
+		"scripts/extra.asi":                                                 "untracked script plugin",
+		"CLEO/extra.cs":                                                     "cleo script",
+		"samp.dll":                                                          "MZoriginal",
 	} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -255,16 +263,42 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
 			t.Fatalf("open.mp samp.dll was restored before GTA exited: %q, %v", data, err)
 		}
+		if _, err := os.Stat(filepath.Join(root, "modloader/WidescreenFix/GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
+			t.Fatalf("Widescreen Fix restored before GTA exit: %v", err)
+		}
 		return true, nil
 	}, Execute: func(_ context.Context, dir, exe string, args ...string) error {
-		if _, err := os.Stat(filepath.Join(root, "modloader.asi")); !os.IsNotExist(err) {
-			t.Fatalf("Mod Loader remained active during open.mp launch: %v", err)
+		if data, err := os.ReadFile(filepath.Join(root, "modloader.asi")); err != nil || string(data) != "loader" {
+			t.Fatalf("open.mp disabled or changed Mod Loader: %q, %v", data, err)
+		}
+		for _, rel := range []string{".downgrader/multiplayer/modloader.asi.disabled", ".downgrader/multiplayer/mod-overlay.json", "SilentPatchSA.asi", "GTASA.WidescreenFix.asi"} {
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+				t.Fatalf("open.mp used the filtered compatibility overlay: %s, %v", rel, err)
+			}
+		}
+		if _, err := os.Stat(filepath.Join(root, "modloader/WidescreenFix/GTASA.WidescreenFix.asi")); !os.IsNotExist(err) {
+			t.Fatalf("open.mp left Widescreen Fix active: %v", err)
+		}
+		for rel, want := range map[string]string{
+			"modloader/FramerateVigilante/FramerateVigilante.asi":               "framerate",
+			"modloader/GInput/GInputSA.asi":                                     "ginput",
+			"modloader/ExtendedLanguageLoader/ExtendedLanguageLoader.asi":       "ell",
+			"modloader/ExtendedLanguageLoader/language-fonts/package/fonts.txd": "ell fonts",
+			"modloader/HDRadarMap/radar00.txd":                                  "radar",
+			"modloader/OriginalHQRadarIcons/hud.txd":                            "hud",
+			"modloader/NadalaoWeaponIcons/weaponicons.txd":                      "weapon icons",
+			"modloader/.data/config.ini":                                        "EnableMenu = true\n",
+			"scripts/extra.asi":                                                 "untracked script plugin", "CLEO/extra.cs": "cleo script",
+		} {
+			if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel))); err != nil || string(data) != want {
+				t.Fatalf("open.mp altered installed mod %s: %q, %v", rel, data, err)
+			}
 		}
 		if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZmanaged" {
 			t.Fatalf("managed SA-MP client was not active during open.mp launch: %q, %v", data, err)
 		}
-		if data, err := os.ReadFile(filepath.Join(root, "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
-			t.Fatalf("SilentPatch was not staged directly: %q, %v", data, err)
+		if data, err := os.ReadFile(filepath.Join(root, "modloader", "SilentPatch", "SilentPatchSA.asi")); err != nil || string(data) != "silent patch" {
+			t.Fatalf("open.mp changed SilentPatch in its installed bundle: %q, %v", data, err)
 		}
 		got = append([]string{dir, exe}, args...)
 		return errors.New("bootstrap returned a Wine status after starting GTA")
@@ -279,6 +313,9 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(root, "samp.dll")); err != nil || string(data) != "MZoriginal" {
 		t.Fatalf("original samp.dll was not restored: %q, %v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "modloader/WidescreenFix/GTASA.WidescreenFix.asi")); err != nil || string(data) != "widescreen" {
+		t.Fatalf("Widescreen Fix was not restored after GTA: %q, %v", data, err)
 	}
 	if data, err := os.ReadFile(filepath.Join(root, "bass.dll")); err != nil || string(data) != "shared" {
 		t.Fatalf("managed shared file was not installed: %q, %v", data, err)

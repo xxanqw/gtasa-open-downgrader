@@ -1,0 +1,874 @@
+{
+  "schema": 1,
+  "targets": {
+    "linux": [
+      {
+        "path": "fyne.io/fyne/v2",
+        "version": "v2.8.1"
+      },
+      {
+        "path": "fyne.io/systray",
+        "version": "v1.12.3-0.20260810170012-af4e8e793ec4"
+      },
+      {
+        "path": "github.com/BurntSushi/toml",
+        "version": "v1.6.0"
+      },
+      {
+        "path": "github.com/FyshOS/fancyfs",
+        "version": "v0.0.1"
+      },
+      {
+        "path": "github.com/andybalholm/brotli",
+        "version": "v1.2.2"
+      },
+      {
+        "path": "github.com/anthonynsimon/bild",
+        "version": "v0.14.0"
+      },
+      {
+        "path": "github.com/bodgit/plumbing",
+        "version": "v1.3.0"
+      },
+      {
+        "path": "github.com/bodgit/sevenzip",
+        "version": "v1.6.5"
+      },
+      {
+        "path": "github.com/bodgit/windows",
+        "version": "v1.0.1"
+      },
+      {
+        "path": "github.com/clipperhouse/uax29/v2",
+        "version": "v2.2.0"
+      },
+      {
+        "path": "github.com/fsnotify/fsnotify",
+        "version": "v1.9.0"
+      },
+      {
+        "path": "github.com/fyne-io/image",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/fyne-io/oksvg",
+        "version": "v0.2.0"
+      },
+      {
+        "path": "github.com/go-gl/gl",
+        "version": "v0.0.0-20260331235117-4566fea9a276"
+      },
+      {
+        "path": "github.com/go-gl/glfw/v3.4/glfw",
+        "version": "v0.1.0-pre.1.0.20260707082822-2a407d02d01a"
+      },
+      {
+        "path": "github.com/go-text/render",
+        "version": "v0.2.1"
+      },
+      {
+        "path": "github.com/go-text/typesetting",
+        "version": "v0.3.4"
+      },
+      {
+        "path": "github.com/godbus/dbus/v5",
+        "version": "v5.2.2"
+      },
+      {
+        "path": "github.com/hashicorp/golang-lru/v2",
+        "version": "v2.0.7"
+      },
+      {
+        "path": "github.com/jeandeaual/go-locale",
+        "version": "v0.0.0-20250612000132-0ef82f21eade"
+      },
+      {
+        "path": "github.com/jsummers/gobmp",
+        "version": "v0.0.0-20230614200233-a9de23ed2e25"
+      },
+      {
+        "path": "github.com/klauspost/compress",
+        "version": "v1.19.0"
+      },
+      {
+        "path": "github.com/mattn/go-runewidth",
+        "version": "v0.0.24"
+      },
+      {
+        "path": "github.com/ncruces/zenity",
+        "version": "v0.10.15"
+      },
+      {
+        "path": "github.com/nfnt/resize",
+        "version": "v0.0.0-20180221191011-83c6a9932646"
+      },
+      {
+        "path": "github.com/nicksnyder/go-i18n/v2",
+        "version": "v2.5.1"
+      },
+      {
+        "path": "github.com/pierrec/lz4/v4",
+        "version": "v4.1.27"
+      },
+      {
+        "path": "github.com/rymdport/portal",
+        "version": "v0.4.2"
+      },
+      {
+        "path": "github.com/spf13/afero",
+        "version": "v1.15.0"
+      },
+      {
+        "path": "github.com/srwiley/oksvg",
+        "version": "v0.0.0-20221011165216-be6e8873101c"
+      },
+      {
+        "path": "github.com/srwiley/rasterx",
+        "version": "v0.0.0-20220730225603-2ab79fcdd4ef"
+      },
+      {
+        "path": "github.com/stangelandcl/ppmd",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/ulikunitz/xz",
+        "version": "v0.5.15"
+      },
+      {
+        "path": "github.com/yuin/goldmark",
+        "version": "v1.8.2"
+      },
+      {
+        "path": "go4.org",
+        "version": "v0.0.0-20260112195520-a5071408f32f"
+      },
+      {
+        "path": "golang.org/x/image",
+        "version": "v0.44.0"
+      },
+      {
+        "path": "golang.org/x/mod",
+        "version": "v0.40.0"
+      },
+      {
+        "path": "golang.org/x/net",
+        "version": "v0.48.0"
+      },
+      {
+        "path": "golang.org/x/sys",
+        "version": "v0.47.0"
+      },
+      {
+        "path": "golang.org/x/text",
+        "version": "v0.40.0"
+      }
+    ],
+    "windows": [
+      {
+        "path": "fyne.io/fyne/v2",
+        "version": "v2.8.1"
+      },
+      {
+        "path": "fyne.io/systray",
+        "version": "v1.12.3-0.20260810170012-af4e8e793ec4"
+      },
+      {
+        "path": "github.com/BurntSushi/toml",
+        "version": "v1.6.0"
+      },
+      {
+        "path": "github.com/FyshOS/fancyfs",
+        "version": "v0.0.1"
+      },
+      {
+        "path": "github.com/andybalholm/brotli",
+        "version": "v1.2.2"
+      },
+      {
+        "path": "github.com/anthonynsimon/bild",
+        "version": "v0.14.0"
+      },
+      {
+        "path": "github.com/bodgit/plumbing",
+        "version": "v1.3.0"
+      },
+      {
+        "path": "github.com/bodgit/sevenzip",
+        "version": "v1.6.5"
+      },
+      {
+        "path": "github.com/bodgit/windows",
+        "version": "v1.0.1"
+      },
+      {
+        "path": "github.com/clipperhouse/uax29/v2",
+        "version": "v2.2.0"
+      },
+      {
+        "path": "github.com/fsnotify/fsnotify",
+        "version": "v1.9.0"
+      },
+      {
+        "path": "github.com/fyne-io/image",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/fyne-io/oksvg",
+        "version": "v0.2.0"
+      },
+      {
+        "path": "github.com/go-gl/gl",
+        "version": "v0.0.0-20260331235117-4566fea9a276"
+      },
+      {
+        "path": "github.com/go-gl/glfw/v3.4/glfw",
+        "version": "v0.1.0-pre.1.0.20260707082822-2a407d02d01a"
+      },
+      {
+        "path": "github.com/go-text/render",
+        "version": "v0.2.1"
+      },
+      {
+        "path": "github.com/go-text/typesetting",
+        "version": "v0.3.4"
+      },
+      {
+        "path": "github.com/godbus/dbus/v5",
+        "version": "v5.2.2"
+      },
+      {
+        "path": "github.com/hashicorp/golang-lru/v2",
+        "version": "v2.0.7"
+      },
+      {
+        "path": "github.com/jeandeaual/go-locale",
+        "version": "v0.0.0-20250612000132-0ef82f21eade"
+      },
+      {
+        "path": "github.com/jsummers/gobmp",
+        "version": "v0.0.0-20230614200233-a9de23ed2e25"
+      },
+      {
+        "path": "github.com/klauspost/compress",
+        "version": "v1.19.0"
+      },
+      {
+        "path": "github.com/mattn/go-runewidth",
+        "version": "v0.0.24"
+      },
+      {
+        "path": "github.com/ncruces/zenity",
+        "version": "v0.10.15"
+      },
+      {
+        "path": "github.com/nfnt/resize",
+        "version": "v0.0.0-20180221191011-83c6a9932646"
+      },
+      {
+        "path": "github.com/nicksnyder/go-i18n/v2",
+        "version": "v2.5.1"
+      },
+      {
+        "path": "github.com/pierrec/lz4/v4",
+        "version": "v4.1.27"
+      },
+      {
+        "path": "github.com/spf13/afero",
+        "version": "v1.15.0"
+      },
+      {
+        "path": "github.com/srwiley/oksvg",
+        "version": "v0.0.0-20221011165216-be6e8873101c"
+      },
+      {
+        "path": "github.com/srwiley/rasterx",
+        "version": "v0.0.0-20220730225603-2ab79fcdd4ef"
+      },
+      {
+        "path": "github.com/stangelandcl/ppmd",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/ulikunitz/xz",
+        "version": "v0.5.15"
+      },
+      {
+        "path": "github.com/yuin/goldmark",
+        "version": "v1.8.2"
+      },
+      {
+        "path": "go4.org",
+        "version": "v0.0.0-20260112195520-a5071408f32f"
+      },
+      {
+        "path": "golang.org/x/image",
+        "version": "v0.44.0"
+      },
+      {
+        "path": "golang.org/x/mod",
+        "version": "v0.40.0"
+      },
+      {
+        "path": "golang.org/x/net",
+        "version": "v0.48.0"
+      },
+      {
+        "path": "golang.org/x/sys",
+        "version": "v0.47.0"
+      },
+      {
+        "path": "golang.org/x/text",
+        "version": "v0.40.0"
+      }
+    ],
+    "launcher": [
+      {
+        "path": "fyne.io/fyne/v2",
+        "version": "v2.8.1"
+      },
+      {
+        "path": "fyne.io/systray",
+        "version": "v1.12.3-0.20260810170012-af4e8e793ec4"
+      },
+      {
+        "path": "github.com/BurntSushi/toml",
+        "version": "v1.6.0"
+      },
+      {
+        "path": "github.com/FyshOS/fancyfs",
+        "version": "v0.0.1"
+      },
+      {
+        "path": "github.com/andybalholm/brotli",
+        "version": "v1.2.2"
+      },
+      {
+        "path": "github.com/anthonynsimon/bild",
+        "version": "v0.14.0"
+      },
+      {
+        "path": "github.com/bodgit/plumbing",
+        "version": "v1.3.0"
+      },
+      {
+        "path": "github.com/bodgit/sevenzip",
+        "version": "v1.6.5"
+      },
+      {
+        "path": "github.com/bodgit/windows",
+        "version": "v1.0.1"
+      },
+      {
+        "path": "github.com/clipperhouse/uax29/v2",
+        "version": "v2.2.0"
+      },
+      {
+        "path": "github.com/fsnotify/fsnotify",
+        "version": "v1.9.0"
+      },
+      {
+        "path": "github.com/fyne-io/image",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/fyne-io/oksvg",
+        "version": "v0.2.0"
+      },
+      {
+        "path": "github.com/go-gl/gl",
+        "version": "v0.0.0-20260331235117-4566fea9a276"
+      },
+      {
+        "path": "github.com/go-gl/glfw/v3.4/glfw",
+        "version": "v0.1.0-pre.1.0.20260707082822-2a407d02d01a"
+      },
+      {
+        "path": "github.com/go-text/render",
+        "version": "v0.2.1"
+      },
+      {
+        "path": "github.com/go-text/typesetting",
+        "version": "v0.3.4"
+      },
+      {
+        "path": "github.com/godbus/dbus/v5",
+        "version": "v5.2.2"
+      },
+      {
+        "path": "github.com/hashicorp/golang-lru/v2",
+        "version": "v2.0.7"
+      },
+      {
+        "path": "github.com/jeandeaual/go-locale",
+        "version": "v0.0.0-20250612000132-0ef82f21eade"
+      },
+      {
+        "path": "github.com/jsummers/gobmp",
+        "version": "v0.0.0-20230614200233-a9de23ed2e25"
+      },
+      {
+        "path": "github.com/klauspost/compress",
+        "version": "v1.19.0"
+      },
+      {
+        "path": "github.com/mattn/go-runewidth",
+        "version": "v0.0.24"
+      },
+      {
+        "path": "github.com/nfnt/resize",
+        "version": "v0.0.0-20180221191011-83c6a9932646"
+      },
+      {
+        "path": "github.com/nicksnyder/go-i18n/v2",
+        "version": "v2.5.1"
+      },
+      {
+        "path": "github.com/pierrec/lz4/v4",
+        "version": "v4.1.27"
+      },
+      {
+        "path": "github.com/spf13/afero",
+        "version": "v1.15.0"
+      },
+      {
+        "path": "github.com/srwiley/oksvg",
+        "version": "v0.0.0-20221011165216-be6e8873101c"
+      },
+      {
+        "path": "github.com/srwiley/rasterx",
+        "version": "v0.0.0-20220730225603-2ab79fcdd4ef"
+      },
+      {
+        "path": "github.com/stangelandcl/ppmd",
+        "version": "v0.1.1"
+      },
+      {
+        "path": "github.com/ulikunitz/xz",
+        "version": "v0.5.15"
+      },
+      {
+        "path": "github.com/yuin/goldmark",
+        "version": "v1.8.2"
+      },
+      {
+        "path": "go4.org",
+        "version": "v0.0.0-20260112195520-a5071408f32f"
+      },
+      {
+        "path": "golang.org/x/image",
+        "version": "v0.44.0"
+      },
+      {
+        "path": "golang.org/x/net",
+        "version": "v0.48.0"
+      },
+      {
+        "path": "golang.org/x/sys",
+        "version": "v0.47.0"
+      },
+      {
+        "path": "golang.org/x/text",
+        "version": "v0.40.0"
+      }
+    ]
+  },
+  "notices": [
+    {
+      "title": "App License (MIT)",
+      "source": "internal/assets/app-LICENSE.txt",
+      "sha256": "efa4853be8b68d834cfa8ec34b3a8d523330ac2e74eb7337c8bf41658062f9b9"
+    },
+    {
+      "title": "xdelta3 License",
+      "source": "internal/assets/LICENSE.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "title": "Font Awesome License",
+      "source": "internal/assets/fontawesome/LICENSE.txt",
+      "sha256": "9b914eae88817d63b576eab5aafde7068c7a1abae125d7cdfb034f1da43a9afc"
+    },
+    {
+      "title": "Hack Font License",
+      "source": "internal/ui/fonts/LICENSE",
+      "sha256": "1f61bb7c790c59b4b0ecdf304628b94e42ae4c8020094a8c3da73381ab212623"
+    },
+    {
+      "title": "Noto Sans Font License",
+      "source": "internal/ui/fonts/LICENSE-NotoSans.txt",
+      "sha256": "f675b30443f84f0d5c10c2976bdbf57ae55b58fa817bba0ba4ae18ddee6bec59"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — AUTHORS",
+      "source": "fyne.io/fyne/v2@v2.8.1/AUTHORS",
+      "sha256": "477326325c45f37a21117797cd40b1157c6090f9e4a2b5fb839d6bbb9b595453"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — LICENSE",
+      "source": "fyne.io/fyne/v2@v2.8.1/LICENSE",
+      "sha256": "68a1eafb90581708e62e1d269e7f6e92e6b0b5cdae93f45ede832d42912c7014"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — theme/font/LICENSE.txt",
+      "source": "fyne.io/fyne/v2@v2.8.1/theme/font/LICENSE.txt",
+      "sha256": "66cf61bbd6c7818d08d8e61b186d48f01eecf212e32395235e758511da01a232"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — theme/font/LICENSE_Inter.txt",
+      "source": "fyne.io/fyne/v2@v2.8.1/theme/font/LICENSE_Inter.txt",
+      "sha256": "4d7d9c95e7d7f2f0ebf76d5e0b344826b74e903a34028ee18ab54bb639e45906"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — theme/font/LICENSE_DejaVu-Powerline.txt",
+      "source": "fyne.io/fyne/v2@v2.8.1/theme/font/LICENSE_DejaVu-Powerline.txt",
+      "sha256": "a30f2466a95cd1eaeff6041692f43469edcca052d002e877015a819c6e31c194"
+    },
+    {
+      "title": "fyne.io/fyne/v2 v2.8.1 — theme/font/LICENSE_EmojiOneColor.txt",
+      "source": "fyne.io/fyne/v2@v2.8.1/theme/font/LICENSE_EmojiOneColor.txt",
+      "sha256": "a79e11d824be724d362c8c143b4130889c66cf2ef47f16e5ad83bd796dd18183"
+    },
+    {
+      "title": "fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 — LICENSE",
+      "source": "fyne.io/systray@v1.12.3-0.20260810170012-af4e8e793ec4/LICENSE",
+      "sha256": "a106bc9f4d5d7d91d5173e86d0864fcf061c33a30cc237710b8f4a05cf127021"
+    },
+    {
+      "title": "github.com/BurntSushi/toml v1.6.0 — COPYING",
+      "source": "github.com/BurntSushi/toml@v1.6.0/COPYING",
+      "sha256": "d21cb1c60785d6d3a84a7059323ccafc45c645b1bbda281c76a62d66ad2d7dc3"
+    },
+    {
+      "title": "github.com/FyshOS/fancyfs v0.0.1 — AUTHORS",
+      "source": "github.com/FyshOS/fancyfs@v0.0.1/AUTHORS",
+      "sha256": "efacd7afd0856fee05c335bd2d1b183c289aa013be54295b64ded0d56071461e"
+    },
+    {
+      "title": "github.com/FyshOS/fancyfs v0.0.1 — LICENSE",
+      "source": "github.com/FyshOS/fancyfs@v0.0.1/LICENSE",
+      "sha256": "6df86a72d288d232476070e4534f35fcec1dd830ad303d76c7f577e271a369d2"
+    },
+    {
+      "title": "github.com/andybalholm/brotli v1.2.2 — LICENSE",
+      "source": "github.com/andybalholm/brotli@v1.2.2/LICENSE",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+    },
+    {
+      "title": "github.com/andybalholm/brotli v1.2.2 — flate/LICENSE",
+      "source": "github.com/andybalholm/brotli@v1.2.2/flate/LICENSE",
+      "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+    },
+    {
+      "title": "github.com/anthonynsimon/bild v0.14.0 — LICENSE",
+      "source": "github.com/anthonynsimon/bild@v0.14.0/LICENSE",
+      "sha256": "637516cf71f2b3eda480c6cb39ee62297d8748acc95d8b4c63200d04e18793ea"
+    },
+    {
+      "title": "github.com/bodgit/plumbing v1.3.0 — LICENSE",
+      "source": "github.com/bodgit/plumbing@v1.3.0/LICENSE",
+      "sha256": "5c74848524ad9ff97892be1d05418853eab0ea95e7f59545ba44153ef2017425"
+    },
+    {
+      "title": "github.com/bodgit/sevenzip v1.6.5 — LICENSE",
+      "source": "github.com/bodgit/sevenzip@v1.6.5/LICENSE",
+      "sha256": "4135898ee98985c6084e6d8304930b010dec1b395083074ae455ae20ca207d9a"
+    },
+    {
+      "title": "github.com/bodgit/windows v1.0.1 — LICENSE",
+      "source": "github.com/bodgit/windows@v1.0.1/LICENSE",
+      "sha256": "8e937a4f1e8d29fb77b8433044b21906774513e307153a53c68bd638c87a1b09"
+    },
+    {
+      "title": "github.com/clipperhouse/uax29/v2 v2.2.0 — LICENSE",
+      "source": "github.com/clipperhouse/uax29/v2@v2.2.0/LICENSE",
+      "sha256": "07e9e3daaccc707c9b7d535ed1405a65d37919fdd42197fe55e68820e974688c"
+    },
+    {
+      "title": "github.com/fsnotify/fsnotify v1.9.0 — LICENSE",
+      "source": "github.com/fsnotify/fsnotify@v1.9.0/LICENSE",
+      "sha256": "2dfbe6d2b5eb18b55148f3805d88648a09e0d17e38428123259afb08c8996e37"
+    },
+    {
+      "title": "github.com/fyne-io/image v0.1.1 — LICENSE",
+      "source": "github.com/fyne-io/image@v0.1.1/LICENSE",
+      "sha256": "b9c31d8f1a43d7260789099ef59cc17a8b72aa3fccd1479bd516ec1b924637c3"
+    },
+    {
+      "title": "github.com/fyne-io/image v0.1.1 — ico/LICENSE-reader",
+      "source": "github.com/fyne-io/image@v0.1.1/ico/LICENSE-reader",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    {
+      "title": "github.com/fyne-io/image v0.1.1 — ico/LICENSE-writer",
+      "source": "github.com/fyne-io/image@v0.1.1/ico/LICENSE-writer",
+      "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d"
+    },
+    {
+      "title": "github.com/fyne-io/oksvg v0.2.0 — LICENSE",
+      "source": "github.com/fyne-io/oksvg@v0.2.0/LICENSE",
+      "sha256": "cda28abc46a25d34ad876ec119ad3c29edbb8634d5fef46ccf2e1d63acd9ca34"
+    },
+    {
+      "title": "github.com/go-gl/gl v0.0.0-20260331235117-4566fea9a276 — LICENSE",
+      "source": "github.com/go-gl/gl@v0.0.0-20260331235117-4566fea9a276/LICENSE",
+      "sha256": "035b8c4d5796e3465c668aa0d6df233f644a7aecdeeb9016dcec1b2875f70c6b"
+    },
+    {
+      "title": "github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.1.0.20260707082822-2a407d02d01a — LICENSE",
+      "source": "github.com/go-gl/glfw/v3.4/glfw@v0.1.0-pre.1.0.20260707082822-2a407d02d01a/LICENSE",
+      "sha256": "72f474049924563f43e5a5cc8e7e228a4fc8eb58e3dd7383bd3552c0725f566c"
+    },
+    {
+      "title": "github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.1.0.20260707082822-2a407d02d01a — glfw/LICENSE.md",
+      "source": "github.com/go-gl/glfw/v3.4/glfw@v0.1.0-pre.1.0.20260707082822-2a407d02d01a/glfw/LICENSE.md",
+      "sha256": "149704059b5d0bf551637e50042dd4de9c2cae921021f6636298911e3a5f9462"
+    },
+    {
+      "title": "github.com/go-text/render v0.2.1 — LICENSE",
+      "source": "github.com/go-text/render@v0.2.1/LICENSE",
+      "sha256": "6b1bf94c77d7faa0ce94f8745595bfaf4c404f8b3873f5c2ce55ca15f8e44eca"
+    },
+    {
+      "title": "github.com/go-text/typesetting v0.3.4 — LICENSE",
+      "source": "github.com/go-text/typesetting@v0.3.4/LICENSE",
+      "sha256": "6b1bf94c77d7faa0ce94f8745595bfaf4c404f8b3873f5c2ce55ca15f8e44eca"
+    },
+    {
+      "title": "github.com/go-text/typesetting v0.3.4 — harfbuzz/LICENSE",
+      "source": "github.com/go-text/typesetting@v0.3.4/harfbuzz/LICENSE",
+      "sha256": "e45d96558ba3d406f95dffed6f22c3be07093475ef617bcfddf88444d6b66788"
+    },
+    {
+      "title": "github.com/godbus/dbus/v5 v5.2.2 — LICENSE",
+      "source": "github.com/godbus/dbus/v5@v5.2.2/LICENSE",
+      "sha256": "e4646a82a976369d7ae8f6ed5c11d35dc0af18433a8ccc24c85b459ad8b95128"
+    },
+    {
+      "title": "github.com/hashicorp/golang-lru/v2 v2.0.7 — LICENSE",
+      "source": "github.com/hashicorp/golang-lru/v2@v2.0.7/LICENSE",
+      "sha256": "6c7088eb877b5d7e6e0e9d27e822ea25fcda2e83f9eba59bb5f1418a656796e0"
+    },
+    {
+      "title": "github.com/hashicorp/golang-lru/v2 v2.0.7 — simplelru/LICENSE_list",
+      "source": "github.com/hashicorp/golang-lru/v2@v2.0.7/simplelru/LICENSE_list",
+      "sha256": "6d462371baa8649492b06f51f154dba9b25d2ac9548369b8b4fdbbbb85f2f75d"
+    },
+    {
+      "title": "github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade — LICENSE",
+      "source": "github.com/jeandeaual/go-locale@v0.0.0-20250612000132-0ef82f21eade/LICENSE",
+      "sha256": "f5a169b17b7b5bc97a3909f190089256dc62adb86eefc65454b0fdca37861c20"
+    },
+    {
+      "title": "github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 — COPYING.txt",
+      "source": "github.com/jsummers/gobmp@v0.0.0-20230614200233-a9de23ed2e25/COPYING.txt",
+      "sha256": "027529c1f33b6ef9280c5b9569e120734dbbee0e5e37436fb9a1bc7a0153b0ae"
+    },
+    {
+      "title": "github.com/klauspost/compress v1.19.0 — LICENSE",
+      "source": "github.com/klauspost/compress@v1.19.0/LICENSE",
+      "sha256": "0d9e582ee4bff57bf1189c9e514e6da7ce277f9cd3bc2d488b22fbb39a6d87cf"
+    },
+    {
+      "title": "github.com/klauspost/compress v1.19.0 — internal/snapref/LICENSE",
+      "source": "github.com/klauspost/compress@v1.19.0/internal/snapref/LICENSE",
+      "sha256": "f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf"
+    },
+    {
+      "title": "github.com/klauspost/compress v1.19.0 — zstd/internal/xxhash/LICENSE.txt",
+      "source": "github.com/klauspost/compress@v1.19.0/zstd/internal/xxhash/LICENSE.txt",
+      "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c"
+    },
+    {
+      "title": "github.com/mattn/go-runewidth v0.0.24 — LICENSE",
+      "source": "github.com/mattn/go-runewidth@v0.0.24/LICENSE",
+      "sha256": "88a2379b3ca34bf5c57127aff9dcb802bbb60ece0805cdbda65b3bd115f971d9"
+    },
+    {
+      "title": "github.com/ncruces/zenity v0.10.15 — LICENSE",
+      "source": "github.com/ncruces/zenity@v0.10.15/LICENSE",
+      "sha256": "f0fd8bae1b051ac3a95fdabcd30f24f0835ec3ca6d446d0564555758f09941ac"
+    },
+    {
+      "title": "github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 — LICENSE",
+      "source": "github.com/nfnt/resize@v0.0.0-20180221191011-83c6a9932646/LICENSE",
+      "sha256": "7b850692b15c71706bc6906b51d6375c1404c2d26233078335b6aaa7def8b3f4"
+    },
+    {
+      "title": "github.com/nicksnyder/go-i18n/v2 v2.5.1 — LICENSE",
+      "source": "github.com/nicksnyder/go-i18n/v2@v2.5.1/LICENSE",
+      "sha256": "8fb3aead091abd1579670cd4d805c7923b66ee97b771148f4ef928a65c259328"
+    },
+    {
+      "title": "github.com/pierrec/lz4/v4 v4.1.27 — LICENSE",
+      "source": "github.com/pierrec/lz4/v4@v4.1.27/LICENSE",
+      "sha256": "6a358d2540ca14048f02d366f23787c0a480157e58f058113f0e27168dd4e447"
+    },
+    {
+      "title": "github.com/rymdport/portal v0.4.2 — LICENSE",
+      "source": "github.com/rymdport/portal@v0.4.2/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "title": "github.com/spf13/afero v1.15.0 — LICENSE.txt",
+      "source": "github.com/spf13/afero@v1.15.0/LICENSE.txt",
+      "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283"
+    },
+    {
+      "title": "github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c — LICENSE",
+      "source": "github.com/srwiley/oksvg@v0.0.0-20221011165216-be6e8873101c/LICENSE",
+      "sha256": "cda28abc46a25d34ad876ec119ad3c29edbb8634d5fef46ccf2e1d63acd9ca34"
+    },
+    {
+      "title": "github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef — LICENSE",
+      "source": "github.com/srwiley/rasterx@v0.0.0-20220730225603-2ab79fcdd4ef/LICENSE",
+      "sha256": "cda28abc46a25d34ad876ec119ad3c29edbb8634d5fef46ccf2e1d63acd9ca34"
+    },
+    {
+      "title": "github.com/stangelandcl/ppmd v0.1.1 — LICENSE",
+      "source": "github.com/stangelandcl/ppmd@v0.1.1/LICENSE",
+      "sha256": "9bdaf6c691adeb560c86a43c26b9dd4f8a52c8d9965229e356e545e5894c3ab1"
+    },
+    {
+      "title": "github.com/ulikunitz/xz v0.5.15 — LICENSE",
+      "source": "github.com/ulikunitz/xz@v0.5.15/LICENSE",
+      "sha256": "701cbcc144a7c865b072f27547e66ddbf17ac44a3bd21f71149ace02518f107c"
+    },
+    {
+      "title": "github.com/yuin/goldmark v1.8.2 — LICENSE",
+      "source": "github.com/yuin/goldmark@v1.8.2/LICENSE",
+      "sha256": "c1d6f653c38c80294dc7994647ba0dcc508ce64a86996303c804efa2f7982bff"
+    },
+    {
+      "title": "go4.org v0.0.0-20260112195520-a5071408f32f — AUTHORS",
+      "source": "go4.org@v0.0.0-20260112195520-a5071408f32f/AUTHORS",
+      "sha256": "c63f99c63839b2821456c6f675ca638fa55c2f87486a336afa76b3105c89962c"
+    },
+    {
+      "title": "go4.org v0.0.0-20260112195520-a5071408f32f — LICENSE",
+      "source": "go4.org@v0.0.0-20260112195520-a5071408f32f/LICENSE",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+    },
+    {
+      "title": "golang.org/x/image v0.44.0 — LICENSE",
+      "source": "golang.org/x/image@v0.44.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/image v0.44.0 — PATENTS",
+      "source": "golang.org/x/image@v0.44.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "golang.org/x/mod v0.40.0 — LICENSE",
+      "source": "golang.org/x/mod@v0.40.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/mod v0.40.0 — PATENTS",
+      "source": "golang.org/x/mod@v0.40.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "golang.org/x/net v0.48.0 — LICENSE",
+      "source": "golang.org/x/net@v0.48.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/net v0.48.0 — PATENTS",
+      "source": "golang.org/x/net@v0.48.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "golang.org/x/sys v0.47.0 — LICENSE",
+      "source": "golang.org/x/sys@v0.47.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/sys v0.47.0 — PATENTS",
+      "source": "golang.org/x/sys@v0.47.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "golang.org/x/text v0.40.0 — LICENSE",
+      "source": "golang.org/x/text@v0.40.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/text v0.40.0 — PATENTS",
+      "source": "golang.org/x/text@v0.40.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "AppImage-libfuse-3.15.0-GPL2.txt",
+      "source": "internal/licenses/native/AppImage-libfuse-3.15.0-GPL2.txt",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "title": "AppImage-libfuse-3.15.0-LGPL2.txt",
+      "source": "internal/licenses/native/AppImage-libfuse-3.15.0-LGPL2.txt",
+      "sha256": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+    },
+    {
+      "title": "AppImage-libfuse-3.15.0-LICENSE.txt",
+      "source": "internal/licenses/native/AppImage-libfuse-3.15.0-LICENSE.txt",
+      "sha256": "b8832d9caaa075bbbd2aef24efa09f8b7ab66a832812d88c602da0c7b4397fad"
+    },
+    {
+      "title": "AppImage-musl-1.2.5-COPYRIGHT.txt",
+      "source": "internal/licenses/native/AppImage-musl-1.2.5-COPYRIGHT.txt",
+      "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+    },
+    {
+      "title": "AppImage-squashfuse-0.5.2-LICENSE.txt",
+      "source": "internal/licenses/native/AppImage-squashfuse-0.5.2-LICENSE.txt",
+      "sha256": "9e909cc8a8ba27b1a649c964cf9eda37de911f3138c2b64e6d2f01703904ac13"
+    },
+    {
+      "title": "AppImage-type2-runtime-20251108-LICENSE.txt",
+      "source": "internal/licenses/native/AppImage-type2-runtime-20251108-LICENSE.txt",
+      "sha256": "aa154fc9070614bbe7921f89db11efd1dba7a1f3a41685958110e2230f9c0ca1"
+    },
+    {
+      "title": "AppImage-zlib-1.3.1-LICENSE.txt",
+      "source": "internal/licenses/native/AppImage-zlib-1.3.1-LICENSE.txt",
+      "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+    },
+    {
+      "title": "AppImage-zstd-1.5.6-LICENSE.txt",
+      "source": "internal/licenses/native/AppImage-zstd-1.5.6-LICENSE.txt",
+      "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+    },
+    {
+      "title": "GCC-GPL-3.0.txt",
+      "source": "internal/licenses/native/GCC-GPL-3.0.txt",
+      "sha256": "fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0"
+    },
+    {
+      "title": "GCC-RUNTIME-LIBRARY-EXCEPTION.txt",
+      "source": "internal/licenses/native/GCC-RUNTIME-LIBRARY-EXCEPTION.txt",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    },
+    {
+      "title": "Go-runtime-LICENSE.txt",
+      "source": "internal/licenses/native/Go-runtime-LICENSE.txt",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "MinGW-COPYING.txt",
+      "source": "internal/licenses/native/MinGW-COPYING.txt",
+      "sha256": "f38e6194bd3bfa1b654f118e5acefe0aead437bbe669eee43957ccc65a7127f1"
+    },
+    {
+      "title": "MinGW-runtime-COPYING.txt",
+      "source": "internal/licenses/native/MinGW-runtime-COPYING.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f"
+    },
+    {
+      "title": "liblzma-COPYING-0BSD.txt",
+      "source": "internal/licenses/native/liblzma-COPYING-0BSD.txt",
+      "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1"
+    }
+  ],
+  "mpl_source_sha256": "95a073fdf09822e1a5f065753e7f063c6dc27ef53f1beb31f1f37c891c6a9235",
+  "notices_sha256": "1e265634c02371f43d58f6f13293e12a91833824aea252710f09b1a1c9df0c9e"
+}

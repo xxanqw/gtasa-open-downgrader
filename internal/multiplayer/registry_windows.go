@@ -28,6 +28,19 @@ func registryCandidates() map[ClientID][]string {
 	return result
 }
 
+func mtaRegistryCandidates() map[string][]string {
+	result := map[string][]string{}
+	for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+		for _, version := range []string{"1.6", "1.7", "1.5"} {
+			for _, key := range []string{`SOFTWARE\Multi Theft Auto: San Andreas All\` + version, `SOFTWARE\WOW6432Node\Multi Theft Auto: San Andreas All\` + version} {
+				if value := registryString(root, key, "Last Install Location"); value != "" {
+					result[version] = append(result[version], executable(value, "Multi Theft Auto.exe"))
+				}
+			}
+		}
+	}
+	return result
+}
 func registryString(root registry.Key, path, name string) string {
 	key, err := registry.OpenKey(root, path, registry.QUERY_VALUE|registry.WOW64_32KEY)
 	if err != nil {

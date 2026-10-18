@@ -1,8 +1,8 @@
 [Details]
   Icon = "internal/assets/icon.png"
   Name = "GTA SA Open Downgrader"
-  ID = "pp.ua.xxanqw.gtasa-open-downgrader"
-  Version = "0.2.2"
+  ID = "me.xxanqw.gtasa-open-downgrader"
+  Version = "0.3.0"
   Build = 1
 [Migrations]
   fyneDo = true

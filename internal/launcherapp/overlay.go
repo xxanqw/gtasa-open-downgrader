@@ -65,47 +65,28 @@ func (runtime *Runtime) runWithMultiplayerModsAndCleanup(ctx context.Context, ru
 	if err != nil {
 		return fmt.Errorf("inspect running GTA processes: %w", err)
 	}
-	if _, err := runtime.disableModLoader(); err != nil {
+	if len(before) != 0 {
+		return fmt.Errorf("close GTA before preparing multiplayer compatibility")
+	}
+	if err := runtime.disableWidescreen(ctx); err != nil {
 		return err
 	}
+	if _, err := runtime.disableModLoader(); err != nil {
+		return errors.Join(err, runtime.restoreWidescreen())
+	}
 	if err := runtime.stageMultiplayerOverlay(ctx); err != nil {
-		return errors.Join(err, runtime.restoreModLoader())
+		return errors.Join(err, runtime.restoreModLoader(), runtime.restoreWidescreen())
 	}
-	runDone := make(chan error, 1)
-	launcherDone := make(chan struct{})
-	go func() {
-		runDone <- run()
-		close(launcherDone)
-	}()
-	started, waitErr := runtime.waitForSpawnedGame(ctx, before, launcherDone)
-	if waitErr != nil {
-		// The game may still have these files mapped. Preserve the complete
-		// transaction for restoreCompatibility on the next safe launcher run.
-		var runErr error
-		select {
-		case runErr = <-runDone:
-		default:
+	return runtime.runTrackedGame(ctx, before, run, func() error {
+		if err := runtime.requireClosedForCompatibility(); err != nil {
+			return err
 		}
-		return errors.Join(runErr, fmt.Errorf("wait for GTA to exit: %w", waitErr))
-	}
-	var runErr error
-	if started {
-		// Bootstrap programs can outlive GTA or return a Wine status even though
-		// they started it successfully. Observing GTA is authoritative.
-		select {
-		case <-runDone:
-		default:
+		var cleanupErr error
+		if cleanup != nil {
+			cleanupErr = cleanup()
 		}
-	} else {
-		runErr = <-runDone
-	}
-	var cleanupErr error
-	if cleanup != nil {
-		cleanupErr = cleanup()
-	}
-	restoreErr := runtime.restoreMultiplayerOverlay()
-	loaderErr := runtime.restoreModLoader()
-	return errors.Join(runErr, cleanupErr, restoreErr, loaderErr)
+		return errors.Join(cleanupErr, runtime.restoreMultiplayerOverlay(), runtime.restoreModLoader(), runtime.restoreWidescreen())
+	})
 }
 
 func (runtime *Runtime) gameProcessSnapshot() (gameProcessSet, error) {
@@ -139,11 +120,9 @@ func (runtime *Runtime) stageMultiplayerOverlay(ctx context.Context) error {
 		if !tracker.Has(candidate.name) {
 			continue
 		}
-		// Current Widescreen Fix builds overflow GTA's stack under Proton when
-		// SA-MP is injected alongside either GInput or Framerate Vigilante.
-		// Keep it in Mod Loader for single-player and retain the other selected
-		// modifications in SA-MP/open.mp. Native Windows does not use this filter.
-		if candidate.name == "Widescreen Fixes" && RunningUnderProton() {
+		// Widescreen Fix is single-player only on both platforms: its scaling
+		// conflicts with SA-MP/open.mp textdraws. Never copy it into the overlay.
+		if candidate.name == "Widescreen Fixes" {
 			continue
 		}
 		root := filepath.Join(runtime.GameDir, "modloader", candidate.directory)

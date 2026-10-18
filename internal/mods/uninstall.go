@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 )
 
 type UninstallResult struct {
@@ -32,6 +33,9 @@ func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallRes
 	}
 	if reason := uninstallDependency(name, tracker); reason != "" {
 		return result, fmt.Errorf("%s: %s", name, reason)
+	}
+	if err = platform.RequireGameClosed(); err != nil {
+		return result, err
 	}
 	paths := uninstallPaths(name)
 	if len(paths) == 0 {
@@ -68,6 +72,9 @@ func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallRes
 		if err = ctx.Err(); err != nil {
 			return rollback(err)
 		}
+		if err = platform.RequireGameClosed(); err != nil {
+			return rollback(err)
+		}
 		source, joinErr := fsutil.Join(root, rel)
 		if joinErr != nil {
 			return rollback(joinErr)
@@ -90,6 +97,9 @@ func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallRes
 		moved = append(moved, move{source: source, backup: backup})
 	}
 	if err = ctx.Err(); err != nil {
+		return rollback(err)
+	}
+	if err = platform.RequireGameClosed(); err != nil {
 		return rollback(err)
 	}
 	names := make([]string, 0, len(tracker.Installed)-1)
@@ -117,6 +127,11 @@ func uninstallDependency(name string, tracker Tracker) string {
 		if installed == name {
 			continue
 		}
+		for _, dep := range RequiredMods(installed) {
+			if name == dep {
+				return "remove " + installed + " first; it depends on this package"
+			}
+		}
 		if name == "ASI Loader" {
 			return "remove the other installed mods first; they need ASI Loader"
 		}
@@ -128,6 +143,9 @@ func uninstallDependency(name string, tracker Tracker) string {
 }
 
 func uninstallPaths(name string) []string {
+	if spec, ok := interfacePacks[name]; ok {
+		return []string{spec.folder}
+	}
 	switch name {
 	case "ASI Loader":
 		return []string{"vorbisFile.dll", "vorbisHooked.dll"}
@@ -141,6 +159,10 @@ func uninstallPaths(name string) []string {
 		return []string{"modloader/SkyGFX"}
 	case "Frontend Mods":
 		return []string{"modloader/FrontendMods"}
+	case HDFonts:
+		return []string{"modloader/HDFonts", hdFontStore}
+	case ExtendedFonts:
+		return []string{extendedBundle}
 	case Framerate:
 		return []string{"modloader/FramerateVigilante"}
 	case "GInput":

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/mtavalidation"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/ui"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/updater"
 	"os"
@@ -11,6 +12,13 @@ import (
 )
 
 func main() {
+	if handled, err := mtavalidation.HelperMain(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 5 && os.Args[1] == "--apply-update" {
 		pid, e := strconv.Atoi(os.Args[2])
 		if e == nil {

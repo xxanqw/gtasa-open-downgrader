@@ -5,7 +5,7 @@ package assets
 
 import (
 	"context"
-	"embed"
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
@@ -18,20 +18,23 @@ import (
 //go:embed icon.png
 var Icon []byte
 
+//go:embed splash.png
+var Splash []byte
+
+//go:embed steam-launcher-icon.png
+var SteamLauncherIcon []byte
+
+//go:embed samp.png
+var SAMPClientIcon []byte
+
+//go:embed openmp.png
+var OpenMPClientIcon []byte
+
+//go:embed mta.png
+var MTAClientIcon []byte
+
 //go:embed samp-drive-guide.png
 var SAMPDriveGuide []byte
-
-//go:embed app-LICENSE.txt
-var AppLicense string
-
-//go:embed LICENSE.txt
-var XdeltaLicense string
-
-//go:embed fontawesome/*.svg
-var FontAwesome embed.FS
-
-//go:embed fontawesome/LICENSE.txt
-var FontAwesomeLicense string
 
 func Xdelta(ctx context.Context) (string, func(), error) {
 	if runtime.GOARCH != "amd64" {

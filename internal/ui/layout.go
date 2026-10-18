@@ -11,107 +11,57 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
 )
 
-// Preserve the user's light/dark preference and scaling with a neutral palette.
-// Explicit surface shades keep controls, collection headers and separators
-// distinct instead of flattening the interface into one grey plane.
-type compactTheme struct{ fyne.Theme }
-
-func (t compactTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
-	dark := variant != theme.VariantLight
-	neutral := func(light, darkValue uint8) color.Color {
-		value := light
-		if dark {
-			value = darkValue
-		}
-		return color.NRGBA{R: value, G: value, B: value, A: 255}
-	}
-	switch name {
-	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
-		return neutral(32, 238)
-	case theme.ColorNameForegroundOnPrimary, theme.ColorNameForegroundOnError, theme.ColorNameForegroundOnSuccess, theme.ColorNameForegroundOnWarning:
-		return neutral(255, 18)
-	case theme.ColorNameError, theme.ColorNameWarning, theme.ColorNameSuccess:
-		return neutral(45, 220)
-	case theme.ColorNameForeground:
-		return neutral(24, 242)
-	case theme.ColorNameDisabled, theme.ColorNamePlaceHolder:
-		return neutral(104, 154)
-	case theme.ColorNameBackground:
-		return neutral(244, 18)
-	case theme.ColorNameInputBackground:
-		return neutral(255, 30)
-	case theme.ColorNameButton:
-		return neutral(218, 48)
-	case theme.ColorNameDisabledButton:
-		return neutral(234, 30)
-	case theme.ColorNameHeaderBackground:
-		return neutral(222, 40)
-	case theme.ColorNameMenuBackground, theme.ColorNameOverlayBackground:
-		return neutral(250, 28)
-	case theme.ColorNameInputBorder, theme.ColorNameSeparator, theme.ColorNameInnerWindowBorder, theme.ColorNameInnerWindowBorderInactive:
-		return neutral(170, 68)
-	case theme.ColorNameScrollBar:
-		return neutral(96, 160)
-	case theme.ColorNameScrollBarBackground:
-		return neutral(230, 35)
-	case theme.ColorNameSelection:
-		return neutral(200, 76)
-	case theme.ColorNameFocus:
-		if dark {
-			return color.NRGBA{R: 255, G: 255, B: 255, A: 112}
-		}
-		return color.NRGBA{A: 72}
-	case theme.ColorNameHover:
-		if dark {
-			return color.NRGBA{R: 255, G: 255, B: 255, A: 36}
-		}
-		return color.NRGBA{A: 28}
-	case theme.ColorNamePressed:
-		if dark {
-			return color.NRGBA{R: 255, G: 255, B: 255, A: 72}
-		}
-		return color.NRGBA{A: 52}
-	case theme.ColorNameShadow:
-		return color.NRGBA{A: 104}
-	}
-	// Neutralize every remaining theme role, including translucent overlays.
-	c := color.NRGBAModel.Convert(t.Theme.Color(name, variant)).(color.NRGBA)
-	value := uint8((uint32(c.R)*299 + uint32(c.G)*587 + uint32(c.B)*114) / 1000)
-	return color.NRGBA{R: value, G: value, B: value, A: c.A}
-}
-
-func (t compactTheme) Size(name fyne.ThemeSizeName) float32 {
-	switch name {
-	case theme.SizeNameText:
-		return 13
-	case theme.SizeNamePadding:
-		return 3
-	case theme.SizeNameInnerPadding:
-		return 5
-	case theme.SizeNameInlineIcon:
-		return 12
-	}
-	return t.Theme.Size(name)
-}
-
 func compactLabel(text string) *widget.Label {
 	l := widget.NewLabel(text)
 	l.Truncation = fyne.TextTruncateEllipsis
 	return l
 }
 
-// Keep the footer glanceable while the journal retains the complete message.
-// Paths are reduced to their final component because the full source path is
-// available from the log button beside the status bar.
+// Short footer labels only; the journal retains the original diagnostics.
 func compactStatusText(text string) string {
+	text = strings.TrimSpace(text)
+	if strings.HasSuffix(text, " failed") {
+		return "Failed | see log"
+	}
+	complete := strings.HasSuffix(text, " complete")
+	operation := strings.TrimSuffix(text, " complete")
+	for _, item := range []struct{ operation, active, done string }{
+		{"Detecting Steam and multiplayer", "Checking Steam…", "Steam checked"},
+		{"Preparing patch assets", "Preparing patches…", "Patches ready"},
+		{"Scanning game files", "Scanning…", "Scan done"},
+		{"Installing mods", "Installing mods…", "Mods installed"},
+		{"Updating installed mods", "Updating mods…", "Mods updated"},
+		{"Downgrading game", "Downgrading…", "Downgrade done"},
+		{"Downloading patch assets", "Downloading patches…", "Patches downloaded"},
+		{"Downloading app update", "Downloading update…", "Update downloaded"},
+		{"Importing patch assets", "Importing patches…", "Patches imported"},
+		{"Validating patches", "Checking patches…", "Patches checked"},
+		{"Restoring backups", "Restoring…", "Backups restored"},
+		{"Deleting backups", "Deleting backups…", "Backups deleted"},
+		{"Clearing user data", "Clearing user data…", "User data cleared"},
+		{"Stopping background work…", "Stopping…", "Stopped"},
+		{"Steam / Proton launch options copied.", "Options copied", "Options copied"},
+		{"Application log exported.", "Log exported", "Log exported"},
+		{"File report copied.", "Report copied", "Report copied"},
+	} {
+		if operation == item.operation {
+			if complete {
+				return item.done
+			}
+			return item.active
+		}
+	}
+	if complete {
+		return "Done"
+	}
 	if strings.HasPrefix(text, "Scan complete: ") {
 		var files int
 		if _, err := fmt.Sscanf(text, "Scan complete: %d manifest files checked.", &files); err == nil {
-			return fmt.Sprintf("Scan complete · %d files", files)
+			return fmt.Sprintf("Scanned %d files", files)
 		}
 	}
 	if strings.HasPrefix(text, "Cancelled.") {
-		return "Cancelled · backups preserved"
+		return "Cancelled"
 	}
 	if strings.HasPrefix(text, "Cancelling;") {
 		return "Cancelling…"
@@ -121,9 +71,21 @@ func compactStatusText(text string) string {
 		if index := strings.LastIndexAny(path, `/\`); index >= 0 {
 			path = path[index+1:]
 		}
-		text = path + " · " + parts[1]
+		text = path + " | " + parts[1]
 	}
-	const limit = 30
+	text = strings.ReplaceAll(text, " · ", " | ")
+	const limit = 24
+	// Keep download percentages visible even when the asset name is long.
+	if index := strings.LastIndex(text, " | "); index >= 0 && strings.HasSuffix(text, "%") {
+		suffix := text[index:]
+		if len([]rune(suffix)) < limit {
+			return shortStatusLabel(text[:index], limit-len([]rune(suffix))) + suffix
+		}
+	}
+	return shortStatusLabel(text, limit)
+}
+
+func shortStatusLabel(text string, limit int) string {
 	runes := []rune(strings.TrimSpace(text))
 	if len(runes) <= limit {
 		return string(runes)
@@ -151,19 +113,26 @@ func fileValues(row game.Row) [5]string {
 	return [5]string{row.Path, row.NeedsPatch, row.Status, row.CurrentHash, row.TargetHash}
 }
 
-// Keep all five columns in the viewport. Long values elide like the original
-// Qt table, with the grid used only to display scan and patch results.
+// Resize File/Status columns, or all five columns when checksums are enabled.
 type fileTableLayout struct {
-	table *readOnlyTable
-	width float32
+	table        *readOnlyTable
+	width        float32
+	detailed     func() bool
+	lastDetailed bool
 }
 
 func (l *fileTableLayout) MinSize([]fyne.CanvasObject) fyne.Size { return fyne.NewSize(360, 150) }
 func (l *fileTableLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	if l.width != size.Width {
+	detailed := l.detailed == nil || l.detailed()
+	if l.width != size.Width || detailed != l.lastDetailed {
 		l.width = size.Width
+		l.lastDetailed = detailed
 		usable := max(float32(0), size.Width-24)
-		for col, fraction := range []float32{0.25, 0.07, 0.24, 0.22, 0.22} {
+		fractions := []float32{0.58, 0.42}
+		if detailed {
+			fractions = []float32{0.25, 0.07, 0.24, 0.22, 0.22}
+		}
+		for col, fraction := range fractions {
 			l.table.SetColumnWidth(col, usable*fraction)
 		}
 	}
@@ -171,51 +140,15 @@ func (l *fileTableLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	l.table.Resize(size)
 }
 
-// Match the original compact mod grid while retaining readable version details.
-type modGridTheme struct{ fyne.Theme }
+// Only the active progress fill uses the light foreground; keep primary
+// buttons and other components on the existing neutral palette.
+type progressBarTheme struct{ fyne.Theme }
 
-func (t modGridTheme) Size(name fyne.ThemeSizeName) float32 {
-	switch name {
-	case theme.SizeNameText:
-		return 11
-	case theme.SizeNameInnerPadding:
-		return 1
-	case theme.SizeNameInlineIcon:
-		return 14
+func (t progressBarTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if name == theme.ColorNamePrimary {
+		return t.Theme.Color(theme.ColorNameForeground, variant)
 	}
-	return t.Theme.Size(name)
-}
-
-func (w *Window) refreshModSelection() {
-	if w.modsTitle == nil {
-		return
-	}
-	n := len(w.selected())
-	action := "Downgrade game"
-	if n > 0 {
-		action = fmt.Sprintf("Downgrade game + %d mods", n)
-	}
-	w.downgrade.SetText(action)
-}
-
-// Keep status text out of the progress lane, even with long paths or at narrow
-// window sizes. A hidden progress bar leaves the footer's geometry unchanged.
-type statusLayout struct{}
-
-func (statusLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	return fyne.NewSize(360, max(objects[0].MinSize().Height, objects[2].MinSize().Height))
-}
-func (statusLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	status, progress, actions := objects[0], objects[1], objects[2]
-	right := actions.MinSize().Width
-	available := max(float32(0), size.Width-right-12)
-	left := min(size.Width*0.25, available*0.45)
-	status.Move(fyne.NewPos(0, 0))
-	status.Resize(fyne.NewSize(left, size.Height))
-	progress.Move(fyne.NewPos(left+10, (size.Height-3)/2))
-	progress.Resize(fyne.NewSize(max(float32(0), available-left-10), 3))
-	actions.Move(fyne.NewPos(size.Width-right, (size.Height-actions.MinSize().Height)/2))
-	actions.Resize(actions.MinSize())
+	return t.Theme.Color(name, variant)
 }
 
 func modCheckSummary(updates, unknown, failed int) string {

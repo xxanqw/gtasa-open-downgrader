@@ -45,6 +45,9 @@ func Uninstall(ctx context.Context, id ClientID, environment Environment, runner
 	if !ok || !client.Installed {
 		return UninstallResult{}, fmt.Errorf("%s is not installed", clientName(id))
 	}
+	if id == ClientMTA {
+		return UninstallResult{}, UninstallMTA(ctx, client.Version, environment, runner)
+	}
 	uninstaller, err := UninstallerPath(client, environment)
 	if err != nil {
 		return UninstallResult{}, err

@@ -23,10 +23,12 @@ func Candidates() []string {
 		key, value string
 		steam      bool
 	}{
+		{registry.CURRENT_USER, `Software\Valve\Steam`, "SteamPath", true},
+		{registry.CURRENT_USER, `Software\Valve\Steam`, "InstallPath", true},
+		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Valve\Steam`, "InstallPath", true},
+		{registry.LOCAL_MACHINE, `SOFTWARE\Valve\Steam`, "InstallPath", true},
 		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto San Andreas\Installation`, "ExePath", false},
 		{registry.LOCAL_MACHINE, `SOFTWARE\Rockstar Games\Grand Theft Auto San Andreas\Installation`, "ExePath", false},
-		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Valve\Steam`, "InstallPath", true},
-		{registry.CURRENT_USER, `Software\Valve\Steam`, "SteamPath", true},
 	} {
 		key, e := registry.OpenKey(source.root, source.key, registry.QUERY_VALUE)
 		if e != nil {
@@ -38,7 +40,7 @@ func Candidates() []string {
 			continue
 		}
 		if source.steam {
-			paths = append(paths, SteamLibraries(v)...)
+			paths = append(paths, SteamGameDirs(v)...)
 		} else {
 			if strings.HasSuffix(strings.ToLower(v), ".exe") {
 				v = filepath.Dir(v)

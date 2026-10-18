@@ -6,14 +6,18 @@ __pycache__/
 uv.lock
 dist/
 build/
+/downgrader
+/downgrader.exe
 *.syso
 *.AppImage
 *.test
 *.test.exe
 coverage.out
+omp-launcher.log
 # Never commit copyrighted game files, generated patches or local backups.
 Patches/
 SA_STEAM/
+SA_STEAM_GERMAN/
 SA_10US/
 .temp_patch_gen/
 .patch-download-*/

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
@@ -148,6 +149,167 @@ func TestBadOutputDoesNotReplaceOriginal(t *testing.T) {
 		t.Fatal("overwrote original")
 	}
 }
+func TestManifestV2SelectsGermanVariantPatch(t *testing.T) {
+	root, patches := t.TempDir(), t.TempDir()
+	testutil.Write(t, root, "models/gta3.img", "german source")
+	globalPatch := testutil.Write(t, patches, "models/gta3.img.xdelta", "global delta")
+	germanPatch := testutil.Write(t, patches, "variants/steam_r2_german/models/gta3.img.xdelta", "German delta")
+	m := game.Manifest{Version: "2.0", Files: []game.File{{
+		Path: "models/gta3.img", Action: "patch", SourceHash: testutil.Hash("global source"), TargetHash: testutil.Hash("target"),
+		Sources: []game.PatchSource{{Hash: testutil.Hash("global source"), Patch: "models/gta3.img.xdelta"}, {Hash: testutil.Hash("german source"), Patch: "variants/steam_r2_german/models/gta3.img.xdelta"}},
+	}}}
+	var selected string
+	engine := patch.Engine{Xdelta: "xdelta3", Run: func(_ context.Context, _ string, args ...string) error {
+		selected = args[3]
+		return os.WriteFile(args[4], []byte("target"), 0644)
+	}}
+	result, err := engine.Apply(context.Background(), root, patches, m, nil)
+	if err != nil || result.Succeeded != 1 {
+		t.Fatalf("apply German variant: %+v, %v", result, err)
+	}
+	if selected != germanPatch || selected == globalPatch {
+		t.Fatalf("selected patch %q, want %q", selected, germanPatch)
+	}
+	if got := testutil.Read(t, root, "models/gta3.img"); got != "target" {
+		t.Fatalf("patched content = %q", got)
+	}
+}
+func TestManifestV2CopyUsesDeclaredPayload(t *testing.T) {
+	root, patches := t.TempDir(), t.TempDir()
+	testutil.Write(t, root, "gta-sa.exe", "German executable")
+	testutil.Write(t, patches, "payloads/hoodlum.exe", "target")
+	m := game.Manifest{Version: "2.0", Files: []game.File{{
+		Path: "gta-sa.exe", Action: "copy", SourceHash: testutil.Hash("global executable"), TargetHash: testutil.Hash("target"), Payload: "payloads/hoodlum.exe",
+		Sources: []game.PatchSource{{Hash: testutil.Hash("global executable")}, {Hash: testutil.Hash("German executable")}},
+	}}}
+	if _, err := (patch.Engine{}).Apply(context.Background(), root, patches, m, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"gta-sa.exe", "gta_sa.exe"} {
+		if got := testutil.Read(t, root, name); got != "target" {
+			t.Fatalf("%s = %q", name, got)
+		}
+	}
+}
+func TestValidateAssetsRequiresEveryManifestV2Variant(t *testing.T) {
+	root := t.TempDir()
+	m := game.Manifest{Version: "2.0", Files: []game.File{{
+		Path: "models/gta3.img", SourceHash: testutil.Hash("global"), TargetHash: testutil.Hash("target"),
+		Sources: []game.PatchSource{{Hash: testutil.Hash("global"), Patch: "models/gta3.img.xdelta"}, {Hash: testutil.Hash("german"), Patch: "variants/steam_r2_german/models/gta3.img.xdelta"}},
+	}}}
+	b, _ := json.Marshal(m)
+	testutil.Write(t, root, "manifest.json", string(b))
+	testutil.Write(t, root, "models/gta3.img.xdelta", "global")
+	if _, err := patch.ValidateAssets(root); err == nil {
+		t.Fatal("accepted assets with missing German variant")
+	}
+	testutil.Write(t, root, "variants/steam_r2_german/models/gta3.img.xdelta", "german")
+	if _, err := patch.ValidateAssets(root); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestEditionScopedDowngradeAndRevert(t *testing.T) {
+	ctx := context.Background()
+	bin, cleanup, err := assets.Xdelta(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	patches := t.TempDir()
+	testutil.Write(t, patches, "gta_sa.exe", "target executable")
+	for _, tc := range []struct{ name, exe, own, other string }{
+		{"steam_r2_global", "global executable", "global.img", "german.img"},
+		{"steam_r2_german", "german executable", "german.img", "global.img"},
+	} {
+		path := filepath.Join("models", tc.own)
+		source := testutil.Write(t, t.TempDir(), tc.own, "source "+tc.own)
+		target := testutil.Write(t, t.TempDir(), tc.own, "target "+tc.own)
+		delta := filepath.Join(patches, path+".xdelta")
+		if err := os.MkdirAll(filepath.Dir(delta), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := patch.Run(ctx, bin, "-e", "-s", source, target, delta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := game.Manifest{Version: "2.1", ReleaseID: patch.ReleaseID,
+		SourceVersions: []game.SourceVersion{
+			{ID: "steam_r2_global", Name: "Global", EXEHash: testutil.Hash("global executable")},
+			{ID: "steam_r2_german", Name: "German", EXEHash: testutil.Hash("german executable")},
+		},
+		Files: []game.File{{Path: "gta-sa.exe", Action: "copy", SourceHash: testutil.Hash("global executable"), TargetHash: testutil.Hash("target executable"), Sources: []game.PatchSource{{Hash: testutil.Hash("global executable")}, {Hash: testutil.Hash("german executable")}}, ApplicableVersions: []string{"steam_r2_global", "steam_r2_german"}}},
+	}
+	for _, tc := range []struct{ id, name string }{{"steam_r2_global", "global.img"}, {"steam_r2_german", "german.img"}} {
+		m.Files = append(m.Files, game.File{Path: "models/" + tc.name, SourceHash: testutil.Hash("source " + tc.name), TargetHash: testutil.Hash("target " + tc.name), Sources: []game.PatchSource{{Hash: testutil.Hash("source " + tc.name), Patch: "models/" + tc.name + ".xdelta"}}, ApplicableVersions: []string{tc.id}})
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.Write(t, patches, "manifest.json", string(data))
+	if _, err := patch.ValidateReleaseAssets(patches); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, exe, own, other string }{
+		{"steam_r2_global", "global executable", "global.img", "german.img"},
+		{"steam_r2_german", "german executable", "german.img", "global.img"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			testutil.Write(t, root, "gta-sa.exe", tc.exe)
+			testutil.Write(t, root, "models/"+tc.own, "source "+tc.own)
+			loaded, err := game.Load(filepath.Join(patches, "manifest.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for run := 0; run < 2; run++ {
+				result, err := (patch.Engine{Xdelta: bin}).Apply(ctx, root, patches, loaded, nil)
+				if err != nil || result.Failed != 0 {
+					t.Fatalf("apply %d: %+v %v", run, result, err)
+				}
+				if got := testutil.Read(t, root, "models/"+tc.own); got != "target "+tc.own {
+					t.Fatalf("patched file: %q", got)
+				}
+				if _, err := os.Stat(filepath.Join(root, "models", tc.other)); !os.IsNotExist(err) {
+					t.Fatalf("wrong edition file created: %v", err)
+				}
+			}
+			if err := patch.Revert(ctx, root, nil); err != nil {
+				t.Fatal(err)
+			}
+			if got := testutil.Read(t, root, "models/"+tc.own); got != "source "+tc.own {
+				t.Fatalf("revert: %q", got)
+			}
+		})
+	}
+}
+
+func TestEditionUnknownFailsBeforeModifyingGame(t *testing.T) {
+	root, patches := t.TempDir(), t.TempDir()
+	testutil.Write(t, root, "gta-sa.exe", "unrecognized")
+	testutil.Write(t, patches, "gta_sa.exe", "target")
+	m := game.Manifest{SourceVersions: []game.SourceVersion{{ID: "global", Name: "Global", EXEHash: testutil.Hash("global")}}, Files: []game.File{{Path: "gta-sa.exe", Action: "copy", SourceHash: testutil.Hash("global"), TargetHash: testutil.Hash("target"), ApplicableVersions: []string{"global"}}}}
+	if _, err := (patch.Engine{}).Apply(context.Background(), root, patches, m, nil); err == nil {
+		t.Fatal("patched installation with unknown source edition")
+	}
+	if got := testutil.Read(t, root, "gta-sa.exe"); got != "unrecognized" {
+		t.Fatalf("game changed: %q", got)
+	}
+}
+
+func TestReleaseValidationRejectsOldAndIncompleteManifests(t *testing.T) {
+	root := t.TempDir()
+	m := manifest("gta_sa.exe", "copy", "original", "target")
+	testutil.Write(t, root, "gta_sa.exe", "target")
+	for _, candidate := range []game.Manifest{m, {Version: "2.0", ReleaseID: patch.ReleaseID, SourceVersions: []game.SourceVersion{{ID: "steam_r2_global", Name: "Global", EXEHash: testutil.Hash("original")}, {ID: "steam_r2_german", Name: "German", EXEHash: testutil.Hash("german")}}, Files: m.Files}, {Version: "2.1", ReleaseID: patch.ReleaseID, SourceVersions: []game.SourceVersion{{ID: "steam_r2_global", Name: "Global", EXEHash: testutil.Hash("original")}, {ID: "steam_r2_german", Name: "German", EXEHash: testutil.Hash("german")}}, Files: m.Files}} {
+		b, _ := json.Marshal(candidate)
+		testutil.Write(t, root, "manifest.json", string(b))
+		if _, err := patch.ValidateReleaseAssets(root); err == nil {
+			t.Fatal("accepted non-release or incomplete assets")
+		}
+	}
+}
+
 func TestCancelledXdeltaLeavesOriginalAndNoTemp(t *testing.T) {
 	root := t.TempDir()
 	testutil.Write(t, root, "data", "original")
@@ -169,6 +331,34 @@ func TestCancelledXdeltaLeavesOriginalAndNoTemp(t *testing.T) {
 		t.Fatal("temporary output leaked")
 	}
 }
+func TestDowngradeRecoveryPreservesModUninstallSnapshots(t *testing.T) {
+	root, patches := t.TempDir(), t.TempDir()
+	testutil.Write(t, root, "gta_sa.exe", "original")
+	testutil.Write(t, patches, "gta_sa.exe", "target")
+	if _, err := (patch.Engine{}).Apply(context.Background(), root, patches, manifest("gta_sa.exe", "copy", "original", "target"), nil); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Write(t, root, "backups/mods/SilentPatch-1/modloader/SilentPatch/file.asi", "saved mod")
+	if err := patch.Revert(context.Background(), root, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Read(t, root, "gta_sa.exe"); got != "original" {
+		t.Fatalf("restore game executable: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "mods", "SilentPatch-1", "modloader")); !os.IsNotExist(err) {
+		t.Fatalf("mod backup unexpectedly copied into game: %v", err)
+	}
+	if err := patch.Cleanup(root); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.Read(t, root, "backups/mods/SilentPatch-1/modloader/SilentPatch/file.asi"); got != "saved mod" {
+		t.Fatalf("mod backup lost: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "backups", "gta_sa.exe")); !os.IsNotExist(err) {
+		t.Fatal("downgrade backup survived cleanup")
+	}
+}
+
 func TestRestorePythonBackups(t *testing.T) {
 	root := t.TempDir()
 	testutil.Write(t, root, "data", "patched")
@@ -180,17 +370,31 @@ func TestRestorePythonBackups(t *testing.T) {
 		t.Fatal("legacy restore failed")
 	}
 }
+func TestImportReleaseRejectsOldArchiveWithoutLosingCache(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Patches")
+	testutil.Write(t, root, "keep", "existing")
+	m := manifest("gta_sa.exe", "copy", "old", "new")
+	b, _ := json.Marshal(m)
+	archive := testutil.Zip(t, map[string]string{"Patches/manifest.json": string(b), "Patches/gta_sa.exe": "new"})
+	if err := patch.ImportReleaseAssets(context.Background(), archive, root); err == nil {
+		t.Fatal("accepted a v1 release archive")
+	}
+	if got := testutil.Read(t, root, "keep"); got != "existing" {
+		t.Fatalf("cache replaced: %q", got)
+	}
+}
+
 func TestPatchArchiveValidationAndRollback(t *testing.T) {
 	m := manifest("gta_sa.exe", "copy", "original", "target")
 	b, _ := json.Marshal(m)
-	for _, nested := range []bool{false, true} {
-		t.Run(map[bool]string{false: "flat", true: "nested"}[nested], func(t *testing.T) {
+	for _, prefix := range []string{"", "Patches/", "Patches_v2/"} {
+		name := "flat"
+		if prefix != "" {
+			name = strings.TrimSuffix(prefix, "/")
+		}
+		t.Run(name, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "Patches")
 			testutil.Write(t, root, "old", "old")
-			prefix := ""
-			if nested {
-				prefix = "Patches/"
-			}
 			archive := testutil.Zip(t, map[string]string{prefix + "manifest.json": string(b), prefix + "gta_sa.exe": "target"})
 			if e := patch.ImportAssets(context.Background(), archive, root); e != nil {
 				t.Fatal(e)

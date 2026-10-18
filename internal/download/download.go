@@ -16,7 +16,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 )
 
-const PatchURL = "https://www.icloud.com/iclouddrive/0afGK6zDBog_0drwp6YZoDLIg#Patches"
+const PatchURL = "https://files.xxanqw.me/s/ARC9NX3rm5"
 const ICloudAPI = "https://ckdatabasews.icloud.com/database/1/com.apple.cloudkit/production/public/records/resolve"
 
 type Progress func(done, total int64)

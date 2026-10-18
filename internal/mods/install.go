@@ -12,6 +12,7 @@ import (
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 )
 
 func layout(mod, name string) string {
@@ -37,6 +38,10 @@ func layout(mod, name string) string {
 		}
 	case "Frontend Mods":
 		return "modloader/FrontendMods/" + name
+	case HDRadarMap, OriginalHQIcons, AtmosphereHUD, NadalaoWeapons:
+		return interfaceArchivePath(mod, name)
+	case ExtendedFonts:
+		return extendedArchivePath(name)
 	case Framerate:
 		base := strings.ToLower(path.Base(name))
 		if base == "frameratevigilante.sa.asi" || base == "frameratevigilante.ini" {
@@ -87,8 +92,18 @@ func ExtractUpdate(ctx context.Context, root, mod, archive, kind string) error {
 }
 
 func extract(ctx context.Context, root, mod, archive, kind string, update bool) error {
+	mod = canonicalModName(mod)
+	if mod == ExtendedFonts {
+		return importExtended(ctx, root, archive, kind, "")
+	}
+	if isInterfaceMod(mod) {
+		return importInterface(ctx, root, mod, archive, kind, "")
+	}
 	if !Supported(mod) {
 		return fmt.Errorf("unknown mod %q", mod)
+	}
+	if err := platform.RequireGameClosed(); err != nil {
+		return err
 	}
 	work, e := os.MkdirTemp(root, ".downgrader-mod-*")
 	if e != nil {
@@ -129,6 +144,9 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 	if len(files) == 0 {
 		return fmt.Errorf("package contains no files for %s", mod)
 	}
+	if e = checkInterfaceOverlap(root, files); e != nil {
+		return e
+	}
 	existed := map[string]bool{}
 	var writes []string
 	for _, rel := range files {
@@ -159,6 +177,9 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 	var applied []string
 	for _, rel := range writes {
 		dst, err := fsutil.Join(root, rel)
+		if err == nil {
+			err = platform.RequireGameClosed()
+		}
 		if err == nil {
 			err = fsutil.CopyFile(ctx, filepath.Join(staged, filepath.FromSlash(rel)), dst)
 		}
@@ -207,6 +228,21 @@ type UpdateResult struct {
 // UpdateInstalled checks only recorded installations. Packages without a
 // fingerprint cannot be classified safely and require an explicit reinstall.
 func (i Installer) UpdateInstalled(ctx context.Context, root string, event Event) (UpdateResult, error) {
+	return i.updateSelected(ctx, root, nil, event)
+}
+
+// UpdateSelected scopes update checks and installation to the named installed mods.
+func (i Installer) UpdateSelected(ctx context.Context, root string, selected []string, event Event) (UpdateResult, error) {
+	allowed := make(map[string]bool, len(selected))
+	for _, name := range selected {
+		if !Supported(name) {
+			return UpdateResult{}, fmt.Errorf("unsupported selected mod: %s", name)
+		}
+		allowed[name] = true
+	}
+	return i.updateSelected(ctx, root, allowed, event)
+}
+func (i Installer) updateSelected(ctx context.Context, root string, allowed map[string]bool, event Event) (UpdateResult, error) {
 	var result UpdateResult
 	tracker, err := LoadTracker(root)
 	if err != nil {
@@ -219,6 +255,9 @@ func (i Installer) UpdateInstalled(ctx context.Context, root string, event Event
 	}
 	var failures []error
 	for _, name := range tracker.Installed {
+		if allowed != nil && !allowed[name] {
+			continue
+		}
 		if err = ctx.Err(); err != nil {
 			return result, err
 		}
@@ -272,6 +311,12 @@ func (i Installer) UpdateInstalled(ctx context.Context, root string, event Event
 			}
 			return result, errors.Join(append(failures, fmt.Errorf("%s: %w", name, err))...)
 		}
+		if hasTransactionalTracker(name) && i.Install == nil {
+			tracker, err = LoadTracker(root)
+			if err != nil {
+				return result, err
+			}
+		}
 		latest.InstalledAt = time.Now().UTC().Format(time.RFC3339)
 		tracker.Versions[name] = latest
 		if err = tracker.Save(context.Background(), root, i.AppVersion); err != nil {
@@ -292,6 +337,26 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 	}
 	legacy := tracker.Legacy()
 	names := Selection(selected, tracker)
+	if e = checkInterfaceSelection(names, tracker); e != nil {
+		return e
+	}
+	if i.Install == nil {
+		if e = platform.RequireGameClosed(); e != nil {
+			return e
+		}
+		for _, name := range names {
+			if isInterfaceMod(name) {
+				if e = preflightInterface(root, name); e != nil {
+					return e
+				}
+			}
+			if name == ExtendedFonts && (!tracker.Has(name) || legacy || force) {
+				if e = preflightExtended(root, tracker, extendedInventory); e != nil {
+					return e
+				}
+			}
+		}
+	}
 	resolver := NewResolver(i.Client)
 	resolve := i.Resolve
 	if resolve == nil {
@@ -322,6 +387,12 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
+		if hasTransactionalTracker(name) && i.Install == nil {
+			tracker, err = LoadTracker(root)
+			if err != nil {
+				return err
+			}
+		}
 		if !tracker.Has(name) {
 			tracker.Installed = append(tracker.Installed, name)
 		}
@@ -346,6 +417,18 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 	return tracker.Save(context.Background(), root, i.AppVersion)
 }
 func (i Installer) install(ctx context.Context, r *Resolver, root, name string, rel Release, event Event, update bool) error {
+	if err := platform.RequireGameClosed(); err != nil {
+		return err
+	}
+	if i.Client == nil {
+		i.Client = r.Client
+	}
+	if name == ExtendedFonts {
+		return i.installExtended(ctx, root, rel, event)
+	}
+	if isInterfaceMod(name) {
+		return i.installInterface(ctx, r, root, name, rel, event)
+	}
 	raw, e := r.DownloadURL(ctx, rel)
 	if e != nil {
 		return e
@@ -367,12 +450,17 @@ func (i Installer) install(ctx context.Context, r *Resolver, root, name string, 
 	if event != nil {
 		event(name, "Installing", 0, 0)
 	}
-	if update {
-		return ExtractUpdate(ctx, root, name, archive, rel.ArchiveType)
-	}
-	return Extract(ctx, root, name, archive, rel.ArchiveType)
+	return extract(ctx, root, name, archive, rel.ArchiveType, update)
 }
 func Import(ctx context.Context, root, name, archive, version string) error {
+	name = canonicalModName(name)
+	if isInterfaceMod(name) {
+		return importInterface(ctx, root, name, archive, strings.TrimPrefix(strings.ToLower(filepath.Ext(archive)), "."), version)
+	}
+	if name == ExtendedFonts {
+		kind := strings.TrimPrefix(strings.ToLower(filepath.Ext(archive)), ".")
+		return importExtended(ctx, root, archive, kind, version)
+	}
 	tracker, e := LoadTracker(root)
 	if e != nil {
 		return e
@@ -387,7 +475,8 @@ func Import(ctx context.Context, root, name, archive, version string) error {
 	if !tracker.Has(name) {
 		tracker.Installed = append(tracker.Installed, name)
 	}
-	tracker.Versions[name] = Release{Version: "manual import", InstalledAt: time.Now().UTC().Format(time.RFC3339)}
+	rel := Release{Version: "manual import", InstalledAt: time.Now().UTC().Format(time.RFC3339)}
+	tracker.Versions[name] = rel
 	if !tracker.Legacy() {
 		tracker.Schema = 2
 	}

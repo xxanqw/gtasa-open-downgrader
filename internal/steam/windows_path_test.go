@@ -93,6 +93,9 @@ func TestEnsureGameDirectoryMappingMigratesDriveRootLayout(t *testing.T) {
 	if err := os.Symlink(game, mapping); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "compatdata", "pfx", "drive_c"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	proton := ProtonContext{CompatDataPath: filepath.Join(root, "compatdata")}
 	got, err := proton.EnsureGameDirectoryMapping(game)
 	if err != nil {
@@ -105,7 +108,12 @@ func TestEnsureGameDirectoryMappingMigratesDriveRootLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved != parent {
-		t.Fatalf("mapping target = %q, want %q", resolved, parent)
+	want := filepath.Join(root, "compatdata", "pfx", "drive_c", ".gtasa-open-downgrader", "game-drive")
+	if resolved != want {
+		t.Fatalf("mapping target = %q, want filtered view %q", resolved, want)
+	}
+	entries, err := os.ReadDir(resolved)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "Grand Theft Auto San Andreas" {
+		t.Fatalf("unfiltered game view: %v, %v", entries, err)
 	}
 }

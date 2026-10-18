@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 )
 
 type Executor func(context.Context, string, string, ...string) error
@@ -97,7 +99,10 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
 		return err
 	}
-	return runtime.runWithMultiplayerModsAndCleanup(ctx, func() error {
+	// Keep Mod Loader and all other installed bundles enabled. Only Widescreen
+	// Fix is paused for multiplayer, then restored after GTA safely exits.
+	// Do not reintroduce the classic SA-MP filtered overlay here.
+	return runtime.runWithGameCleanup(ctx, func() error {
 		return runtime.runWithOpenMPSAMP(ctx, client, managedSAMP, arguments...)
 	}, func() error {
 		return runtime.restoreOpenMPSAMP()
@@ -110,18 +115,48 @@ func (runtime *Runtime) multiplayer(ctx context.Context, id multiplayer.ClientID
 	}
 	client, ok := multiplayer.Find(runtime.Clients(), id)
 	if !ok || !client.Installed {
+		if id == multiplayer.ClientMTA && client.Detail != "" {
+			return fmt.Errorf("%s", client.Detail)
+		}
 		return fmt.Errorf("%s is not installed", clientName(id))
 	}
 	if err := multiplayer.ValidateExecutable(client); err != nil {
 		return err
 	}
 	if id == multiplayer.ClientMTA {
+		if winedrive.RunningUnderWine() {
+			mapped, err := winedrive.EnsureWineGameDrive(runtime.GameDir)
+			if err != nil {
+				return err
+			}
+			if err = multiplayer.ConfigureWineGamePath(id, mapped); err != nil {
+				return err
+			}
+		}
+		if RunningUnderProton() {
+			drive := os.Getenv("SystemDrive")
+			if drive == "" {
+				drive = "C:"
+			}
+			missing, err := multiplayer.MissingMTAFonts(multiplayer.Environment{PrefixDriveC: drive + `\`})
+			if err != nil {
+				return fmt.Errorf("inspect MTA prefix fonts: %w", err)
+			}
+			if len(missing) > 0 {
+				return fmt.Errorf("MTA needs %s; use Multiplayer > MTA > Repair in the downgrader to install the fonts automatically", strings.Join(missing, ", "))
+			}
+		}
 		return runtime.runWithoutModLoader(ctx, client)
 	}
 	if id == multiplayer.ClientSAMP {
 		return runtime.runWithMultiplayerMods(ctx, func() error {
 			return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 		})
+	}
+	if id == multiplayer.ClientOpenMP {
+		return runtime.runWithGameCleanup(ctx, func() error {
+			return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
+		}, nil)
 	}
 	return runtime.run(ctx, client.WorkingDir, client.Executable, arguments...)
 }
@@ -190,7 +225,10 @@ func (runtime *Runtime) restoreCompatibility() error {
 	if len(processes) != 0 {
 		return fmt.Errorf("Grand Theft Auto: San Andreas is already running")
 	}
-	return errors.Join(runtime.restoreMultiplayerOverlay(), runtime.restoreOpenMPSAMP(), runtime.restoreModLoader(), runtime.restoreLegacyModLoaderMenu())
+	if _, err := winedrive.EnsureWineGameDrive(runtime.GameDir); err != nil {
+		return fmt.Errorf("prepare Wine game drive: %w", err)
+	}
+	return errors.Join(runtime.restoreMultiplayerOverlay(), runtime.restoreOpenMPSAMP(), runtime.restoreWidescreen(), runtime.restoreModLoader(), runtime.restoreLegacyModLoaderMenu())
 }
 
 // restoreLegacyModLoaderMenu recovers the one config backup created by builds

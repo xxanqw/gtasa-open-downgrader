@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+python3 scripts/generate-notices.py --check --package dist/THIRD-PARTY-NOTICES.zip
 variant=${1:-online}
 case "$variant" in online|offline) ;; *) echo 'Usage: scripts/build.sh [online|offline]' >&2; exit 2;; esac
 system=$(go env GOOS)
@@ -13,12 +14,12 @@ if [[ "$variant" == offline ]]; then
   tags+=,offline
   name+=-offline
 fi
-flags="-s -w -X github.com/xxanqw/gtasa-open-downgrader/internal/updater.Version=${VERSION:-v0.2.2}"
+flags="-s -w -X github.com/xxanqw/gtasa-open-downgrader/internal/updater.Version=${VERSION:-v0.3.0}"
 if [[ "$system" == windows ]]; then
 	name+=.exe
 	flags+=' -H=windowsgui'
 	"${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/downgrader/resources_windows_amd64.syso
-	"${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows.rc -O coff -o cmd/steam-launcher/resources_windows_amd64.syso
+	"${WINDRES:-x86_64-w64-mingw32-windres}" -i scripts/windows-launcher.rc -O coff -o cmd/steam-launcher/resources_windows_amd64.syso
 	trap 'rm -f cmd/downgrader/resources_windows_amd64.syso cmd/steam-launcher/resources_windows_amd64.syso' EXIT
 fi
 mkdir -p dist build/tmp

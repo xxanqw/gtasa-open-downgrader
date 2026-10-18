@@ -1,8 +1,10 @@
 $ErrorActionPreference = "Stop"
 
 $SteamDir = "SA_STEAM"
+$GermanDir = "SA_STEAM_GERMAN"
 $V10Dir = "SA_10US"
 $PatchesDir = "Patches"
+$VariantDir = Join-Path $PatchesDir "variants\steam_r2_german"
 $TempDir = ".temp_patch_gen"
 $XdeltaBin = "internal\assets\xdelta3.exe"
 
@@ -34,13 +36,48 @@ Write-Host "GTA SA Patch Generator (Windows)" -ForegroundColor Blue
 Write-Host "========================================" -ForegroundColor Blue
 Write-Host ""
 
+# An unsuccessful run must not leave a previously successful manifest publishable.
+Remove-Item -Path (Join-Path $PatchesDir "manifest.json") -Force -ErrorAction SilentlyContinue
+$GermanOverlay = Test-Path (Join-Path $GermanDir "german_r2_diff.json")
+if ($GermanOverlay) {
+    $report = Get-Content -Raw (Join-Path $GermanDir "german_r2_diff.json") | ConvertFrom-Json
+    if ($report.reference_version -ne "steam_r2_global" -or $report.scanned_version -ne "steam_r2_german" -or
+        $report.summary.missing -ne 0 -or $report.summary.extra -ne 0 -or $report.summary.errors -ne 0 -or
+        $report.summary.global_files -ne $report.summary.german_files -or $report.summary.different -ne @($report.different).Count) {
+        throw "Invalid German overlay comparison report."
+    }
+    if (@(Get-ChildItem -Path $SteamDir -Recurse -File).Count -ne $report.summary.global_files) {
+        throw "Global file count differs from the German comparison report."
+    }
+    $reported = @($report.different | ForEach-Object { $_.path })
+    $actual = @(Get-ChildItem -Path $GermanDir -Recurse -File | ForEach-Object {
+        $_.FullName.Substring((Get-Item $GermanDir).FullName.Length + 1) -replace '\\', '/'
+    } | Where-Object { $_ -ne "german_r2_diff.json" })
+    if (@(Compare-Object $actual $reported -CaseSensitive).Count -ne 0) {
+        throw "German overlay files do not match the comparison report."
+    }
+    foreach ($item in $report.different) {
+        foreach ($check in @(
+            @{ dir = $SteamDir; path = $item.global_path; info = $item.global },
+            @{ dir = $GermanDir; path = $item.path; info = $item.german }
+        )) {
+            $file = Join-Path $check.dir $check.path
+            if (-not (Test-Path -PathType Leaf $file) -or (Get-Item $file).Length -ne $check.info.size -or
+                (Get-FileHash -Path $file -Algorithm SHA256).Hash -ine $check.info.sha256) {
+                throw "German overlay size or SHA-256 mismatch: $file"
+            }
+        }
+    }
+    Write-Host "Verified $($reported.Count) German differences; unchanged files inherit Global sources." -ForegroundColor Green
+}
+
 Write-Host "Step 1: Scanning directories..." -ForegroundColor Yellow
-$SteamFiles = Get-ChildItem -Path $SteamDir -Recurse -File | ForEach-Object { 
-    $_.FullName.Substring((Get-Item $SteamDir).FullName.Length + 1) 
-}
-$V10Files = Get-ChildItem -Path $V10Dir -Recurse -File | ForEach-Object { 
-    $_.FullName.Substring((Get-Item $V10Dir).FullName.Length + 1) 
-}
+$SteamFiles = Get-ChildItem -Path $SteamDir -Recurse -File | ForEach-Object {
+    $_.FullName.Substring((Get-Item $SteamDir).FullName.Length + 1)
+} | Where-Object { $_ -notmatch '^(?i)readme(/|\\|$|\.)' }
+$V10Files = Get-ChildItem -Path $V10Dir -Recurse -File | ForEach-Object {
+    $_.FullName.Substring((Get-Item $V10Dir).FullName.Length + 1)
+} | Where-Object { $_ -notmatch '^(?i)readme(/|\\|$|\.)' }
 
 Write-Host "  Steam files: $($SteamFiles.Count)" -ForegroundColor Green
 Write-Host "  v1.0 files:  $($V10Files.Count)" -ForegroundColor Green
@@ -51,7 +88,7 @@ $CommonFiles = Compare-Object $SteamFiles $V10Files -IncludeEqual -ExcludeDiffer
 Write-Host "  Common files: $($CommonFiles.Count)" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "Step 3: Comparing file hashes..." -ForegroundColor Yellow
+Write-Host "Step 3: Comparing Global Steam files..." -ForegroundColor Yellow
 $ManifestData = New-Object System.Collections.Generic.List[PSObject]
 
 function Get-FileHashMD5($path) {
@@ -59,14 +96,19 @@ function Get-FileHashMD5($path) {
     return (Get-FileHash -Path $path -Algorithm MD5).Hash.ToLower()
 }
 
+$GlobalExeHash = $null
+$TargetExeHash = $null
 $FoundExe = $false
+
 foreach ($exeName in @("gta-sa.exe", "gta_sa.exe")) {
     $steamExePath = Join-Path $SteamDir $exeName
     $v10ExePath = Join-Path $V10Dir "gta_sa.exe"
-    
+
     if (Test-Path $steamExePath) {
         $hashSteam = Get-FileHashMD5 $steamExePath
         $hashV10 = Get-FileHashMD5 $v10ExePath
+        if (-not $GlobalExeHash) { $GlobalExeHash = $hashSteam }
+        $TargetExeHash = $hashV10
         if ($hashSteam -ne $hashV10) {
             $ManifestData.Add([PSCustomObject]@{
                 path = $exeName
@@ -81,6 +123,7 @@ foreach ($exeName in @("gta-sa.exe", "gta_sa.exe")) {
 
 if (-not $FoundExe -and (Test-Path (Join-Path $V10Dir "gta_sa.exe"))) {
     $hashV10 = Get-FileHashMD5 (Join-Path $V10Dir "gta_sa.exe")
+    $TargetExeHash = $hashV10
     $ManifestData.Add([PSCustomObject]@{
         path = "gta_sa.exe"
         source_hash = "MISSING"
@@ -94,7 +137,7 @@ $Progress = 0
 
 foreach ($relPath in $CommonFiles) {
     if ($relPath -eq "gta_sa.exe" -or $relPath -eq "gta-sa.exe") { continue }
-    
+
     $Progress++
     if ($Progress % 100 -eq 0) {
         Write-Host -NoNewline "  Progress: $Progress / $($CommonFiles.Count)`r"
@@ -120,13 +163,13 @@ Write-Host "  Identical: $IdenticalCount" -ForegroundColor Green
 Write-Host "  Different: $($ManifestData.Count)" -ForegroundColor Yellow
 Write-Host ""
 
-if ($ManifestData.Count -eq 0) {
+if ($ManifestData.Count -eq 0 -and -not (Test-Path $GermanDir)) {
     Write-Host "No differences found! Directories are identical." -ForegroundColor Green
     Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 0
 }
 
-Write-Host "Step 4: Processing differences..." -ForegroundColor Yellow
+Write-Host "Step 4: Processing Global differences..." -ForegroundColor Yellow
 Write-Host ""
 
 $PatchNum = 0
@@ -138,7 +181,7 @@ foreach ($item in $ManifestData) {
     $PatchNum++
     $relPath = $item.path
     $action = $item.action
-    
+
     Write-Host -NoNewline "  [$PatchNum/$($ManifestData.Count)] Processing: $relPath"
 
     if ($action -eq "copy") {
@@ -146,13 +189,13 @@ foreach ($item in $ManifestData) {
         $patchExe = Join-Path $PatchesDir "gta_sa.exe"
         $destDir = Split-Path $patchExe
         if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
-        
+
         Copy-Item $v10Exe $patchExe -Force
-        
+
         $steamExePath = Join-Path $SteamDir $relPath
         if (Test-Path $steamExePath) { $TotalSizeOriginal += (Get-Item $steamExePath).Length }
         $TotalSizePatches += (Get-Item $patchExe).Length
-        
+
         Write-Host "`r  [$PatchNum/$($ManifestData.Count)] ✓ $relPath (Direct Copy)   " -ForegroundColor Green
     } else {
         $srcFile = Join-Path $SteamDir $relPath
@@ -161,9 +204,9 @@ foreach ($item in $ManifestData) {
         $destDir = Split-Path $patchFile
         if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
 
-        $argList = @("-d", "-e", "-9", "-s", "`"$srcFile`"", "`"$dstFile`"", "`"$patchFile`"")
+        $argList = @("-d", "-e", "-9", "-f", "-s", "`"$srcFile`"", "`"$dstFile`"", "`"$patchFile`"")
         $proc = Start-Process -FilePath $XdeltaBin -ArgumentList $argList -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
-        
+
         if ($proc -and $proc.ExitCode -eq 0) {
             $TotalSizeOriginal += (Get-Item $srcFile).Length
             $TotalSizePatches += (Get-Item $patchFile).Length
@@ -176,42 +219,226 @@ foreach ($item in $ManifestData) {
     }
 }
 
-Write-Host ""
+$GermanExeHash = $null
+$GermanVariants = New-Object System.Collections.Generic.List[PSObject]
+$GermanVariantsCount = 0
 
-Write-Host "Step 5: Generating manifest.json..." -ForegroundColor Yellow
+if (Test-Path $GermanDir) {
+    Write-Host ""
+    Write-Host "Step 5: Processing German variants..." -ForegroundColor Yellow
+
+    foreach ($exeName in @("gta-sa.exe", "gta_sa.exe")) {
+        $germanExePath = Join-Path $GermanDir $exeName
+        if (Test-Path $germanExePath) {
+            $GermanExeHash = Get-FileHashMD5 $germanExePath
+            break
+        }
+    }
+
+    $GermanFiles = Get-ChildItem -Path $GermanDir -Recurse -File | ForEach-Object {
+        $_.FullName.Substring((Get-Item $GermanDir).FullName.Length + 1)
+    } | Where-Object { $_ -notmatch '^(?i)readme(/|\\|$|\.)' -and $_ -notmatch '(?i)\.json$' -and $_ -notmatch '^(?i)gta[-_]sa\.exe$' }
+
+    Write-Host "  German files to inspect: $($GermanFiles.Count)" -ForegroundColor Green
+
+    $gNum = 0
+    foreach ($relPath in $GermanFiles) {
+        $gNum++
+        $srcFile = Join-Path $GermanDir $relPath
+        $dstFile = Join-Path $V10Dir $relPath
+        $patchFile = Join-Path $VariantDir "$relPath.xdelta"
+
+        if (-not (Test-Path $dstFile)) {
+            Write-Host "  [German $gNum/$($GermanFiles.Count)] Target file not found: $relPath" -ForegroundColor Red
+            $FailedCount++
+            continue
+        }
+
+        $hashGerman = Get-FileHashMD5 $srcFile
+        $hashV10 = Get-FileHashMD5 $dstFile
+
+        # 1. German file is already target 1.0 US -> no delta required
+        if ($hashGerman -eq $hashV10) {
+            continue
+        }
+
+        # 2. Check if German hash is already supported by Global source
+        $globalFile = Join-Path $SteamDir $relPath
+        $hashGlobal = if (Test-Path $globalFile) { Get-FileHashMD5 $globalFile } else { $null }
+
+        if ($hashGlobal -and ($hashGerman -eq $hashGlobal)) {
+            continue
+        }
+
+        Write-Host -NoNewline "  [German $gNum/$($GermanFiles.Count)] Processing variant: $relPath"
+        $destDir = Split-Path $patchFile
+        if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+
+        $argList = @("-d", "-e", "-9", "-f", "-s", "`"$srcFile`"", "`"$dstFile`"", "`"$patchFile`"")
+        $proc = Start-Process -FilePath $XdeltaBin -ArgumentList $argList -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+
+        if ($proc -and $proc.ExitCode -eq 0) {
+            $TotalSizeOriginal += (Get-Item $srcFile).Length
+            $TotalSizePatches += (Get-Item $patchFile).Length
+            Write-Host "`r  [German $gNum/$($GermanFiles.Count)] ✓ $relPath   " -ForegroundColor Green
+            $variantRel = ("variants/steam_r2_german/" + ($relPath -replace '\\', '/')) + ".xdelta"
+            $GermanVariants.Add([PSCustomObject]@{
+                path = ($relPath -replace '\\', '/')
+                german_hash = $hashGerman
+                target_hash = $hashV10
+                global_hash = $hashGlobal
+                patch_rel = $variantRel
+            })
+            $GermanVariantsCount++
+        } else {
+            Write-Host "`r  [German $gNum/$($GermanFiles.Count)] ✗ $relPath   " -ForegroundColor Red
+            $FailedCount++
+            if (Test-Path $patchFile) { Remove-Item $patchFile }
+        }
+    }
+    Write-Host "  German variants generated: $GermanVariantsCount" -ForegroundColor Green
+}
+
+Write-Host ""
+if (-not $GlobalExeHash -or ((Test-Path $GermanDir) -and -not $GermanExeHash)) {
+    throw "Every supplied source edition must contain a GTA executable."
+}
+if ($FailedCount -gt 0) {
+    throw "Patch generation incomplete: $FailedCount failure(s). Refusing to publish a partial manifest."
+}
+Write-Host "Step 6: Generating manifest.json (v2.1)..." -ForegroundColor Yellow
+
+$SourceVersions = New-Object System.Collections.Generic.List[PSObject]
+if ($GlobalExeHash) {
+    $SourceVersions.Add([PSCustomObject]@{
+        id = "steam_r2_global"
+        name = "NewSteam R2"
+        exe_hash = $GlobalExeHash
+    })
+}
+if ($GermanExeHash) {
+    $SourceVersions.Add([PSCustomObject]@{
+        id = "steam_r2_german"
+        name = "NewSteam R2 (German)"
+        exe_hash = $GermanExeHash
+    })
+}
+
+$ManifestFiles = [System.Collections.Generic.Dictionary[string, PSObject]]::new()
+
+foreach ($item in $ManifestData) {
+    $relPath = ($item.path -replace '\\', '/')
+    $action = $item.action
+    if ($action -eq "copy" -and (Test-Path (Join-Path $PatchesDir "gta_sa.exe"))) {
+        $sources = New-Object System.Collections.Generic.List[PSObject]
+        if ($item.source_hash -and $item.source_hash -ne "MISSING") {
+            $sources.Add([PSCustomObject]@{ hash = $item.source_hash })
+        }
+        if ($GermanExeHash -and $GermanExeHash -ne $item.source_hash -and $GermanExeHash -ne $item.target_hash) {
+            $sources.Add([PSCustomObject]@{ hash = $GermanExeHash })
+        }
+        $ManifestFiles[$relPath] = [PSCustomObject]@{
+            path = $relPath
+            action = "copy"
+            source_hash = $item.source_hash
+            target_hash = $item.target_hash
+            payload = "gta_sa.exe"
+            sources = $sources
+        }
+    } elseif ($action -eq "patch" -and (Test-Path (Join-Path $PatchesDir "$($item.path).xdelta"))) {
+        $sources = New-Object System.Collections.Generic.List[PSObject]
+        $sources.Add([PSCustomObject]@{
+            hash = $item.source_hash
+            patch = "$relPath.xdelta"
+        })
+        $ManifestFiles[$relPath] = [PSCustomObject]@{
+            path = $relPath
+            action = "patch"
+            source_hash = $item.source_hash
+            target_hash = $item.target_hash
+            sources = $sources
+        }
+    }
+}
+
+foreach ($v in $GermanVariants) {
+    $relPath = $v.path
+    $patchFull = Join-Path $PatchesDir ($v.patch_rel -replace '/', '\')
+    if (-not (Test-Path $patchFull)) { continue }
+
+    if ($ManifestFiles.ContainsKey($relPath)) {
+        $entry = $ManifestFiles[$relPath]
+        $alreadyHas = $false
+        foreach ($s in $entry.sources) {
+            if ($s.hash -eq $v.german_hash) { $alreadyHas = $true; break }
+        }
+        if (-not $alreadyHas) {
+            $entry.sources.Add([PSCustomObject]@{
+                hash = $v.german_hash
+                patch = $v.patch_rel
+            })
+        }
+    } else {
+        $sourceHash = if ($v.global_hash) { $v.global_hash } else { $v.target_hash }
+        $sources = New-Object System.Collections.Generic.List[PSObject]
+        $sources.Add([PSCustomObject]@{
+            hash = $v.german_hash
+            patch = $v.patch_rel
+        })
+        $ManifestFiles[$relPath] = [PSCustomObject]@{
+            path = $relPath
+            action = "patch"
+            source_hash = $sourceHash
+            target_hash = $v.target_hash
+            sources = $sources
+        }
+    }
+}
+
+foreach ($entry in $ManifestFiles.Values) {
+    $versions = New-Object System.Collections.Generic.List[string]
+    foreach ($version in $SourceVersions) {
+        $sourceDir = if ($version.id -eq "steam_r2_global") { $SteamDir } else { $GermanDir }
+        $present = if ($entry.path -eq "gta-sa.exe" -or $entry.path -eq "gta_sa.exe") {
+            (Test-Path (Join-Path $sourceDir "gta-sa.exe")) -or (Test-Path (Join-Path $sourceDir "gta_sa.exe"))
+        } else {
+            (Test-Path (Join-Path $sourceDir ($entry.path -replace '/', '\'))) -or
+                ($GermanOverlay -and $version.id -eq "steam_r2_german" -and (Test-Path (Join-Path $SteamDir ($entry.path -replace '/', '\'))))
+        }
+        if ($present) { $versions.Add($version.id) }
+    }
+    if ($versions.Count -eq 0) { throw "No source edition contains $($entry.path)" }
+    $entry | Add-Member -NotePropertyName applicable_versions -NotePropertyValue $versions
+}
+
+$SortedFiles = $ManifestFiles.Values | Sort-Object { if ($_.path -eq "gta-sa.exe" -or $_.path -eq "gta_sa.exe") { 0 } else { 1 } }, path
+
+$TotalPatchesCount = 0
+foreach ($f in $SortedFiles) {
+    if ($f.sources) {
+        foreach ($s in $f.sources) {
+            if ($s.patch) { $TotalPatchesCount++ }
+        }
+    }
+}
 
 $Manifest = [PSCustomObject]@{
-    version = "1.0"
+    version = "2.1"
+    release_id = "steam-r2-global-german-v2-complete"
     generated = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
     source_version = "steam"
     target_version = "1.0_us"
+    source_versions = $SourceVersions
     statistics = @{
         total_files = $CommonFiles.Count
         identical = $IdenticalCount
-        different = $ManifestData.Count
-        patches_generated = $ManifestData.Count - $FailedCount
+        different = $SortedFiles.Count
+        patches_generated = $TotalPatchesCount
         failed = $FailedCount
         original_size_mb = [Math]::Round($TotalSizeOriginal / 1MB, 2)
         patches_size_mb = [Math]::Round($TotalSizePatches / 1MB, 2)
     }
-    files = New-Object System.Collections.Generic.List[PSObject]
-}
-
-foreach ($item in $ManifestData) {
-    $relPath = $item.path
-    $action = $item.action
-    $valid = $false
-    if ($action -eq "copy" -and (Test-Path (Join-Path $PatchesDir "gta_sa.exe"))) { $valid = $true }
-    if ($action -eq "patch" -and (Test-Path (Join-Path $PatchesDir "$relPath.xdelta"))) { $valid = $true }
-
-    if ($valid) {
-        $Manifest.files.Add([PSCustomObject]@{
-            path = $relPath
-            action = $action
-            source_hash = $item.source_hash
-            target_hash = $item.target_hash
-        })
-    }
+    files = $SortedFiles
 }
 
 $Manifest | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $PatchesDir "manifest.json")

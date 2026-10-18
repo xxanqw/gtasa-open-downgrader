@@ -16,7 +16,14 @@ import (
 
 const (
 	Framerate          = "Framerate Vigilante (60fps fix)"
-	SanLtdRussian      = "SanLtd Russian"
+	HDFonts            = "HD Fonts" // retired tracker/uninstall ID
+	ExtendedFonts      = "Extended Fonts (ELL)"
+	HDRadarMap         = "HD Radar Map (Original HD)"
+	legacySVGRadarMap  = "HD Radar Map (SVG)"
+	OriginalHQIcons    = "Original HQ Radar Icons"
+	AtmosphereHUD      = "Atmosphere HUD Textures"
+	NadalaoWeapons     = "nadalao Weapon Icons"
+	SanLtdRussian      = "SanLtd Russian" // retired tracker/uninstall ID
 	legacySALtdRussian = "SALtd Russian"
 )
 
@@ -32,17 +39,23 @@ var Catalog = []Source{
 	{Name: "Widescreen Fixes", Repository: "ThirteenAG/WidescreenFixesPack", Endpoint: "releases/tags/gtasa", Asset: "GTASA.WidescreenFix.zip", DateVersion: true},
 	{Name: "SkyGFX", Repository: "aap/skygfx", Endpoint: "releases/latest", Prefix: "skygfx_sa_"},
 	{Name: "Frontend Mods", Repository: "ThirteenAG/WidescreenFixesPack", Endpoint: "releases/tags/gtasa", Asset: "GTASA.WidescreenFrontend.zip", DateVersion: true},
+	{Name: ExtendedFonts, Version: "0.1.0 / ELL 0.4.2 Beta", URL: extendedFontsURL},
+	{Name: HDRadarMap, Version: "2021-07-20 / Yojo2 original HQ 512px", URL: "https://sharemods.com/zfcud8b4sc5g/Atmosphere_Interface_Pack.7z.html", Page: "https://www.mixmods.com.br/2021/01/atmosphere-interface-pack-interface-hd/"},
+	{Name: OriginalHQIcons, Version: "2021-01-25", URL: "https://sharemods.com/e9q9mnaxppyv/SA_Original_Radar_Icons_HQ.7z.html", Page: "https://www.mixmods.com.br/2021/11/sa-sade-original-hq-icons-icones-originais-hd/"},
+	{Name: AtmosphereHUD, Version: "2021-07-20 (selected textures)", URL: "https://sharemods.com/zfcud8b4sc5g/Atmosphere_Interface_Pack.7z.html", Page: "https://www.mixmods.com.br/2021/01/atmosphere-interface-pack-interface-hd/"},
+	{Name: NadalaoWeapons, Version: "2022-02-16 / helper 1.0", URL: "https://sharemods.com/tysasyrhqebt/nadalao_Weapon_Icons_-_icones_fieis_corrigidos.7z.html", Page: "https://www.mixmods.com.br/2022/02/icones-de-armas-fieis-desenhos-corrigidos/"},
 	{Name: Framerate, Version: "2026-08-16", URL: "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html", Page: "https://www.mixmods.com.br/2022/08/iii-vc-sa-framerate-vigilante/"},
 	{Name: "GInput", Version: "2016-02-09", URL: "https://silent.rockstarvision.com/uploads/GInputSA.zip", Page: "https://silentsblog.com/mods/gta-sa/#ginput"},
 	{Name: "Project 2DFX", Repository: "ThirteenAG/III.VC.SA.IV.Project2DFX", Endpoint: "releases/tags/gtasa", Asset: "SA.Project2DFX.zip", DateVersion: true},
-	{Name: SanLtdRussian, Version: "0.56", URL: "https://www.gtavicecity.ru/get-manual/4a8dcc0c87c81d056678016d25a011279b7def52/22077-lokalizaciya-ot-sanltd-team.html", Page: "https://www.gtavicecity.ru/gta-san-andreas/mods/22077-lokalizaciya-ot-sanltd-team.html"},
 }
 
 type Release struct {
 	Version     string `json:"version"`
 	Fingerprint string `json:"fingerprint"`
+	Checksum    string `json:"archive_sha256,omitempty"`
 	SourceURL   string `json:"source_url"`
 	InstalledAt string `json:"installed_at,omitempty"`
+	Style       string `json:"style,omitempty"`
 	URL         string `json:"-"`
 	FileID      string `json:"-"`
 	ArchiveType string `json:"-"`
@@ -65,6 +78,9 @@ type Resolver struct {
 }
 
 func NewResolver(c *download.Client) *Resolver {
+	if c == nil {
+		c = download.New()
+	}
 	return &Resolver{Client: c, GitHubAPI: service.GitHubMetadataURL, cache: map[string]githubRelease{}}
 }
 func Supported(name string) bool {
@@ -110,6 +126,24 @@ func (r *Resolver) Resolve(ctx context.Context, name string) (Release, error) {
 			}
 		}
 		return Release{}, fmt.Errorf("official %s release has no matching package", name)
+	}
+	if name == ExtendedFonts {
+		return Release{Version: s.Version, Fingerprint: "sha256:" + extendedFontsSHA + ":" + extendedLoaderSHA,
+			URL: s.URL, SourceURL: s.URL, ArchiveType: "zip"}, nil
+	}
+	if spec, ok := interfacePacks[name]; ok {
+		fingerprint := "sha256:" + spec.checksum
+		if name == NadalaoWeapons {
+			fingerprint += ":" + weaponHelperSHA
+		}
+		if name == HDRadarMap {
+			fingerprint += ":original-hq-radar-512-v1"
+		}
+		rel := Release{Version: s.Version, Fingerprint: fingerprint, Checksum: spec.checksum, URL: s.URL, SourceURL: s.Page, ArchiveType: "7z"}
+		if match := shareLink.FindStringSubmatch(s.URL); match != nil {
+			rel.FileID = match[1]
+		}
+		return rel, nil
 	}
 	if name == Framerate {
 		return r.framerate(ctx, s)

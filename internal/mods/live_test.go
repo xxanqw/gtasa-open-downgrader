@@ -15,18 +15,27 @@ import (
 func TestOfficialPackages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	root := t.TempDir()
 	client := download.New()
 	resolver := NewResolver(client)
 	installer := Installer{Client: client}
 	for _, source := range Catalog {
 		t.Run(source.Name, func(t *testing.T) {
+			root := t.TempDir() // Mutually overlapping packages are audited separately.
+			for _, dep := range RequiredMods(source.Name) {
+				rel, err := resolver.Resolve(ctx, dep)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = installer.install(ctx, resolver, root, dep, rel, nil, false); err != nil {
+					t.Fatal(err)
+				}
+			}
 			release, err := resolver.Resolve(ctx, source.Name)
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Logf("Official version: %s", release.Version)
-			if err = installer.install(ctx, resolver, root, source.Name, release, nil); err != nil {
+			if err = installer.install(ctx, resolver, root, source.Name, release, nil, false); err != nil {
 				t.Fatal(err)
 			}
 		})

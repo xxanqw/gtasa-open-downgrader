@@ -10,9 +10,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ncruces/zenity"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
@@ -81,6 +79,9 @@ func systemPicker(ctx context.Context, r promptRequest, parent any) (string, err
 // Keep prompts ordered, including prompts arriving from background work while
 // Tools or About is open. Only an explicit confirmation can start an action.
 func (w *Window) prompt(r promptRequest) {
+	if w.modFilter != nil {
+		w.modFilter.closePopup()
+	}
 	if w.closing {
 		return
 	}
@@ -171,79 +172,14 @@ func (w *Window) nativePicker(r promptRequest, done func(string, bool)) func() {
 // Content is bounded by the current window; scrollable bodies retain access to
 // long messages and licenses even at the smallest supported window size.
 func (w *Window) panel(title string, body fyne.CanvasObject, size fyne.Size, accept, dismiss string, extra fyne.CanvasObject, done func(bool)) func() {
-	canvas := w.window.Canvas()
-	oldKey, oldFocus := canvas.OnTypedKey(), canvas.Focused()
-	var popup *widget.PopUp
-	closed := false
-	finish := func(ok bool) {
-		if closed {
-			return
-		}
-		closed = true
-		popup.Hide()
-		canvas.SetOnTypedKey(oldKey)
-		if oldFocus != nil {
-			canvas.Focus(oldFocus)
-		} else {
-			canvas.Unfocus()
-		}
-		done(ok)
-	}
-	closeButton := appwidget.NewButtonWithIcon("", theme.CancelIcon(), func() { finish(false) })
-	closeButton.Importance = widget.LowImportance
-	heading := compactLabel(title)
-	heading.TextStyle.Bold = true
-	header := container.NewBorder(nil, nil, nil, closeButton, heading)
-	cancel := appwidget.NewButton(dismiss, func() { finish(false) })
-	buttons := container.NewHBox(cancel)
+	actions := []appwidget.ModalAction{{Text: dismiss}}
 	if accept != "" {
-		confirm := appwidget.NewButton(accept, func() { finish(true) })
-		confirm.Importance = widget.HighImportance
-		buttons.Add(confirm)
+		actions = append(actions, appwidget.ModalAction{ID: "accept", Text: accept, Importance: widget.HighImportance})
 	}
-	footer := container.NewBorder(nil, nil, extra, buttons, nil)
-	headerSpace := container.NewVBox(container.New(layout.NewCustomPaddedLayout(0, 6, 0, 0), header), widget.NewSeparator())
-	footerSpace := container.NewVBox(widget.NewSeparator(), container.New(layout.NewCustomPaddedLayout(10, 0, 0, 0), footer))
-	frame := container.NewBorder(headerSpace, footerSpace, nil, nil, body)
-	content := container.New(layout.NewCustomPaddedLayout(10, 10, 14, 14), frame)
-	popup = widget.NewModalPopUp(content, canvas)
-	bounds := canvas.Size()
-	width := min(size.Width, bounds.Width-24)
-	height := min(size.Height, bounds.Height-24)
-	if size.Height == 0 {
-		// Lay out at the final width before measuring wrapped text. Keep lengthy
-		// messages scrollable instead of allowing them to push actions off-screen.
-		height = bounds.Height - 24
-		popup.Resize(fyne.NewSize(width, height))
-		naturalHeight := body.MinSize().Height
-		if scroll, ok := body.(*container.Scroll); ok {
-			naturalHeight = scroll.Content.MinSize().Height
-		} else if form, ok := body.(*fyne.Container); ok {
-			// Entry/choice prompts keep their input outside the scrolling message.
-			for _, child := range form.Objects {
-				if scroll, ok := child.(*container.Scroll); ok {
-					naturalHeight += scroll.Content.MinSize().Height - scroll.MinSize().Height
-				}
-			}
-		}
-		height = min(height, height-body.Size().Height+naturalHeight)
-	}
-	popup.Resize(fyne.NewSize(width, height))
-	canvas.Unfocus()
-	canvas.SetOnTypedKey(func(key *fyne.KeyEvent) {
-		if key.Name == fyne.KeyEscape {
-			finish(false)
-		}
-	})
-	popup.Show()
-	return func() { finish(false) }
+	modal := appwidget.ShowModal(w.window, appwidget.ModalOptions{Title: title, Body: body, Size: size, Extra: extra, Actions: actions, OnClosed: func(result string) { done(result == "accept") }})
+	return func() { modal.Close("") }
 }
-func promptText(text string) *widget.Label {
-	label := widget.NewLabel(text)
-	label.Wrapping = fyne.TextWrapWord
-	label.Selectable = true
-	return label
-}
+func promptText(text string) *widget.Label { return appwidget.ModalText(text) }
 func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 	accept, dismiss := r.accept, r.dismiss
 	if accept == "" {
@@ -253,8 +189,10 @@ func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 		dismiss = "Cancel"
 	}
 	switch r.kind {
-	case promptInfo, promptError:
+	case promptInfo:
 		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(480, 0), "", "Close", nil, func(bool) { done("", false) })
+	case promptError:
+		return w.panel(r.title, container.NewVScroll(appwidget.GuideNotice("Details", r.text, widget.DangerImportance)), fyne.NewSize(560, 0), "", "Close", nil, func(bool) { done("", false) })
 	case promptConfirm:
 		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(480, 0), accept, dismiss, nil, func(ok bool) { done("", ok) })
 	case promptFolder:
@@ -323,17 +261,18 @@ func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 		d.SetConfirmText("Save")
 		return func() { d.Hide(); done("", false) }
 	case promptEntry:
-		entry := widget.NewEntry()
+		entry := appwidget.NewModalEntry()
 		entry.SetText(r.initial)
-		body := container.NewBorder(nil, entry, nil, nil, container.NewVScroll(promptText(r.text)))
+		body := container.NewBorder(nil, styleInput(entry), nil, nil, container.NewVScroll(promptText(r.text)))
 		close := w.panel(r.title, body, fyne.NewSize(480, 0), accept, dismiss, nil, func(ok bool) { done(entry.Text, ok) })
 		w.window.Canvas().Focus(entry)
 		return close
 	case promptChoice:
-		choice := widget.NewSelect(r.choices, nil)
+		choice := newControlSelect(r.choices, nil)
 		choice.SetSelected(r.initial)
-		body := container.NewBorder(nil, choice, nil, nil, container.NewVScroll(promptText(r.text)))
-		return w.panel(r.title, body, fyne.NewSize(480, 0), accept, dismiss, nil, func(ok bool) { done(choice.Selected, ok && choice.Selected != "") })
+		body := container.NewBorder(nil, styleInput(choice), nil, nil, container.NewVScroll(promptText(r.text)))
+		close := w.panel(r.title, body, fyne.NewSize(480, 0), accept, dismiss, nil, func(ok bool) { choice.closePopup(); done(choice.Selected, ok && choice.Selected != "") })
+		return func() { choice.closePopup(); close() }
 	}
 	return func() { done("", false) }
 }

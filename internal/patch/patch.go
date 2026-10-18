@@ -48,10 +48,25 @@ func (e Engine) Apply(ctx context.Context, root, assets string, m game.Manifest,
 	if e.Run == nil {
 		e.Run = Run
 	}
+	edition, err := m.SourceEdition(ctx, root)
+	if err != nil {
+		return result, err
+	}
+	for _, f := range m.Files {
+		if len(f.ApplicableVersions) > 0 && edition == "" {
+			return result, fmt.Errorf("cannot determine source edition for %s; restore an original executable or backup", f.Path)
+		}
+	}
 	var failures []error
 	for i, f := range m.Files {
 		if err := ctx.Err(); err != nil {
 			return result, err
+		}
+		if !f.AppliesTo(edition) {
+			if progress != nil {
+				progress(i, "Not in this edition", "")
+			}
+			continue
 		}
 		if progress != nil {
 			progress(i, "Backup & patching…", "")
@@ -91,7 +106,7 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 		targets = append(targets, game.OtherEXE(filepath.Base(src)))
 	}
 	if h == f.TargetHash || game.IsEXE(f.Path) && h == game.LAAHash {
-		// The legacy app only creates a missing alias for an already downgraded EXE.
+		// Already downgraded: create only a missing executable alias.
 		if len(targets) == 2 {
 			dst, err := fsutil.Join(root, targets[1])
 			if err != nil {
@@ -118,7 +133,7 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 	os.Remove(out)
 	defer os.Remove(out)
 	if f.Action == "copy" {
-		p, err := fsutil.Join(assets, "gta_sa.exe")
+		p, err := fsutil.Join(assets, f.Payload)
 		if err != nil {
 			return err
 		}
@@ -130,7 +145,7 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 		if h == "" {
 			return fmt.Errorf("source file is missing")
 		}
-		p, err := fsutil.Join(assets, f.Path+".xdelta")
+		p, err := fsutil.Join(assets, f.PatchAsset(h))
 		if err != nil {
 			return err
 		}
@@ -256,6 +271,11 @@ func Revert(ctx context.Context, root string, progress func(int, int)) error {
 			return fmt.Errorf("backup contains symbolic link: %s", p)
 		}
 		if d.IsDir() {
+			// Mod uninstall snapshots are kept in backups/mods and are not
+			// original game files managed by the downgrade journal.
+			if p == filepath.Join(backup, "mods") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, err := filepath.Rel(backup, p)
@@ -315,5 +335,25 @@ func Cleanup(root string) error {
 	if e != nil {
 		return e
 	}
-	return os.RemoveAll(p)
+	entries, e := os.ReadDir(p)
+	if os.IsNotExist(e) {
+		return nil
+	}
+	if e != nil {
+		return e
+	}
+	keepMods := false
+	for _, entry := range entries {
+		if entry.Name() == "mods" {
+			keepMods = true
+			continue
+		}
+		if e := os.RemoveAll(filepath.Join(p, entry.Name())); e != nil {
+			return e
+		}
+	}
+	if keepMods {
+		return nil
+	}
+	return os.Remove(p)
 }

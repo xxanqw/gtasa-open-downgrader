@@ -156,19 +156,29 @@ func resolveToolRoot(directory, installPath string) string {
 	return filepath.Clean(filepath.Join(directory, installPath))
 }
 
+// A Steam mapping can refer to a Steam-internal tool that is not available to
+// this app. Keep the missing-tool classification, but explain the next step
+// instead of implying that Steam has not installed its own Proton build.
+type unavailableCompatibilityToolError struct{ name string }
+
+func (e unavailableCompatibilityToolError) Error() string {
+	return fmt.Sprintf("Use a custom Proton build such as GE-Proton (Proton-GE). Steam's tool %q is unavailable to this app. Install the custom build, restart Steam, select it in the game's Properties > Compatibility, then refresh Multiplayer in the downgrader.", e.name)
+}
+func (unavailableCompatibilityToolError) Unwrap() error { return ErrToolMissing }
+
 func selectCompatibilityTool(appID uint32, mappings map[string]compatMapping, tools []CompatibilityTool) (CompatibilityTool, string, error) {
 	appKey := strconv.FormatUint(uint64(appID), 10)
 	if mapping, ok := mappings[appKey]; ok && mapping.Name != "" {
 		tool, found := findTool(tools, mapping.Name)
 		if !found {
-			return CompatibilityTool{}, "", fmt.Errorf("%w: AppID %d explicitly selects %q", ErrToolMissing, appID, mapping.Name)
+			return CompatibilityTool{}, "", unavailableCompatibilityToolError{name: mapping.Name}
 		}
 		return tool, "per-game mapping", nil
 	}
 	if mapping, ok := mappings["0"]; ok && mapping.Name != "" {
 		tool, found := findTool(tools, mapping.Name)
 		if !found {
-			return CompatibilityTool{}, "", fmt.Errorf("%w: Steam's default mapping selects %q", ErrToolMissing, mapping.Name)
+			return CompatibilityTool{}, "", unavailableCompatibilityToolError{name: mapping.Name}
 		}
 		return tool, "Steam default mapping", nil
 	}

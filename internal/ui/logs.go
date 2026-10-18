@@ -11,7 +11,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
@@ -22,7 +21,7 @@ func (w *Window) showLogs() {
 		entries := promptText(logPreview(text))
 		entries.TextStyle.Monospace = true
 		scroll := container.NewVScroll(entries)
-		follow := widget.NewCheck("Follow new entries", nil)
+		follow := newModCheck("Follow new entries", nil)
 		follow.SetChecked(true)
 		note := compactLabel("Session log · timestamps and full error details · export includes all retained entries")
 		body := container.NewBorder(note, follow, nil, nil, scroll)

@@ -109,6 +109,50 @@ func TestLibraryRootsParsesModernAndLegacyEntries(t *testing.T) {
 	}
 }
 
+func TestFindGameInstallDirsReadsAppManifestsWithoutProton(t *testing.T) {
+	fixture := newSteamFixture(t)
+	if err := os.RemoveAll(fixture.prefix); err != nil {
+		t.Fatal(err)
+	}
+	games, err := NewDetector(fixture.root, fixture.root).FindGameInstallDirs(testAppID)
+	if err != nil || !slices.Equal(games, []string{fixture.game}) {
+		t.Fatalf("installed games = %q, %v; want %q", games, err, fixture.game)
+	}
+	if _, err = NewDetector(fixture.root).FindGameInstallDirs(0); err == nil {
+		t.Fatal("zero AppID accepted")
+	}
+}
+
+func TestFindGameInstallDirsUsesDefaultLibraryWithBrokenConfig(t *testing.T) {
+	fixture := newSteamFixture(t)
+	game := filepath.Join(fixture.root, "steamapps", "common", "Steam default game")
+	mkdir(t, game)
+	testutil.Write(t, fixture.root, "steamapps/appmanifest_12120.acf", `"AppState" { "appid" "12120" "installdir" "Steam default game" }`)
+	testutil.Write(t, fixture.root, "steamapps/libraryfolders.vdf", `"libraryfolders" { broken`)
+	games, err := NewDetector(fixture.root).FindGameInstallDirs(testAppID)
+	if err != nil || !slices.Equal(games, []string{game}) {
+		t.Fatalf("default library hidden by broken libraryfolders.vdf: %q, %v", games, err)
+	}
+}
+
+func TestFindGameInstallDirsContinuesPastStaleOrInvalidLibraries(t *testing.T) {
+	fixture := newSteamFixture(t)
+	testutil.Write(t, fixture.root, "steamapps/appmanifest_12120.acf", `"AppState" { "appid" "12120" "installdir" "Missing" }`)
+	games, err := NewDetector(fixture.root).FindGameInstallDirs(testAppID)
+	if err != nil || !slices.Equal(games, []string{fixture.game}) {
+		t.Fatalf("stale library hid active game: %q, %v", games, err)
+	}
+	for _, dir := range []string{"..", ".", `C:\\Windows`, "../escape", `..\\escape`} {
+		t.Run(dir, func(t *testing.T) {
+			testutil.Write(t, fixture.library, "steamapps/appmanifest_12120.acf", fmt.Sprintf(`"AppState" { "appid" "12120" "installdir" %q }`, dir))
+			_, err := NewDetector(fixture.root).FindGameInstallDirs(testAppID)
+			if err == nil || !strings.Contains(err.Error(), "invalid installdir") {
+				t.Fatalf("unsafe installdir %q: %v", dir, err)
+			}
+		})
+	}
+}
+
 func TestDetectProtonContextUsesExplicitCustomToolAndGameLibrary(t *testing.T) {
 	fixture := newSteamFixture(t)
 	proton := fixture.addTool(t, "compatibilitytools.d/Local-Custom-Build", "custom_internal_id", "My Local Proton", 250)
