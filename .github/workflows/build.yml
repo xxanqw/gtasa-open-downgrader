@@ -114,9 +114,8 @@ jobs:
         with:
           name: downgrader-linux
           path: |
-            dist/gtasa-open-downgrader-linux
-            dist/gtasa-open-downgrader-linux-offline
-            dist/*.AppImage
+            dist/gtasa-open-downgrader-linux.AppImage
+            dist/gtasa-open-downgrader-linux-offline.AppImage
             dist/THIRD-PARTY-NOTICES.zip
           compression-level: 0
           retention-days: 7
@@ -161,8 +160,8 @@ jobs:
         with:
           name: downgrader-windows
           path: |
-            dist/gtasa-open-downgrader-windows*.exe
-            dist/gta-sa.exe
+            dist/gtasa-open-downgrader-windows.exe
+            dist/gtasa-open-downgrader-windows-offline.exe
             dist/THIRD-PARTY-NOTICES.zip
           compression-level: 0
           retention-days: 7
@@ -221,8 +220,15 @@ jobs:
           pattern: downgrader-*
           merge-multiple: true
           path: dist
-      - name: Checksum all release files
-        run: cd dist && sha256sum gtasa-open-downgrader-* gta-sa.exe THIRD-PARTY-NOTICES.zip > SHA256SUMS
+      - name: Checksum downgrader distribution files only
+        run: |
+          cd dist
+          sha256sum \
+            gtasa-open-downgrader-linux.AppImage \
+            gtasa-open-downgrader-linux-offline.AppImage \
+            gtasa-open-downgrader-windows.exe \
+            gtasa-open-downgrader-windows-offline.exe \
+            THIRD-PARTY-NOTICES.zip > SHA256SUMS
       - uses: softprops/action-gh-release@v3.0.2
         with:
           tag_name: ${{ github.ref_name }}
@@ -230,8 +236,10 @@ jobs:
           prerelease: ${{ needs.metadata.outputs.prerelease == 'true' }}
           make_latest: ${{ needs.metadata.outputs.prerelease == 'true' && 'false' || 'true' }}
           files: |
-            dist/gtasa-open-downgrader-*
-            dist/gta-sa.exe
+            dist/gtasa-open-downgrader-linux.AppImage
+            dist/gtasa-open-downgrader-linux-offline.AppImage
+            dist/gtasa-open-downgrader-windows.exe
+            dist/gtasa-open-downgrader-windows-offline.exe
             dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
           generate_release_notes: true

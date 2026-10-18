@@ -120,6 +120,8 @@ Release builds run only on tag pushes, not branch pushes or manual dispatch:
 - `v0.3.0`: stable downgrader release.
 - `launcher-1`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
 
+Downgrader releases contain only Windows executables, Linux AppImages, notices, and checksums. Standalone Linux build inputs and `gta-sa.exe` are not published there; the launcher has its own release channel.
+
 Launcher update checks use only `launcher-N` releases; downgrader checks use only stable `vX.Y.Z` releases. `LAUNCHER_VERSION` controls launcher stamping independently of the downgrader's `VERSION`.
 
 ### Checks
