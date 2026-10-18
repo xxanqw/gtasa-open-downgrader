@@ -28,7 +28,7 @@ liblzma is copied separately when packaging the AppImage; the reviewed host vers
 
 PROVENANCE ITEMS NOT RESOLVED BY THESE NOTICES
 
-xdelta3: Copyright 2016 Joshua MacDonald. The supplied Apache-2.0 notice applies to the author's Apache-relicensed source branches, including release3_1_apl. Original v3.1.0 was GPL-licensed; a 3.1.0 version string alone does not establish which grant applies. The embedded Linux build identifies Fedora xdelta-3.1.0-23.fc43, reported as Apache-2.0 by Fedora. Exact Windows binary source/build provenance remains to be established before redistribution compliance can be certified.
-https://github.com/jmacd/xdelta/tree/release3_1_apl
+xdelta3: Copyright 2016 Joshua MacDonald. The embedded Linux xdelta3 3.1.1 is built from unmodified Apache-2.0 release3_1_apl source at commit 7508fd2a823443b1f0173ca361620f21d62a7d37, using scripts/build-xdelta.sh and its pinned Ubuntu 22.04 image (glibc 2.35). The script verifies source archive SHA-256 e5aa66a79eab43e85597f54a15dce699488a301535afd264e30432cc076ad218. Original v3.1.0 was GPL-licensed; a 3.1.0 version string alone does not establish which grant applies. Exact Windows binary source/build provenance remains to be established before redistribution compliance can be certified.
+https://github.com/jmacd/xdelta/tree/7508fd2a823443b1f0173ca361620f21d62a7d37
 
 Application/launcher artwork, client icons, game/patch payloads and separately downloaded mod artwork/fonts/translations are not automatically covered by the application's MIT license. Their copyright/trademark permissions and source provenance require independent verification. The included Adobe EmojiOneColor font notice also does not by itself certify the provenance of every underlying emoji artwork component. Exact CI native-toolchain licensing and older/offline/AppImage artifacts require separate version-matched review.
