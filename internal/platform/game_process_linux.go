@@ -1,11 +1,13 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 func gameProcessName(name string) bool {
@@ -16,6 +18,12 @@ func gameProcessName(name string) bool {
 // RequireGameClosed checks both supported filenames, including Wine's comm name.
 // Failure to enumerate processes does not authorize changing game assets.
 func RequireGameClosed() error { return requireGameClosedIn("/proc") }
+
+// procfs may report ESRCH, not just ENOENT, if a process exits during a read.
+func processExited(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
 func requireGameClosedIn(proc string) error {
 	entries, err := os.ReadDir(proc)
 	if err != nil {
@@ -26,7 +34,7 @@ func requireGameClosedIn(proc string) error {
 			continue
 		}
 		name, err := os.ReadFile(filepath.Join(proc, entry.Name(), "comm"))
-		if os.IsNotExist(err) {
+		if processExited(err) {
 			continue
 		}
 		if err != nil {

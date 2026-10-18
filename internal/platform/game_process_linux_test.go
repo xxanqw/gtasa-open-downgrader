@@ -4,8 +4,22 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/testutil"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
+
+func TestExitedProcessErrors(t *testing.T) {
+	for _, cause := range []error{os.ErrNotExist, syscall.ESRCH} {
+		if !processExited(&os.PathError{Op: "read", Path: "/proc/42/comm", Err: cause}) {
+			t.Fatalf("exited process error rejected: %v", cause)
+		}
+	}
+	for _, cause := range []error{nil, os.ErrPermission, syscall.EIO} {
+		if processExited(cause) {
+			t.Fatalf("uncertain process state accepted: %v", cause)
+		}
+	}
+}
 
 func TestGameProcessChecksBothNamesAndCase(t *testing.T) {
 	for _, name := range []string{"gta_sa.exe\n", "gta-sa.exe\n", "GTA_SA.EXE\n"} {

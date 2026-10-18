@@ -260,7 +260,7 @@ func TestDetectProtonContextErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := NewDetector(fixture.root).DetectProtonContext(testAppID)
-		if !errors.Is(err, ErrPrefixMissing) || !strings.Contains(err.Error(), fixture.prefix) {
+		if !errors.Is(err, ErrPrefixMissing) || !strings.Contains(err.Error(), fmt.Sprintf("%q", fixture.prefix)) {
 			t.Fatalf("error = %v", err)
 		}
 	})

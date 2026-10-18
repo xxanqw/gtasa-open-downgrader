@@ -235,6 +235,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	}
 	localAppData := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", localAppData)
+	t.Setenv("LOCALAPPDATA", localAppData)
 	support := filepath.Join(localAppData, "mp.open.launcher", "omp", "omp-client.dll")
 	managed := filepath.Join(localAppData, "mp.open.launcher", "samp", "0.3.7-R5", "samp.dll")
 	for path, contents := range map[string]string{support: "MZclient", managed: "MZmanaged"} {

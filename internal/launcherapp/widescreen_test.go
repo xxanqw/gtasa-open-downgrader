@@ -43,8 +43,14 @@ func TestWidescreenOnlyPausedAcrossAutoloadLocations(t *testing.T) {
 	root := t.TempDir()
 	r := wsRuntime(root)
 	asis := []string{"GTASA.WidescreenFix.asi", "scripts/nested/gtasa.widescreenfix.ASI", "plugins/GTASA.WidescreenFixLegacy.asi", "modloader/WidescreenFix/GTASA.WidescreenFix.asi", "modloader/renamed/copy.asi"}
+	permissions := make(map[string]os.FileMode)
 	for _, p := range asis {
 		wsWrite(t, root, p, "widescreen")
+		info, err := os.Stat(filepath.Join(root, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		permissions[p] = info.Mode().Perm()
 	}
 	untouched := map[string]string{"modloader/WidescreenFix/GTASA.WidescreenFix.ini": "preferences", "modloader.asi": "loader", "modloader/ExtendedLanguageLoader/ExtendedLanguageLoader.asi": "ell", "modloader/ExtendedLanguageLoader/fonts.txd": "fonts", "scripts/unrelated.asi": "other", "modloader/FrontendMods/GTASA.WidescreenFrontend.asi": "frontend"}
 	for p, v := range untouched {
@@ -65,7 +71,7 @@ func TestWidescreenOnlyPausedAcrossAutoloadLocations(t *testing.T) {
 	for _, p := range asis {
 		wsExpect(t, root, p, "widescreen")
 		info, _ := os.Stat(filepath.Join(root, p))
-		if info.Mode().Perm() != 0640 {
+		if info.Mode().Perm() != permissions[p] {
 			t.Fatal("permissions not preserved")
 		}
 	}
