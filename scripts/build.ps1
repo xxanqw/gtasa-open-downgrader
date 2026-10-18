@@ -10,7 +10,7 @@ if ($Variant -eq 'offline') {
     $Tags += ',offline'
     $Name += '-offline'
 }
-$Version = if ($env:VERSION) { $env:VERSION } else { 'v0.3.0-rc.1' }
+$Version = if ($env:VERSION) { $env:VERSION } else { 'v0.3.0-rc.2' }
 $LauncherVersion = if ($env:LAUNCHER_VERSION) { $env:LAUNCHER_VERSION } else { (Get-Content internal/launcherversion/VERSION -Raw).Trim() }
 if ($LauncherVersion -notmatch '^[1-9][0-9]{0,19}$') { throw 'Invalid launcher version; use a positive release number.' }
 $Resource = 'cmd/downgrader/resources_windows_amd64.syso'

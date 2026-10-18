@@ -299,11 +299,7 @@ func (runner DirectRunner) Run(ctx context.Context, executable string, arguments
 		}
 	}
 	if runner.Executor == nil {
-		runner.Executor = CommandExecutorFunc(func(ctx context.Context, directory, executable string, arguments ...string) error {
-			command := exec.CommandContext(ctx, executable, arguments...)
-			command.Dir = directory
-			return command.Run()
-		})
+		runner.Executor = CommandExecutorFunc(runInstaller)
 	}
 	if !regular(executable) {
 		return fmt.Errorf("installer %q is missing or is not a regular file", executable)

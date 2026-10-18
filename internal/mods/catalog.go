@@ -71,10 +71,13 @@ type githubRelease struct {
 		URL     string `json:"browser_download_url"`
 	} `json:"assets"`
 }
+type BrowserDownloadFunc func(context.Context, string, string, string, download.Progress) error
+
 type Resolver struct {
-	Client    *download.Client
-	GitHubAPI string
-	cache     map[string]githubRelease
+	BrowserDownload BrowserDownloadFunc
+	Client          *download.Client
+	GitHubAPI       string
+	cache           map[string]githubRelease
 }
 
 func NewResolver(c *download.Client) *Resolver {
@@ -252,6 +255,29 @@ func shareDownload(body, id string) (string, error) {
 	}
 	return "", fmt.Errorf("ShareMods did not provide its official download link; download the package in your browser and use Import mod archive")
 }
+
+// Download routes protected ShareMods packages through the user's browser when
+// available. Both paths retain the reviewed archive checksum verification.
+func (r *Resolver) Download(ctx context.Context, rel Release, destination, checksum string, progress download.Progress) error {
+	if rel.FileID != "" && r.BrowserDownload != nil {
+		if err := r.BrowserDownload(ctx, rel.URL, destination, checksum, progress); err != nil {
+			return err
+		}
+	} else {
+		raw, err := r.DownloadURL(ctx, rel)
+		if err != nil {
+			return err
+		}
+		if err := r.Client.File(ctx, raw, destination, progress); err != nil {
+			return err
+		}
+	}
+	if checksum != "" {
+		return checkSHA(destination, checksum)
+	}
+	return nil
+}
+
 func (r *Resolver) DownloadURL(ctx context.Context, rel Release) (string, error) {
 	if rel.FileID == "" {
 		return rel.URL, nil

@@ -63,18 +63,11 @@ func (i Installer) installInterface(ctx context.Context, r *Resolver, root, name
 	stage := filepath.Join(work, "stage")
 	spec := interfacePacks[name]
 	fetch := func(source Release, sha, dest string) error {
-		raw, err := r.DownloadURL(ctx, source)
-		if err != nil {
-			return err
-		}
-		if err = i.Client.File(ctx, raw, dest, func(done, total int64) {
+		return r.Download(ctx, source, dest, sha, func(done, total int64) {
 			if event != nil {
 				event(name, "Downloading reviewed package", done, total)
 			}
-		}); err != nil {
-			return err
-		}
-		return checkSHA(dest, sha)
+		})
 	}
 	archive := filepath.Join(work, "package.7z")
 	if err = fetch(rel, spec.checksum, archive); err != nil {

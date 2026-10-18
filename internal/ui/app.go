@@ -801,7 +801,7 @@ func (w *Window) uninstallMod(name string) {
 	})
 }
 func (w *Window) modInstaller() mods.Installer {
-	return mods.Installer{Client: w.client, AppVersion: updater.Version}
+	return mods.Installer{Client: w.client, AppVersion: updater.Version, BrowserDownload: w.browserModDownload}
 }
 func (w *Window) modEvent(name, status string, done, total int64) {
 	w.report(name+" · "+status, done, total)

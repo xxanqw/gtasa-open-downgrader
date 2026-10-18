@@ -2,7 +2,7 @@
   Icon = "internal/assets/icon.png"
   Name = "GTA SA Open Downgrader"
   ID = "me.xxanqw.gtasa-open-downgrader"
-  Version = "0.3.0-rc.1"
+  Version = "0.3.0-rc.2"
   Build = 1
 [Migrations]
   fyneDo = true

@@ -30,6 +30,7 @@ const (
 )
 
 type promptRequest struct {
+	ctx                  context.Context
 	kind                 promptKind
 	title, text, initial string
 	accept, dismiss      string
@@ -94,14 +95,23 @@ func (w *Window) nextPrompt() {
 	}
 	r := w.prompts[0]
 	w.prompts = w.prompts[1:]
+	if r.ctx != nil && r.ctx.Err() != nil {
+		if r.done != nil {
+			r.done("", false)
+		}
+		w.nextPrompt()
+		return
+	}
 	w.promptActive = true
 	w.refreshEnabled()
 	finished := false
+	stopCancellation := func() bool { return false }
 	complete := func(value string, ok bool) {
 		if finished {
 			return
 		}
 		finished = true
+		stopCancellation()
 		w.activePrompt = nil
 		w.promptActive = false
 		if w.closing {
@@ -112,6 +122,15 @@ func (w *Window) nextPrompt() {
 			r.done(value, ok)
 		}
 		w.nextPrompt()
+	}
+	if r.ctx != nil {
+		stopCancellation = context.AfterFunc(r.ctx, func() {
+			w.post(func() {
+				if !finished && w.activePrompt != nil {
+					w.activePrompt()
+				}
+			})
+		})
 	}
 	if r.present != nil {
 		w.activePrompt = r.present(complete)

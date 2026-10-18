@@ -195,7 +195,7 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 			launcherPurpose = "Installed version: legacy / unknown"
 		}
 	}
-	launcherActions := container.NewVBox(container.NewHBox(launcherButton, checkUpdates), container.NewHBox(layout.NewSpacer(), resetChoice))
+	launcherActions := container.NewHBox(launcherButton, checkUpdates, resetChoice)
 	sections := []fyne.CanvasObject{newMultiplayerCard("Steam launcher", launcherPurpose, launcherState, launcherImportance, launcherCardIcon(), launcherActions, choiceDetail)}
 	if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
 		sections = append(sections, notice)

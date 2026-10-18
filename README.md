@@ -54,11 +54,15 @@ The app offers ASI Loader, ModLoader, SilentPatch, Widescreen Fixes, Framerate V
 
 Select rows in **Mods**, then use **Install**, **Update**, **Reinstall**, or **Remove**. Required dependencies are selected automatically. Open **Details** for package-specific requirements and caveats, or use the settings gear to edit supported INI files.
 
-Mod removals are backed up under `backups/mods/`. Reinstallation can overwrite customized settings. If an upstream download is blocked, use **Tools → Import mod archive** with the supported package.
+Mod removals are backed up under `backups/mods/`. Reinstallation can overwrite customized settings.
+
+ShareMods downloads open in your default browser so you can complete its confirmation and click Download. The app watches your Downloads folder (or a folder you choose), then resumes installation after a new matching archive finishes. Existing/unrelated files and partial downloads are ignored. Reviewed package checksums are still enforced, verified packages are cached for reuse, and your browser download is never deleted. Cancel stops waiting; **Tools → Import mod archive** remains available for existing archives.
 
 ## Multiplayer and Steam Deck
 
 Use **Multiplayer** to manage SA-MP, open.mp, MTA, and the optional Steam launcher. The launcher adds a mode chooser to Steam while keeping the real game executable intact. Use **Check updates** to download a verified launcher release, or **Remove & restore** to undo its installation. Close GTA and the launcher before updating. The launcher's **Settings** menu also offers an update check; installation is handled by the downgrader.
+
+On native Windows, installers that require administrator access open a UAC approval prompt; the downgrader itself stays unelevated. Finish or close an elevated installer before cancellation can complete.
 
 On Linux and Steam Deck, clients use the game's detected Steam Proton installation and prefix. Follow the launch options and setup instructions shown in the app. open.mp uses a built-in server browser under Proton.
 
@@ -116,7 +120,7 @@ To generate patches from your own clean game copies, use [generate_patches.sh](g
 
 Release builds run only on tag pushes, not branch pushes or manual dispatch:
 
-- `v0.3.0-rc.1`: downgrader prerelease; never becomes Latest or an automatic update.
+- `v0.3.0-rc.2`: downgrader prerelease; never becomes Latest or an automatic update.
 - `v0.3.0`: stable downgrader release.
 - `launcher-1`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
 

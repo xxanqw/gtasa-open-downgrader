@@ -214,10 +214,11 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 }
 
 type Installer struct {
-	Client     *download.Client
-	AppVersion string
-	Resolve    func(context.Context, string) (Release, error)
-	Install    func(context.Context, string, string, Release) error
+	Client          *download.Client
+	AppVersion      string
+	BrowserDownload BrowserDownloadFunc
+	Resolve         func(context.Context, string) (Release, error)
+	Install         func(context.Context, string, string, Release) error
 }
 type Event func(name, status string, done, total int64)
 
@@ -249,6 +250,7 @@ func (i Installer) updateSelected(ctx context.Context, root string, allowed map[
 		return result, err
 	}
 	resolver := NewResolver(i.Client)
+	resolver.BrowserDownload = i.BrowserDownload
 	resolve := i.Resolve
 	if resolve == nil {
 		resolve = resolver.Resolve
@@ -358,6 +360,7 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		}
 	}
 	resolver := NewResolver(i.Client)
+	resolver.BrowserDownload = i.BrowserDownload
 	resolve := i.Resolve
 	if resolve == nil {
 		resolve = resolver.Resolve
@@ -429,17 +432,13 @@ func (i Installer) install(ctx context.Context, r *Resolver, root, name string, 
 	if isInterfaceMod(name) {
 		return i.installInterface(ctx, r, root, name, rel, event)
 	}
-	raw, e := r.DownloadURL(ctx, rel)
-	if e != nil {
-		return e
-	}
 	work, e := os.MkdirTemp("", "gtasa-mod-download-*")
 	if e != nil {
 		return e
 	}
 	defer os.RemoveAll(work)
 	archive := filepath.Join(work, "package")
-	e = i.Client.File(ctx, raw, archive, func(done, total int64) {
+	e = r.Download(ctx, rel, archive, rel.Checksum, func(done, total int64) {
 		if event != nil {
 			event(name, "Downloading", done, total)
 		}
