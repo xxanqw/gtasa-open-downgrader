@@ -64,6 +64,8 @@ Use **Multiplayer** to manage SA-MP, open.mp, MTA, and the optional Steam launch
 
 On native Windows, installers that require administrator access open a UAC approval prompt; the downgrader itself stays unelevated. Finish or close an elevated installer before cancellation can complete.
 
+Launcher 2 removes inherited GTA Steam launch identifiers and requests overlay suppression for native Windows MTA only. Other clients and Wine/Proton keep their normal environment. If MTA still crashes only through Steam, disable Steam Overlay for GTA San Andreas under **Steam → Properties → General** and retry; overlay suppression variables cannot guarantee that injection hooks stay unloaded.
+
 On Linux and Steam Deck, clients use the game's detected Steam Proton installation and prefix. Follow the launch options and setup instructions shown in the app. open.mp uses a built-in server browser under Proton.
 
 **Linux multiplayer support is experimental.** Server and anti-cheat compatibility is not guaranteed. MTA 1.6 is the default; MTA 1.7 is an opt-in development build. Keep their installation folders separate.
@@ -122,7 +124,7 @@ Release builds run only on tag pushes, not branch pushes or manual dispatch:
 
 - `v0.3.0-rc.2`: downgrader prerelease; never becomes Latest or an automatic update.
 - `v0.3.0`: stable downgrader release.
-- `launcher-1`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
+- `launcher-2`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
 
 Downgrader releases contain only Windows executables, Linux AppImages, notices, and checksums. Standalone Linux build inputs and `gta-sa.exe` are not published there; the launcher has its own release channel.
 

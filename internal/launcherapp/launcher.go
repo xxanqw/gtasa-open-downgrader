@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
@@ -385,11 +386,23 @@ func (runtime *Runtime) run(ctx context.Context, directory, executable string, a
 	return runtime.Execute(ctx, directory, executable, arguments...)
 }
 
-func execute(ctx context.Context, directory, executable string, arguments ...string) error {
+func launchCommand(ctx context.Context, directory, executable string, arguments ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, executable, arguments...)
 	command.Dir = directory
+	if goruntime.GOOS == "windows" {
+		command.Env = mtaChildEnvironment(executable, goruntime.GOOS, winedrive.RunningUnderWine() || RunningUnderProton(), os.Environ())
+	}
+	return command
+}
+
+func execute(ctx context.Context, directory, executable string, arguments ...string) error {
+	command := launchCommand(ctx, directory, executable, arguments...)
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("run %q: %w", filepath.Base(executable), err)
+		var exit *exec.ExitError
+		if command.Env != nil && errors.As(err, &exit) && uint32(exit.ExitCode()) == 0xc0000409 {
+			return fmt.Errorf("run %q (working directory %q): %w\nMTA still stopped after removing inherited GTA Steam launch settings. Disable Steam Overlay for GTA San Andreas in Steam > Properties > General, then retry.", executable, directory, err)
+		}
+		return fmt.Errorf("run %q (working directory %q): %w", executable, directory, err)
 	}
 	return nil
 }
