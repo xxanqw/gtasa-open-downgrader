@@ -12,7 +12,7 @@ import (
 
 func gameProcessName(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
-	return name == "gta_sa.exe" || name == "gta-sa.exe"
+	return name == "gta_sa.exe" || name == "gta-sa.exe" || name == "gtasa-mta-host.exe"
 }
 
 // RequireGameClosed checks both supported filenames, including Wine's comm name.

@@ -13,6 +13,7 @@ import (
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherapp"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/launcherversion"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 )
@@ -20,6 +21,13 @@ import (
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(launcherversion.Version())
+		return
+	}
+	if handled, err := launcherapp.HandleMTAHost(os.Args[1:]); handled {
+		if err != nil {
+			launcherapp.ShowMTAHostError(err)
+			os.Exit(1)
+		}
 		return
 	}
 	if handled, err := winedrive.HandleHelper(os.Args[1:]); handled {
@@ -43,8 +51,15 @@ func main() {
 	w := a.NewWindow("Grand Theft Auto: San Andreas")
 	w.SetIcon(fyne.NewStaticResource("steam-launcher-icon.png", assets.Icon))
 	ui := newLauncherWindow(a, w, gameDir, runtime.GOOS, launcherapp.RunningUnderProton(), launcher.Clients(), launcherActions{
-		single:      func(ctx context.Context) error { return launcher.SinglePlayer(ctx, os.Args[1:]...) },
-		multiplayer: launcher.Multiplayer, openMP: launcher.OpenMP,
+		single: func(ctx context.Context) error { return launcher.SinglePlayer(ctx, os.Args[1:]...) },
+		multiplayer: func(ctx context.Context, id multiplayer.ClientID) error {
+			if id == multiplayer.ClientMTA {
+				if handled, err := launcherapp.StartNativeMTAHost(ctx, gameDir); handled {
+					return err
+				}
+			}
+			return launcher.Multiplayer(ctx, id)
+		}, openMP: launcher.OpenMP,
 		downgrader:    func() error { return launcherapp.OpenDowngrader(gameDir) },
 		hasDowngrader: launcherapp.FindDowngrader(gameDir) != "",
 	})

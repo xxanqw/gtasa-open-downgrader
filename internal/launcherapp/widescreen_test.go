@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
@@ -22,6 +24,16 @@ func wsWrite(t *testing.T, root, name, contents string) {
 		t.Fatal(err)
 	}
 }
+func wsSymlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		if runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(1314)) {
+			t.Skip("Windows account does not have symlink creation privileges")
+		}
+		t.Fatal(err)
+	}
+}
+
 func wsRuntime(root string) *Runtime {
 	return &Runtime{GameDir: root, snapshotGameProcesses: func() (gameProcessSet, error) { return gameProcessSet{}, nil }}
 }
@@ -116,9 +128,7 @@ func TestWidescreenConflictAndBackupModificationRefused(t *testing.T) {
 				if err := os.Rename(backup, backup+".saved"); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.Symlink(backup+".saved", backup); err != nil {
-					t.Fatal(err)
-				}
+				wsSymlink(t, backup+".saved", backup)
 			}
 			if err := r.restoreWidescreen(); err == nil {
 				t.Fatal("unsafe recovery accepted")
@@ -187,9 +197,7 @@ func TestWidescreenRefusesRunningUnreadableAndSymlinkedState(t *testing.T) {
 			case "enumeration":
 				r.snapshotGameProcesses = func() (gameProcessSet, error) { return nil, errors.New("enumeration denied") }
 			case "symlink":
-				if err := os.Symlink(filepath.Join(root, p), filepath.Join(root, "renamed.asi")); err != nil {
-					t.Fatal(err)
-				}
+				wsSymlink(t, filepath.Join(root, p), filepath.Join(root, "renamed.asi"))
 			case "cancelled":
 				c, cancel := context.WithCancel(ctx)
 				cancel()

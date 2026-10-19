@@ -226,6 +226,9 @@ func (runtime *Runtime) restoreCompatibility() error {
 	if len(processes) != 0 {
 		return fmt.Errorf("Grand Theft Auto: San Andreas is already running")
 	}
+	if err := requireDesktopMTAClosed(); err != nil {
+		return err
+	}
 	if _, err := winedrive.EnsureWineGameDrive(runtime.GameDir); err != nil {
 		return fmt.Errorf("prepare Wine game drive: %w", err)
 	}
@@ -331,6 +334,12 @@ func (runtime *Runtime) runWithoutModLoader(ctx context.Context, client multipla
 		return err
 	}
 	runErr := runtime.run(ctx, client.WorkingDir, client.Executable)
+	if errors.Is(runErr, errMTAExitUnknown) {
+		return runErr
+	}
+	if err := runtime.requireClosedForCompatibility(); err != nil {
+		return errors.Join(runErr, err)
+	}
 	restoreErr := runtime.restoreModLoader()
 	return errors.Join(runErr, restoreErr)
 }
@@ -389,19 +398,15 @@ func (runtime *Runtime) run(ctx context.Context, directory, executable string, a
 func launchCommand(ctx context.Context, directory, executable string, arguments ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, executable, arguments...)
 	command.Dir = directory
-	if goruntime.GOOS == "windows" {
-		command.Env = mtaChildEnvironment(executable, goruntime.GOOS, winedrive.RunningUnderWine() || RunningUnderProton(), os.Environ())
-	}
 	return command
 }
 
 func execute(ctx context.Context, directory, executable string, arguments ...string) error {
+	if desktopMTATarget(executable, goruntime.GOOS, winedrive.RunningUnderWine() || RunningUnderProton()) {
+		return executeDesktopMTA(ctx, directory, executable, arguments...)
+	}
 	command := launchCommand(ctx, directory, executable, arguments...)
 	if err := command.Run(); err != nil {
-		var exit *exec.ExitError
-		if command.Env != nil && errors.As(err, &exit) && uint32(exit.ExitCode()) == 0xc0000409 {
-			return fmt.Errorf("run %q (working directory %q): %w\nMTA still stopped after removing inherited GTA Steam launch settings. Disable Steam Overlay for GTA San Andreas in Steam > Properties > General, then retry.", executable, directory, err)
-		}
 		return fmt.Errorf("run %q (working directory %q): %w", executable, directory, err)
 	}
 	return nil

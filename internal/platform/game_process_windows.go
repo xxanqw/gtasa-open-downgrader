@@ -19,7 +19,7 @@ func RequireGameClosed() error {
 	err = windows.Process32First(snapshot, &entry)
 	for err == nil {
 		name := strings.ToLower(windows.UTF16ToString(entry.ExeFile[:]))
-		if name == "gta_sa.exe" || name == "gta-sa.exe" {
+		if name == "gta_sa.exe" || name == "gta-sa.exe" || name == "gtasa-mta-host.exe" {
 			return fmt.Errorf("close GTA (%s) before changing installed mods", name)
 		}
 		err = windows.Process32Next(snapshot, &entry)

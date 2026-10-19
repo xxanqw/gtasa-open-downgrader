@@ -22,7 +22,7 @@ func TestExitedProcessErrors(t *testing.T) {
 }
 
 func TestGameProcessChecksBothNamesAndCase(t *testing.T) {
-	for _, name := range []string{"gta_sa.exe\n", "gta-sa.exe\n", "GTA_SA.EXE\n"} {
+	for _, name := range []string{"gta_sa.exe\n", "gta-sa.exe\n", "GTA_SA.EXE\n", "gtasa-mta-host.exe\n"} {
 		root := t.TempDir()
 		testutil.Write(t, root, "42/comm", name)
 		if err := requireGameClosedIn(root); err == nil {
