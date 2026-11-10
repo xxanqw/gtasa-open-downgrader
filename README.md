@@ -144,3 +144,13 @@ The `ci` tag uses Fyne's headless driver; do not use it for desktop release buil
 ## License
 
 Original code is licensed under [MIT](LICENSE). Third-party components retain their own terms; see [notices and source availability](internal/licenses/NOTICES.txt) and [distribution qualifications](internal/licenses/scope.txt), also available through **About → Licenses**.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=xxanqw%2Fgtasa-open-downgrader&type=timeline&logscale=&releases=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=xxanqw/gtasa-open-downgrader&type=timeline&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=xxanqw/gtasa-open-downgrader&type=timeline&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=xxanqw/gtasa-open-downgrader&type=timeline&legend=bottom-right" />
+ </picture>
+</a>
