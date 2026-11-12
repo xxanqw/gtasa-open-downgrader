@@ -8,7 +8,35 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/assets"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
+
+// Retain environment-specific availability while temporarily disabling actions
+// during jobs and prompts. Rebuilding a page replaces, rather than appends, it.
+func (w *Window) rememberMultiplayerControls(object fyne.CanvasObject) {
+	switch object := object.(type) {
+	case *appwidget.Button:
+		w.multiplayerControls[object] = !object.Disabled()
+	case *fyne.Container:
+		for _, child := range object.Objects {
+			w.rememberMultiplayerControls(child)
+		}
+	case *framedPanel:
+		w.rememberMultiplayerControls(object.content)
+	case *container.ThemeOverride:
+		w.rememberMultiplayerControls(object.Content)
+	}
+}
+
+func (w *Window) refreshMultiplayerControls() {
+	for button, available := range w.multiplayerControls {
+		if available && !w.busy && !w.promptActive {
+			button.Enable()
+		} else {
+			button.Disable()
+		}
+	}
+}
 
 func launcherCardIcon() fyne.CanvasObject {
 	return multiplayerImage(fyne.NewStaticResource("steam-launcher-icon.png", assets.SteamLauncherIcon))

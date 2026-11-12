@@ -62,8 +62,8 @@ func bindPageFocus(scroll *container.Scroll, object fyne.CanvasObject) {
 
 func (w *Window) buildHub() fyne.CanvasObject {
 	w.hubReadiness = hubText("Select a game folder and scan it to get started.")
-	w.hubReadiness.Wrapping = fyne.TextWrapOff
-	w.hubReadiness.Truncation = fyne.TextTruncateEllipsis
+	w.gameWelcome = w.newGameWelcome()
+	w.setupGuide = w.gameWelcome.root
 	w.hubBackups = hubText("Scan a game to check for downgrade backups.")
 	w.patchButton = appwidget.NewButtonWithIcon("Download patches", theme.DownloadIcon(), w.downloadPatches)
 	fileResults := container.NewThemeOverride(container.New(&fileTableLayout{table: w.table, detailed: func() bool { return w.checksums }}, w.table), fileTableTheme{w.app.Settings().Theme()})
@@ -72,16 +72,16 @@ func (w *Window) buildHub() fyne.CanvasObject {
 		w.setStatus("File report copied.")
 	})
 	w.checksumCheck = newModCheck("Show checksums", func(on bool) { w.checksums = on; w.table.Refresh(); fileResults.Refresh() })
+	w.fileResults = fileResults
+	w.fileControls = container.NewBorder(nil, nil, w.checksumCheck, container.NewHBox(copyDetails), layout.NewSpacer())
 	downgradeBody := container.NewBorder(
 		container.NewVBox(
-			container.NewBorder(nil, nil, w.checksumCheck, container.NewHBox(copyDetails), layout.NewSpacer()),
-			w.patchButton, w.hubReadiness,
+			w.hubReadiness, w.patchButton, w.fileControls,
 		),
 		nil, nil, nil, fileResults,
 	)
-	downgrade := container.NewBorder(w.gameHeader, nil, nil, nil,
-		container.New(layout.NewCustomPaddedLayout(10, 8, 14, 14),
-			newFramedPanel(container.New(layout.NewCustomPaddedLayout(12, 12, 14, 14), downgradeBody))))
+	w.gameResults = container.New(layout.NewCustomPaddedLayout(10, 8, 14, 14), newFramedPanel(container.New(layout.NewCustomPaddedLayout(12, 12, 14, 14), downgradeBody)))
+	downgrade := container.NewStack(w.setupGuide, w.gameResults)
 
 	modToolbar := container.New(layout.NewCustomPaddedLayout(4, 0, 14, 14), container.NewVBox(
 		container.New(modSelectionToolbarLayout{}, styleInput(w.modFilter), w.updateModsButton, w.modSelection, w.bulkActions),
@@ -94,14 +94,14 @@ func (w *Window) buildHub() fyne.CanvasObject {
 
 	restore := appwidget.NewButtonWithIcon("Restore original files", theme.HistoryIcon(), func() { w.runHubTool("Restore downgrade backups") })
 	deleteBackups := appwidget.NewButton("Delete backups", func() { w.runHubTool("Delete downgrade backups") })
-	clearData := appwidget.NewButton("Clear saves & settings", func() { w.runHubTool("Clear saves, settings and gallery") })
+	clearData := appwidget.NewButton("Delete saves, settings & gallery…", func() { w.runHubTool("Clear saves, settings and gallery") })
 	w.recoveryActions = []fyne.Disableable{restore, deleteBackups, clearData}
 	w.legacyRussianRemove = appwidget.NewButton("Remove legacy SanLtd Russian", func() { w.uninstallMod(modpkg.SanLtdRussian) })
 	w.legacyRussianSection = hubSection("Retired translation", hubText("SanLtd Russian is no longer offered. ELL includes Russian. Existing files are left untouched unless you remove them here."), w.legacyRussianRemove)
 	w.legacyRussianSection.Hide()
 	recovery := w.hubPage(
 		hubSection("Downgrade backups", w.hubBackups, container.NewHBox(restore, deleteBackups)),
-		hubSection("Saves & settings", hubText("Deleting user data cannot be undone. Back up files first."), container.NewHBox(clearData)),
+		hubSection("Danger zone: permanent deletion", hubText("Deleting saves, settings and gallery cannot be undone. Copy your user-data folder to a safe location first."), container.NewHBox(clearData)),
 		w.legacyRussianSection,
 	)
 	tools := w.buildToolsPage()
@@ -140,6 +140,9 @@ func (w *Window) buildHub() fyne.CanvasObject {
 }
 
 func (w *Window) showHub(page string) {
+	if w.modTable != nil {
+		w.modTable.dismissDownloadHints()
+	}
 	if w.modFilter != nil {
 		w.modFilter.closePopup()
 	}
@@ -154,7 +157,10 @@ func (w *Window) showHub(page string) {
 		}
 	}
 	w.hubSelected = page
-	if page == hubDowngrade {
+	if page == hubMods && w.modTable != nil {
+		w.modTable.Refresh()
+	}
+	if page == hubDowngrade && strings.TrimSpace(w.path.Text) != "" {
 		w.gameHeader.Show()
 	} else {
 		w.gameHeader.Hide()
@@ -166,8 +172,9 @@ func (w *Window) showHub(page string) {
 		}
 		button.Refresh()
 	}
-	w.hubContent.Refresh()
+	appwidget.Relayout(w.hubContent)
 	w.refreshFooterActions()
+	w.refreshWorkspace()
 	if page == hubMultiplayer && w.scanPath != "" && !w.busy && w.multiplayerBody != nil {
 		w.multiplayer()
 	}
@@ -177,7 +184,7 @@ func (w *Window) refreshFooterActions() {
 	if w.footerActions == nil {
 		return
 	}
-	if w.hubSelected == hubDowngrade && !w.busy {
+	if w.hubSelected == hubDowngrade && !w.busy && len(w.rows) > 0 && w.scanPath == w.path.Text {
 		w.downgrade.Show()
 	} else {
 		w.downgrade.Hide()
@@ -290,8 +297,6 @@ func (w *Window) refreshHub() {
 	pending, modified, missing, _, unknown := fileCounts(w.rows)
 	ready := w.scanPath != "" && w.scanPath == w.path.Text
 	switch {
-	case w.busy:
-		w.hubReadiness.SetText(w.status.Text)
 	case w.lastDowngradeOutcome != "":
 		w.hubReadiness.SetText(w.lastDowngradeOutcome)
 	case !ready:
@@ -320,7 +325,7 @@ func (w *Window) refreshHub() {
 	// The file state and footer action already express the normal ready state.
 	// Reserve this line for blockers, unusual scans and active operations.
 	wasVisible := w.hubReadiness.Visible()
-	if !ready || w.busy || w.lastDowngradeOutcome != "" || (ready && !w.downgradeComplete()) || (ready && (w.readonly || w.patchDir == "")) {
+	if !w.busy && w.operationOutcome == "" && (!ready || (ready && !w.downgradeComplete()) || (ready && (w.readonly || w.patchDir == ""))) {
 		w.hubReadiness.Show()
 	} else {
 		w.hubReadiness.Hide()
@@ -328,7 +333,30 @@ func (w *Window) refreshHub() {
 	if wasVisible != w.hubReadiness.Visible() && w.hubPages != nil {
 		w.hubPages[hubDowngrade].Refresh() // Reclaim or reserve the row above the hash table.
 	}
-	if w.patchDir == "" && !w.busy {
+	showWelcome := len(w.rows) == 0 || (w.busy && w.setupActivity == setupScanning)
+	w.gameWelcome.refresh(w)
+	if showWelcome {
+		w.setupGuide.Show()
+		w.gameResults.Hide()
+		w.hubReadiness.Hide()
+	} else {
+		w.setupGuide.Hide()
+		w.gameResults.Show()
+	}
+	if w.hubSelected == hubDowngrade && strings.TrimSpace(w.path.Text) != "" && len(w.rows) > 0 && !(w.busy && w.setupActivity == setupScanning) {
+		w.gameHeader.Show()
+	} else {
+		w.gameHeader.Hide()
+	}
+	if !showWelcome {
+		w.fileControls.Show()
+		w.fileResults.Show()
+	} else {
+		w.fileControls.Hide()
+		w.fileResults.Hide()
+	}
+
+	if w.patchDir == "" && !w.busy && ready {
 		w.patchButton.Show()
 	} else {
 		w.patchButton.Hide()
@@ -359,21 +387,4 @@ func fileReport(rows []game.Row) string {
 		fmt.Fprintf(&report, "%s\nStatus: %s · Patch: %s\nCurrent MD5: %s\nTarget MD5: %s\n\n", row.Path, row.Status, row.NeedsPatch, row.CurrentHash, row.TargetHash)
 	}
 	return report.String()
-}
-
-func downgradeReview(rows []game.Row) string {
-	pending, modified, missing, _, _ := fileCounts(rows)
-	count := pending + modified
-	name := "game file"
-	if count != 1 {
-		name += "s"
-	}
-	message := fmt.Sprintf("Downgrade %d %s to v1.0 US?", count, name)
-	if modified > 0 {
-		message += " Modified files may need to be restored first."
-	}
-	if missing > 0 {
-		message += " Missing files may prevent completion."
-	}
-	return message + "\n\nOriginals are saved in backups/. Cancelling won't undo files already changed."
 }

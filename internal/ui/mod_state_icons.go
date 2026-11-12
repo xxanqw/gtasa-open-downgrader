@@ -30,7 +30,7 @@ func (l modStatusLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	objects[0].Resize(fyne.NewSquareSize(16))
 	objects[0].Move(fyne.NewPos(left, (size.Height-16)/2))
 	labelHeight := label.MinSize().Height
-	label.Resize(fyne.NewSize(textWidth+2*padding, labelHeight))
+	label.Resize(fyne.NewSize(min(textWidth+2*padding, max(0, size.Width-22+padding)), labelHeight))
 	label.Move(fyne.NewPos(left+22-padding, (size.Height-labelHeight)/2))
 }
 
@@ -55,7 +55,7 @@ func modStateSymbol(text string, importance widget.Importance) fyne.Resource {
 	switch text {
 	case "Installed":
 		file = "circle-check"
-	case "Installed (update)", "To reinstall":
+	case "Installed (update)", "Installed\nUpdate available", "To reinstall":
 		file = "arrows-rotate"
 	case "To install":
 		file = "download"
@@ -64,7 +64,10 @@ func modStateSymbol(text string, importance widget.Importance) fyne.Resource {
 	case "Required":
 		file = "link"
 	}
-	role := theme.ColorNameError
+	role := theme.ColorNameForeground
+	if importance == widget.DangerImportance {
+		role = theme.ColorNameError
+	}
 	if importance == widget.SuccessImportance {
 		role = theme.ColorNameSuccess
 	}

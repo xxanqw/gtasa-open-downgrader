@@ -33,8 +33,7 @@ func (*readOnlyTable) Disabled() bool                 { return true }
 func (*readOnlyTable) Disable()                       {}
 func (*readOnlyTable) Enable()                        {}
 
-// A thin progress track for the footer. Operation guidance remains in the
-// Downgrade panel; the bar has no separate percentage label.
+// Both determinate and indeterminate states occupy the same thin footer track.
 type thinProgress struct{ widget.ProgressBar }
 
 func newThinProgress() *thinProgress {
@@ -43,3 +42,13 @@ func newThinProgress() *thinProgress {
 	return p
 }
 func (*thinProgress) MinSize() fyne.Size { return fyne.NewSize(1, 3) }
+
+// Unknown totals animate in the same track rather than creating a second bar.
+type thinIndeterminate struct{ widget.ProgressBarInfinite }
+
+func newThinIndeterminate() *thinIndeterminate {
+	p := &thinIndeterminate{}
+	p.ExtendBaseWidget(p)
+	return p
+}
+func (*thinIndeterminate) MinSize() fyne.Size { return fyne.NewSize(1, 3) }

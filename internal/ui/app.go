@@ -50,6 +50,20 @@ type Window struct {
 	cache, patchDir                                 string
 	path                                            *widget.Entry
 	status, version, modStatus                      *widget.Label
+	fullStatus, operationTitle, operationOutcome    string
+	outcomePath                                     string
+	outcomeDismiss, browserButton                   *appwidget.Button
+	browserOptions                                  func()
+	browserDetails                                  string
+	indeterminate                                   *thinIndeterminate
+	progressTrack                                   *fyne.Container
+	setupGuide                                      fyne.CanvasObject
+	gameWelcome                                     *gameWelcome
+	gameResults                                     fyne.CanvasObject
+	setupActivity                                   setupActivity
+	gameSetupError                                  error
+	patchSetupError                                 error
+	fileControls, fileResults                       fyne.CanvasObject
 	progress                                        *thinProgress
 	table                                           *readOnlyTable
 	rows                                            []game.Row
@@ -73,6 +87,7 @@ type Window struct {
 	hubNav                                          map[string]*appwidget.Button
 	hubPages                                        map[string]fyne.CanvasObject
 	hubContent, multiplayerBody                     *fyne.Container
+	multiplayerControls                             map[*appwidget.Button]bool
 	footer, footerActions                           *fyne.Container
 	footerLogButton                                 *appwidget.Button
 	hubReadiness, hubBackups                        *widget.Label
@@ -95,9 +110,11 @@ type Window struct {
 	modSortDescending                               bool
 	bulkActions                                     *fyne.Container
 	bulkRemove, bulkClear                           *appwidget.Button
-	recoveryActions                                 []fyne.Disableable
-	legacyRussianRemove                             *appwidget.Button
-	legacyRussianSection                            fyne.CanvasObject
+
+	modTooltipLayer      *fyne.Container
+	recoveryActions      []fyne.Disableable
+	legacyRussianRemove  *appwidget.Button
+	legacyRussianSection fyne.CanvasObject
 }
 
 func Run(gamePath, patchPath string) {
@@ -137,10 +154,28 @@ func Run(gamePath, patchPath string) {
 		case <-stopped:
 		}
 	}()
-	w.window.Show()
+	// Establish the startup operation and its footer before the first map.
 	w.start()
+	w.prepareStartupWindow()
+	w.window.Show()
 	a.Run()
 }
+
+// Settle real content at its intended width before asking the compositor to
+// place the window. Never fix startup geometry with a delayed visible resize.
+func (w *Window) prepareStartupWindow() {
+	size := fyne.NewSize(940, 640)
+	w.window.Resize(size)
+	w.refreshWorkspace()
+	minimum := w.window.Content().MinSize()
+	final := fyne.NewSize(max(size.Width, minimum.Width), max(size.Height, minimum.Height))
+	if final != w.window.Canvas().Size() {
+		w.window.Resize(final)
+		w.refreshWorkspace()
+	}
+	w.window.CenterOnScreen()
+}
+
 func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	a.Settings().SetTheme(appwidget.CompactTheme{Theme: theme.DefaultTheme()})
 	cache, e := os.UserCacheDir()
@@ -153,7 +188,6 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.pickers = pickerBackend{available: zenity.IsAvailable, show: systemPicker}
 	}
 	w.window.SetIcon(fyne.NewStaticResource("icon.png", assets.Icon))
-	w.window.Resize(fyne.NewSize(940, 640))
 	w.window.SetPadded(false)
 	w.window.SetCloseIntercept(w.close)
 	w.path = widget.NewEntry()
@@ -164,7 +198,11 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		if w.scanPath != "" && filepath.Clean(path) != w.scanPath {
 			w.lastDowngradeOutcome = ""
 		}
+		if w.operationOutcome != "" && filepath.Clean(path) != filepath.Clean(w.outcomePath) {
+			w.operationOutcome = ""
+		}
 		w.scanPath = ""
+		w.gameSetupError = nil
 		w.installedModCount = 0
 		w.installedMods = map[string]bool{}
 		w.modTracker = mods.Tracker{}
@@ -194,23 +232,19 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 		w.refreshEnabled()
 	}
 	w.path.OnSubmitted = func(string) { w.scan() }
-	browse := appwidget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
-		w.chooseFolder("Select GTA San Andreas folder", w.path.Text, func(path string) {
-			w.path.SetText(path)
-			w.scan()
-		})
-	})
+	browse := appwidget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), w.chooseGameFolder)
 	scan := appwidget.NewButtonWithIcon("Scan game", theme.SearchIcon(), w.scan)
-	w.version = compactLabel("No game selected")
+	w.version = widget.NewLabel("No game selected")
 	if strings.TrimSpace(w.path.Text) != "" {
 		w.version.SetText("Not scanned")
 	}
 	w.version.Alignment = fyne.TextAlignTrailing
-	w.status = compactLabel("Ready")
+	w.status = widget.NewLabel("Ready")
+	w.status.Wrapping = fyne.TextWrapWord
+	w.status.Selectable = true
 	w.progress = newThinProgress()
 	w.modStatus = widget.NewLabel("Scan a game to check installed mods.")
-	w.modStatus.Truncation = fyne.TextTruncateEllipsis
-	w.modStatus.Alignment = fyne.TextAlignTrailing
+	w.modStatus.Wrapping = fyne.TextWrapWord
 	w.modStatus.Importance = widget.LowImportance
 	w.table = newReadOnlyTable(func() (int, int) {
 		if w.checksums {
@@ -259,6 +293,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.table.StickyRowCount = 1
 	w.modSelection = widget.NewLabel("0 selected")
 	w.modSelection.Truncation = fyne.TextTruncateEllipsis
+	w.modTooltipLayer = container.NewWithoutLayout()
 	w.modEmpty = widget.NewLabel("No matching mods.")
 	w.modEmpty.Hide()
 	for _, source := range mods.Catalog {
@@ -296,13 +331,12 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 	w.gameHeader = container.New(layout.NewCustomPaddedLayout(10, 0, 14, 14),
 		container.NewBorder(nil, nil, nil, container.NewHBox(browse, scan), styleInput(w.path)))
 	w.footerLogButton = appwidget.NewButtonWithIcon("Log", theme.InfoIcon(), w.showLogs)
-	w.footerActions = container.NewHBox(w.cancelButton, w.footerLogButton, w.downgrade)
-	w.footer = container.NewVBox(container.NewBorder(nil, nil, nil, w.footerActions, container.NewGridWithColumns(2, w.status, w.version)), container.NewThemeOverride(w.progress, progressBarTheme{a.Settings().Theme()}))
+	w.buildProgressFooter()
 	pages := w.buildHub()
 	workspace := container.NewBorder(nil, container.New(layout.NewCustomPaddedLayout(5, 5, 12, 12), w.footer), nil, nil, pages)
-	w.window.SetContent(container.NewBorder(w.navigation, nil, nil, nil, workspace))
+	w.window.SetContent(container.NewStack(container.NewBorder(container.NewVBox(w.navigation, w.gameHeader), nil, nil, nil, workspace), w.modTooltipLayer))
 	w.refreshEnabled()
-	w.window.CenterOnScreen()
+	w.prepareStartupWindow()
 	return w
 }
 func mustURL(raw string) *url.URL { u, _ := url.Parse(raw); return u }
@@ -311,7 +345,7 @@ func (w *Window) error(e error) {
 		w.logs.Record("ERROR", e.Error())
 	}
 	if e != nil && !w.closing {
-		w.prompt(promptRequest{kind: promptError, title: "Error", text: e.Error()})
+		w.prompt(promptRequest{kind: promptError, title: "Could not complete the action", text: e.Error()})
 	}
 }
 func (w *Window) post(f func()) {
@@ -328,7 +362,7 @@ func (w *Window) close() {
 	if !w.iniDiscardConfirmed {
 		for _, editor := range w.iniEditors {
 			if editor.dirty() {
-				w.confirm("Close with unsaved INI changes?", "One or more settings editors have unsaved changes. Close the application and discard them?", func(ok bool) {
+				w.confirmAction("Close with unsaved INI changes?", "Discard changes & close", "One or more settings editors have unsaved changes. Close the application and discard them?", func(ok bool) {
 					if ok {
 						w.iniDiscardConfirmed = true
 						w.close()
@@ -352,12 +386,11 @@ func (w *Window) close() {
 func (w *Window) refreshEnabled() {
 	if w.progress != nil && w.cancelButton != nil {
 		if w.busy {
-			w.progress.Show()
 			w.cancelButton.Show()
 		} else {
-			w.progress.Hide()
 			w.cancelButton.Hide()
 		}
+		w.refreshProgressFooter()
 		w.refreshFooterActions()
 	}
 	for _, c := range w.controls {
@@ -391,9 +424,6 @@ func (w *Window) refreshEnabled() {
 	if w.installedModCount == 0 {
 		w.updateModsButton.Disable()
 	}
-	if w.modPanel != nil {
-		w.modPanel.Refresh()
-	}
 	for _, c := range w.checks {
 		if ready && complete {
 			c.Enable()
@@ -417,8 +447,10 @@ func (w *Window) refreshEnabled() {
 			w.legacyRussianRemove.Disable()
 		}
 	}
+	w.refreshMultiplayerControls()
 	w.refreshHubNavigation()
 	w.refreshHub()
+	w.refreshWorkspace()
 }
 func (w *Window) selectDependencies() {
 	if !w.dependencies {
@@ -446,11 +478,16 @@ func (w *Window) runOperation(title string, work func(context.Context) error, do
 	if w.busy || w.closing {
 		return
 	}
+	if !passiveOperation(title) {
+		w.operationOutcome = ""
+	}
 	w.busy = true
 	w.generation++
 	w.transferLabel = ""
+	w.operationTitle = title
 	w.setStatus(title)
 	w.setProgress(0)
+	w.setIndeterminate(true)
 	w.refreshEnabled()
 	w.cancelButton.Enable()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -467,6 +504,8 @@ func (w *Window) runOperation(title string, work func(context.Context) error, do
 		cancel()
 		w.post(func() {
 			w.busy = false
+			w.setIndeterminate(false)
+			w.recordOperationOutcome(title, err)
 			w.cancel = nil
 			w.cancelButton.Disable()
 			w.refreshEnabled()
@@ -475,7 +514,7 @@ func (w *Window) runOperation(title string, work func(context.Context) error, do
 			} else if err != nil {
 				w.setStatus(title + " failed")
 				if showError {
-					w.error(err)
+					w.prompt(promptRequest{kind: promptError, title: title + " failed", text: err.Error()})
 				}
 			} else {
 				w.setProgress(1)
@@ -488,6 +527,7 @@ func (w *Window) runOperation(title string, work func(context.Context) error, do
 	})
 }
 func (w *Window) setProgress(value float64) {
+	w.setIndeterminate(false)
 	w.progress.SetValue(value)
 }
 func (w *Window) report(label string, done, total int64) {
@@ -500,10 +540,12 @@ func (w *Window) report(label string, done, total int64) {
 			w.setProgress(float64(done) / float64(total))
 			label += fmt.Sprintf(" · %.0f%%", 100*float64(done)/float64(total))
 		}
-		w.status.SetText(compactStatusText(label))
-		if w.busy && w.hubReadiness != nil {
-			w.hubReadiness.SetText(w.status.Text)
+		w.fullStatus = label
+
+		if total <= 0 {
+			w.setIndeterminate(true)
 		}
+		w.refreshProgressFooter()
 	})
 }
 func (w *Window) start() {
@@ -511,7 +553,7 @@ func (w *Window) start() {
 	detect := strings.TrimSpace(w.path.Text) == "" || !game.HasEXE(w.path.Text)
 	var detected string
 	var prepareError error
-	w.run("Preparing patch assets", func(ctx context.Context) error {
+	w.runSetup(setupDiscovering, "Preparing patch assets", func(ctx context.Context) error {
 		if detect {
 			detected = platform.Detect()
 		}
@@ -543,6 +585,9 @@ func (w *Window) start() {
 	})
 }
 func (w *Window) scan() {
+	if w.busy || w.closing {
+		return
+	}
 	root := strings.TrimSpace(w.path.Text)
 	if root == "" {
 		w.error(fmt.Errorf("select a game directory first"))
@@ -557,7 +602,15 @@ func (w *Window) scan() {
 	dir := w.patchDir
 	var result game.Scan
 	var tracker mods.Tracker
-	w.run("Scanning game files", func(ctx context.Context) error {
+	w.gameSetupError = nil
+	activity, title := setupScanning, "Scanning game files"
+	if dir == "" {
+		activity, title = setupIdentifying, "Identifying game installation"
+	}
+	w.runSetup(activity, title, func(ctx context.Context) error {
+		if !game.HasEXE(root) {
+			return fmt.Errorf("%w: %s", errMissingGameExecutable, root)
+		}
 		m := game.Manifest{}
 		var e error
 		if dir != "" {
@@ -574,6 +627,7 @@ func (w *Window) scan() {
 		return e
 	}, func(e error) {
 		if e != nil {
+			w.gameSetupError = e
 			// A failed rescan cannot keep authorizing game-changing actions
 			// using results from before a possibly modified installation.
 			w.scanPath = ""
@@ -633,7 +687,11 @@ func (w *Window) scan() {
 			w.warned[root] = true
 			w.info("Older mod tracking format", "The next mod installation will reinstall every recorded mod to migrate version tracking. Back up customized configuration files first.")
 		}
-		w.setStatus(fmt.Sprintf("Scan complete: %d manifest files checked.", len(result.Rows)))
+		if w.patchDir == "" && len(result.Rows) == 0 {
+			w.setStatus("Game installation identified. Patch files are needed before verification.")
+		} else {
+			w.setStatus(fmt.Sprintf("Scan complete: %d manifest files checked.", len(result.Rows)))
+		}
 		if w.hubSelected == hubMultiplayer {
 			w.multiplayer()
 		}
@@ -647,6 +705,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 	}
 	generation := w.generation
 	w.modStatus.SetText("Checking installed mod versions…")
+	w.refreshModCatalogSummary()
 	w.background(func(ctx context.Context) {
 		resolver := mods.NewResolver(w.client)
 		labels := map[string]string{}
@@ -681,6 +740,7 @@ func (w *Window) checkMods(root string, t mods.Tracker) {
 				w.setModLabel(name, label)
 			}
 			w.modStatus.SetText(modCheckSummary(updates, unknown, failed))
+			w.refreshModCatalogSummary()
 		})
 	})
 }
@@ -690,20 +750,21 @@ func (w *Window) confirmMods(root string, force bool, selected []string, proceed
 		w.error(e)
 		return
 	}
-	if !force && !t.Legacy() {
-		plan := mods.Selection(selected, t)
-		w.confirm("Install selected mods", strings.Join(plan, "\n")+"\n\nRequired missing dependencies are included automatically. Each mod is installed separately with its own safeguards/backups; cancellation or failure can leave completed installations in place.", func(ok bool) {
-			if ok {
-				proceed()
-			}
-		})
-		return
+	reinstall := force || t.Legacy()
+	title, action := "Install selected mods", "Install mods"
+	if reinstall {
+		title, action = "Reinstall mod files", "Reinstall mods"
 	}
-	w.confirm("Reinstall mod files", strings.Join(mods.Selection(selected, t), "\n")+"\n\nReinstallation includes required packages and can overwrite customized mod configuration files. Legacy trackers reinstall every recorded mod. Continue after backing up any settings you want to keep.", func(ok bool) {
+	plan := mods.Selection(selected, t)
+	options := modInstallReviewModal(root, plan, reinstall)
+	if t.Legacy() {
+		options.Summary = container.NewVBox(options.Summary, promptText("Older tracking format: every recorded mod will be reinstalled."))
+	}
+	w.prompt(promptRequest{kind: promptConfirm, title: title, accept: action, modal: options, done: func(_ string, ok bool) {
 		if ok {
 			proceed()
 		}
-	})
+	}})
 }
 func (w *Window) installMods(force bool) {
 	if !w.downgradeComplete() {
@@ -779,7 +840,7 @@ func (w *Window) uninstallMod(name string) {
 	if name == "ASI Loader" || name == "ModLoader" {
 		message = "Remove " + name + " from this game? Its loader binaries will be backed up. Shared mod folders and configuration files will stay in place. Remove dependent mods first."
 	}
-	w.confirm("Uninstall "+name, message, func(ok bool) {
+	w.confirm("Uninstall "+name, message+"\n\nGame folder:\n"+root, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -801,7 +862,7 @@ func (w *Window) uninstallMod(name string) {
 	})
 }
 func (w *Window) modInstaller() mods.Installer {
-	return mods.Installer{Client: w.client, AppVersion: updater.Version, BrowserDownload: w.browserModDownload}
+	return mods.Installer{Client: w.client, AppVersion: updater.Version, BrowserDownload: w.browserModDownload, PrepareBrowserDownloads: w.prepareBrowserDownloads}
 }
 func (w *Window) modEvent(name, status string, done, total int64) {
 	w.report(name+" · "+status, done, total)
@@ -817,7 +878,7 @@ func (w *Window) apply() {
 	if root == "" || dir == "" {
 		return
 	}
-	w.prompt(promptRequest{kind: promptConfirm, title: "Review downgrade", text: downgradeReview(w.rows), accept: "Downgrade game", dismiss: "Cancel", done: func(_ string, ok bool) {
+	w.prompt(promptRequest{kind: promptConfirm, title: "Review downgrade", modal: downgradeReviewModal(root, w.version.Text, w.rows), accept: "Downgrade game", dismiss: "Cancel", done: func(_ string, ok bool) {
 		if !ok {
 			return
 		}
@@ -864,16 +925,22 @@ func (w *Window) apply() {
 	}})
 }
 func (w *Window) downloadPatches() {
+	if w.busy || w.closing {
+		return
+	}
+	w.patchSetupError = nil
 	target := filepath.Join(w.cache, "Patches")
-	w.run("Downloading patch assets", func(ctx context.Context) error {
+	w.runSetup(setupInstallingPatches, "Downloading patch assets", func(ctx context.Context) error {
 		return patch.DownloadAssets(ctx, w.client, download.PatchURL, target, func(d, t int64) { w.report("Downloading Patches_v2.1.zip", d, t) })
 	}, func(e error) {
+		w.patchSetupError = e
 		if e == nil {
 			w.patchDir = target
 			if w.path.Text != "" {
 				w.scan()
 			}
 		}
+		w.refreshEnabled()
 	})
 }
 func (w *Window) checkUpdates(manual bool) {
@@ -906,7 +973,7 @@ func (w *Window) checkUpdates(manual bool) {
 				w.info("Update available", r.Tag+" is available. Download a matching build from the releases page.")
 				return
 			}
-			w.confirm("Update available", "Download "+r.Tag+" and restart the application?", func(ok bool) {
+			w.confirmAction("Update available", "Download & restart", "Download "+r.Tag+" and restart the application?", func(ok bool) {
 				if !ok {
 					return
 				}
@@ -933,10 +1000,8 @@ func (w *Window) checkUpdates(manual bool) {
 
 func (w *Window) setStatus(text string) {
 	w.logs.Record("INFO", text)
-	w.status.SetText(compactStatusText(text))
-	if w.busy && w.hubReadiness != nil {
-		w.hubReadiness.SetText(w.status.Text)
-	}
+	w.fullStatus = text
+	w.refreshProgressFooter()
 }
 
 // Background checks have no operation completion callback, but still need the

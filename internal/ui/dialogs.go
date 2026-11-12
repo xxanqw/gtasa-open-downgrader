@@ -37,6 +37,7 @@ type promptRequest struct {
 	extensions, choices  []string
 	done                 func(string, bool)
 	present              func(func(string, bool)) func()
+	modal                *appwidget.ModalOptions
 }
 
 type pickerBackend struct {
@@ -80,6 +81,9 @@ func systemPicker(ctx context.Context, r promptRequest, parent any) (string, err
 // Keep prompts ordered, including prompts arriving from background work while
 // Tools or About is open. Only an explicit confirmation can start an action.
 func (w *Window) prompt(r promptRequest) {
+	if w.modTable != nil {
+		w.modTable.dismissDownloadHints()
+	}
 	if w.modFilter != nil {
 		w.modFilter.closePopup()
 	}
@@ -207,11 +211,45 @@ func (w *Window) fynePrompt(r promptRequest, done func(string, bool)) func() {
 	if dismiss == "" {
 		dismiss = "Cancel"
 	}
+	if r.modal != nil {
+		options := *r.modal
+		options.Title = r.title
+		if len(options.Actions) == 0 {
+			options.Actions = []appwidget.ModalAction{{Text: dismiss}, {ID: "accept", Text: accept, Importance: widget.HighImportance}}
+		}
+		options.OnClosed = func(result string) { done(result, result == "accept") }
+		modal := appwidget.ShowModal(w.window, options)
+		return func() { modal.Close("") }
+	}
 	switch r.kind {
 	case promptInfo:
 		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(480, 0), "", "Close", nil, func(bool) { done("", false) })
 	case promptError:
-		return w.panel(r.title, container.NewVScroll(appwidget.GuideNotice("Details", r.text, widget.DangerImportance)), fyne.NewSize(560, 0), "", "Close", nil, func(bool) { done("", false) })
+		modal := appwidget.ShowModal(w.window, appwidget.ModalOptions{
+			Title:         r.title,
+			Summary:       promptText(errorRecovery(r.text)),
+			Sections:      []appwidget.ModalSection{{Title: "Diagnostic details", Content: promptText(r.text)}},
+			MaxBodyHeight: 220,
+			Actions: []appwidget.ModalAction{
+				{Text: "Close"},
+				{Text: "Copy details", KeepOpen: true, Run: func(*appwidget.Modal) { w.window.Clipboard().SetContent(r.title + "\n\n" + r.text) }},
+				{ID: "log", Text: "View log"},
+				{ID: "game", Text: "Game setup"},
+				{ID: "recovery", Text: "Open Recovery", Disabled: w.scanPath == ""},
+			},
+			OnClosed: func(result string) {
+				done("", false)
+				switch result {
+				case "log":
+					w.showLogs()
+				case "game":
+					w.showHub(hubDowngrade)
+				case "recovery":
+					w.showHub(hubRecovery)
+				}
+			},
+		})
+		return func() { modal.Close("") }
 	case promptConfirm:
 		return w.panel(r.title, container.NewVScroll(promptText(r.text)), fyne.NewSize(480, 0), accept, dismiss, nil, func(ok bool) { done("", ok) })
 	case promptFolder:
@@ -312,7 +350,12 @@ func (w *Window) info(title, message string) {
 	w.prompt(promptRequest{kind: promptInfo, title: title, text: message})
 }
 func (w *Window) confirm(title, message string, done func(bool)) {
-	w.prompt(promptRequest{kind: promptConfirm, title: title, text: message, done: func(_ string, ok bool) { done(ok) }})
+	w.confirmAction(title, title, message, done)
+}
+
+// Action labels name the consequence; Cancel remains the initial focus.
+func (w *Window) confirmAction(title, action, message string, done func(bool)) {
+	w.prompt(promptRequest{kind: promptConfirm, title: title, accept: action, text: message, done: func(_ string, ok bool) { done(ok) }})
 }
 func (w *Window) chooseFolder(title, initial string, chosen func(string)) {
 	w.prompt(promptRequest{kind: promptFolder, title: title, initial: initial, done: func(path string, ok bool) {

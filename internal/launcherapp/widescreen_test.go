@@ -237,6 +237,11 @@ func TestWidescreenWaitFailurePreservesUntilSafeSinglePlayerRecovery(t *testing.
 	}
 	wsAbsent(t, root, p)
 	r.snapshotGameProcesses = func() (gameProcessSet, error) { return gameProcessSet{}, nil }
+	r.waitForGameProcess = func(_ context.Context, _ gameProcessSet, done <-chan struct{}) (bool, error) {
+		<-done
+		wsExpect(t, root, p, "widescreen")
+		return true, nil
+	}
 	r.Execute = func(_ context.Context, _, _ string, _ ...string) error {
 		wsExpect(t, root, p, "widescreen")
 		return nil

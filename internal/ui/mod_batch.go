@@ -34,12 +34,18 @@ func (w *Window) renderModLabel(name string) {
 	}
 	if w.installedMods[name] || strings.HasPrefix(w.modDetails[name], "Installed") {
 		text := "Installed"
-		if strings.Contains(w.modDetails[name], "Update available:") {
-			text = "Installed (update)"
+		importance := widget.SuccessImportance
+		switch {
+		case strings.Contains(w.modDetails[name], "Check unavailable"):
+			text, importance = "Installed\nCheck unavailable", widget.WarningImportance
+		case strings.Contains(w.modDetails[name], "Version untracked"), strings.Contains(w.modDetails[name], "version unknown"):
+			text, importance = "Installed\nVersion unknown", widget.WarningImportance
+		case strings.Contains(w.modDetails[name], "Update available:"):
+			text, importance = "Installed\nUpdate available", widget.WarningImportance
 		}
-		w.setModState(name, text, widget.SuccessImportance)
+		w.setModState(name, text, importance)
 	} else {
-		w.setModState(name, "Not installed", widget.DangerImportance)
+		w.setModState(name, "Available", widget.MediumImportance)
 	}
 }
 func (w *Window) removeSelectedMods() {
@@ -61,7 +67,7 @@ func (w *Window) removeSelectedMods() {
 		w.error(err)
 		return
 	}
-	w.confirm("Remove selected mods", strings.Join(order, "\n")+"\n\nDependents are removed before their loaders. Each mod is backed up in backups/mods. If cancelled or failed, completed removals remain removed; remaining mods are kept.", func(ok bool) {
+	w.confirm("Remove selected mods", "Game folder:\n"+root+"\n\n"+strings.Join(order, "\n")+"\n\nDependents are removed before their loaders. Each mod is backed up in backups/mods. If cancelled or failed, completed removals remain removed; remaining mods are kept.", func(ok bool) {
 		if !ok {
 			return
 		}

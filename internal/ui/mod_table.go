@@ -23,6 +23,7 @@ func (w *Window) newModTable() fyne.CanvasObject {
 		w.modExplicit = map[string]bool{}
 		w.refreshModBatch()
 	})
+	w.bulkClear.AccessibleLabel = "Clear selection"
 	w.bulkActions = container.NewHBox(w.install, w.reinstall, w.bulkRemove, w.bulkClear)
 	w.modTable = newModWebTable(w)
 	w.rebuildModTable()
@@ -83,6 +84,7 @@ func (w *Window) rebuildModTable() {
 		w.modEmpty.Hide()
 	}
 	w.modTable.SetNames(names)
+	w.refreshModCatalogSummary()
 }
 func (w *Window) modSelectedInstalled(installed bool) []string {
 	var names []string
@@ -123,8 +125,10 @@ func (w *Window) refreshModTableBatch() {
 		w.modSelection.SetText(fmt.Sprintf("%d selected + %d required", explicit, required))
 	}
 	w.install.SetText(fmt.Sprintf("Install %d", len(missing)))
-	w.reinstall.SetText(fmt.Sprintf("Reinstall %d", len(installed)))
-	w.bulkRemove.SetText(fmt.Sprintf("Remove %d", len(installed)))
+	w.reinstall.SetText("Reinstall")
+	w.reinstall.AccessibleLabel = fmt.Sprintf("Reinstall %d selected mods", len(installed))
+	w.bulkRemove.SetText("Remove")
+	w.bulkRemove.AccessibleLabel = fmt.Sprintf("Remove %d selected mods", len(installed))
 	for _, item := range []struct {
 		button *appwidget.Button
 		count  int
@@ -168,11 +172,13 @@ func (w *Window) refreshModTableBatch() {
 	}
 	if blocker != "" {
 		w.bulkRemove.Disable()
-		w.modSelection.SetText(fmt.Sprintf("%d selected | Removal blocked: %s", total, blocker))
+
+		w.bulkRemove.AccessibleLabel = "Removal blocked: " + blocker
+		w.modSelection.SetText(fmt.Sprintf("%d selected · Removal blocked", explicit))
 	}
 	if total == 0 {
 		w.bulkActions.Hide()
-		w.modSelection.SetText("Click rows to select mods")
+		w.refreshModCatalogSummary()
 	} else {
 		w.bulkActions.Show()
 	}
@@ -185,20 +191,54 @@ func (w *Window) refreshModTableBatch() {
 	}
 	// Keep this control visible and give it a fixed slot in the main toolbar.
 	if total > 0 {
-		w.updateModsButton.SetText(fmt.Sprintf("Update %d", len(installed)))
+		w.updateModsButton.SetText("Update selected")
 		if ready && len(installed) > 0 {
 			w.updateModsButton.Enable()
 		} else {
 			w.updateModsButton.Disable()
 		}
 	} else {
-		w.updateModsButton.SetText("Update all")
+		w.updateModsButton.SetText("Update installed")
 		if ready && w.installedModCount > 0 {
 			w.updateModsButton.Enable()
 		} else {
 			w.updateModsButton.Disable()
 		}
 	}
-	w.updateModsButton.Show()
+	if total > 0 && len(installed) == 0 {
+		w.updateModsButton.Hide()
+	} else {
+		w.updateModsButton.Show()
+	}
 	w.rebuildModTable()
+	// Visibility changes do not alter the header's fixed minimum size, so Fyne
+	// will not necessarily rerun its layout. Reposition the surviving actions.
+	w.refreshWorkspace()
+}
+
+// Keep routine counts and background version checks in the existing toolbar.
+func (w *Window) refreshModCatalogSummary() {
+	if w.modSelection == nil || len(w.selected()) > 0 {
+		return
+	}
+	if w.modStatus != nil && strings.HasPrefix(w.modStatus.Text, "Checking installed mod versions") {
+		w.modSelection.SetText("Checking versions…")
+		return
+	}
+	installed, updates := 0, 0
+	for _, source := range mods.Catalog {
+		if w.installedMods[source.Name] {
+			installed++
+		}
+		if strings.Contains(w.modDetails[source.Name], "Update available:") {
+			updates++
+		}
+	}
+	text := fmt.Sprintf("%d mods · %d installed", len(mods.Catalog), installed)
+	if updates == 1 {
+		text += " · 1 update"
+	} else if updates > 1 {
+		text += fmt.Sprintf(" · %d updates", updates)
+	}
+	w.modSelection.SetText(text)
 }

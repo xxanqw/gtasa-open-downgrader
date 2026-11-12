@@ -3,7 +3,11 @@ package launcherapp
 import (
 	"context"
 	"errors"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestTrackedGameCleanupStillWaitsAndFailsClosed(t *testing.T) {
@@ -44,5 +48,54 @@ func TestGameCleanupSnapshotFailureDoesNotLaunch(t *testing.T) {
 	err := runtime.runWithGameCleanup(context.Background(), func() error { ran = true; return nil }, func() error { cleaned = true; return nil })
 	if err == nil || ran || cleaned {
 		t.Fatal("process enumeration failure permitted launch/cleanup", err)
+	}
+}
+
+func TestSinglePlayerFinishesWhenGameExitsBeforeLaunchCommand(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, entrypoint.RealGameExecutable), []byte("game"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	commandStarted := make(chan struct{})
+	releaseCommand := make(chan struct{})
+	commandExited := make(chan struct{})
+	defer func() { close(releaseCommand); <-commandExited }()
+	gameExited := make(chan struct{})
+	runtime := &Runtime{GameDir: root,
+		snapshotGameProcesses: func() (gameProcessSet, error) { return gameProcessSet{}, nil },
+		Execute: func(context.Context, string, string, ...string) error {
+			close(commandStarted)
+			<-releaseCommand
+			close(commandExited)
+			return nil
+		},
+		waitForGameProcess: func(ctx context.Context, _ gameProcessSet, _ <-chan struct{}) (bool, error) {
+			<-commandStarted
+			select {
+			case <-gameExited:
+				return true, nil
+			case <-ctx.Done():
+				return true, ctx.Err()
+			}
+		},
+	}
+	result := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	go func() { result <- runtime.SinglePlayer(ctx) }()
+	<-commandStarted
+	select {
+	case err := <-result:
+		t.Fatalf("returned before GTA exited: %v", err)
+	default:
+	}
+	close(gameExited)
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("singleplayer still waiting for launch command after GTA exited")
 	}
 }

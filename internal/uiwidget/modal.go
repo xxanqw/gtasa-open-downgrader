@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -22,9 +23,14 @@ type ModalAction struct {
 type ModalOptions struct {
 	Title, Subtitle string
 	Body            fyne.CanvasObject
-	Size            fyne.Size
-	Actions         []ModalAction
-	Extra           fyne.CanvasObject
+	// Summary stays above the scrollable detail sections. Keep it concise.
+	Summary  fyne.CanvasObject
+	Sections []ModalSection
+	// MaxBodyHeight bounds optional detail content without growing a document.
+	MaxBodyHeight float32
+	Size          fyne.Size
+	Actions       []ModalAction
+	Extra         fyne.CanvasObject
 	// Accessory stays visible below the scrolling body (e.g. explicit consent).
 	Accessory    fyne.CanvasObject
 	InitialFocus fyne.Focusable
@@ -60,6 +66,9 @@ func ShowModal(window fyne.Window, options ModalOptions) *Modal {
 	m := &Modal{window: window, options: options}
 	if m.options.Size.Width <= 0 {
 		m.options.Size.Width = 600
+	}
+	if len(m.options.Sections) > 0 {
+		m.options.Body = m.sectionBody()
 	}
 	if m.options.Body == nil {
 		m.options.Body = ModalText("")
@@ -115,7 +124,7 @@ func (m *Modal) show() {
 	m.closeButton = NewButtonWithIcon("", theme.CancelIcon(), func() { m.Cancel() })
 	m.closeButton.AccessibleLabel = "Close " + m.options.Title
 	m.closeButton.Importance = widget.LowImportance
-	m.header = container.NewVBox(container.NewBorder(nil, nil, nil, m.closeButton, container.NewVBox(m.title, m.subtitle)), widget.NewSeparator())
+	m.header = container.NewVBox(container.New(layout.NewCustomPaddedVBoxLayout(0), container.NewBorder(nil, nil, nil, m.closeButton, m.title), m.subtitle), widget.NewSeparator())
 	m.body = m.options.Body
 	if scroll, ok := m.body.(*container.Scroll); ok {
 		bindGuideFocus(scroll, scroll.Content)
@@ -164,7 +173,11 @@ func (m *Modal) actionBar() fyne.CanvasObject {
 			button.Disable()
 		}
 		m.actions = append(m.actions, button)
-		objects = append(objects, button)
+		if action.Importance == widget.HighImportance {
+			objects = append(objects, container.NewThemeOverride(button, PrimaryActionTheme{Theme: fyne.CurrentApp().Settings().Theme()}))
+		} else {
+			objects = append(objects, button)
+		}
 	}
 	return container.New(&modalActionsLayout{}, objects...)
 }
@@ -193,6 +206,15 @@ func (m *Modal) SetBody(body fyne.CanvasObject) {
 		m.overlay.Refresh()
 	}
 }
+
+// SetSummary replaces the pinned decision context independently of details.
+func (m *Modal) SetSummary(object fyne.CanvasObject) {
+	m.options.Summary = object
+	if m.shown && !m.closed {
+		m.overlay.Refresh()
+	}
+}
+
 func (m *Modal) SetAccessory(object fyne.CanvasObject) {
 	m.options.Accessory = object
 	if m.shown && !m.closed {
@@ -365,16 +387,24 @@ func (r *modalRenderer) Layout(size fyne.Size) {
 	available := max(1, size.Height-24)
 	inner := max(1, width-32)
 	m.header.Resize(fyne.NewSize(inner, m.header.MinSize().Height))
-	// Wrapped title/subtitle minima change after the final width reaches their
-	// text providers; settle them before reserving body and footer space.
-	m.header.Refresh()
+	// Settle wrapped text geometry without refreshing labels and buttons from
+	// inside Layout, which can trigger another layout/paint cycle.
+	Relayout(m.header)
 	headerHeight := m.header.MinSize().Height
+	summaryHeight := float32(0)
+	if summary := m.options.Summary; summary != nil && summary.Visible() {
+		summary.Resize(fyne.NewSize(inner, summary.MinSize().Height))
+		Relayout(summary)
+		summaryHeight = summary.MinSize().Height + 8
+	}
 	footerHeight := modalActionsHeight(m.footer.(*fyne.Container).Objects, inner)
 	accessoryHeight := float32(0)
 	if m.options.Accessory != nil && m.options.Accessory.Visible() {
-		accessoryHeight = m.options.Accessory.MinSize().Height + 10
+		m.options.Accessory.Resize(fyne.NewSize(inner, m.options.Accessory.MinSize().Height))
+		Relayout(m.options.Accessory)
+		accessoryHeight = m.options.Accessory.MinSize().Height + 8
 	}
-	m.body.Resize(fyne.NewSize(inner, max(1, available-headerHeight-footerHeight-accessoryHeight-52)))
+	m.body.Resize(fyne.NewSize(inner, max(1, available-headerHeight-summaryHeight-footerHeight-accessoryHeight-48)))
 	naturalBody := m.body.MinSize().Height
 	if scroll, ok := m.body.(*container.Scroll); ok {
 		naturalBody = scroll.Content.MinSize().Height
@@ -385,9 +415,12 @@ func (r *modalRenderer) Layout(size fyne.Size) {
 			}
 		}
 	}
+	if m.options.MaxBodyHeight > 0 {
+		naturalBody = min(naturalBody, m.options.MaxBodyHeight)
+	}
 	height := m.options.Size.Height
 	if height <= 0 {
-		height = naturalBody + headerHeight + footerHeight + accessoryHeight + 52
+		height = naturalBody + headerHeight + summaryHeight + footerHeight + accessoryHeight + 48
 	}
 	height = max(1, min(available, height))
 	pos := fyne.NewPos((size.Width-width)/2, (size.Height-height)/2)
@@ -396,16 +429,20 @@ func (r *modalRenderer) Layout(size fyne.Size) {
 	r.body.Resize(contentSize)
 	r.surface.Move(pos)
 	r.surface.Resize(contentSize)
-	m.header.Move(fyne.NewPos(16, 14))
+	m.header.Move(fyne.NewPos(16, 16))
 	m.header.Resize(fyne.NewSize(inner, headerHeight))
-	m.footer.Move(fyne.NewPos(16, height-14-footerHeight))
+	m.footer.Move(fyne.NewPos(16, height-16-footerHeight))
 	m.footer.Resize(fyne.NewSize(inner, footerHeight))
 	if accessoryHeight > 0 {
-		m.options.Accessory.Move(fyne.NewPos(16, height-14-footerHeight-accessoryHeight))
-		m.options.Accessory.Resize(fyne.NewSize(inner, accessoryHeight-10))
+		m.options.Accessory.Move(fyne.NewPos(16, height-16-footerHeight-accessoryHeight))
+		m.options.Accessory.Resize(fyne.NewSize(inner, accessoryHeight-8))
 	}
-	m.body.Move(fyne.NewPos(16, 14+headerHeight+12))
-	m.body.Resize(fyne.NewSize(inner, max(1, height-headerHeight-footerHeight-accessoryHeight-52)))
+	if summaryHeight > 0 {
+		m.options.Summary.Move(fyne.NewPos(16, 16+headerHeight+8))
+		m.options.Summary.Resize(fyne.NewSize(inner, summaryHeight-8))
+	}
+	m.body.Move(fyne.NewPos(16, 16+headerHeight+8+summaryHeight))
+	m.body.Resize(fyne.NewSize(inner, max(1, height-headerHeight-summaryHeight-footerHeight-accessoryHeight-48)))
 }
 func (r *modalRenderer) Refresh() {
 	m := r.overlay.modal
@@ -415,6 +452,9 @@ func (r *modalRenderer) Refresh() {
 	r.surface.StrokeWidth = 1
 	r.surface.CornerRadius = 0
 	r.body.Objects = []fyne.CanvasObject{m.header, m.body}
+	if m.options.Summary != nil {
+		r.body.Objects = append(r.body.Objects, m.options.Summary)
+	}
 	if m.options.Accessory != nil {
 		r.body.Objects = append(r.body.Objects, m.options.Accessory)
 	}
@@ -506,4 +546,18 @@ func (*modalActionsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 		}
 		y += height + 6
 	}
+}
+
+// PrimaryActionTheme gives primary calls to action a light fill and dark text.
+// Danger actions retain their separate importance styling.
+type PrimaryActionTheme struct{ fyne.Theme }
+
+func (t PrimaryActionTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	switch name {
+	case theme.ColorNamePrimary:
+		return color.NRGBA{R: 245, G: 245, B: 245, A: 255}
+	case theme.ColorNameForegroundOnPrimary:
+		return color.NRGBA{R: 24, G: 24, B: 24, A: 255}
+	}
+	return t.Theme.Color(name, variant)
 }

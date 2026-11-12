@@ -214,11 +214,12 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 }
 
 type Installer struct {
-	Client          *download.Client
-	AppVersion      string
-	BrowserDownload BrowserDownloadFunc
-	Resolve         func(context.Context, string) (Release, error)
-	Install         func(context.Context, string, string, Release) error
+	Client                  *download.Client
+	AppVersion              string
+	BrowserDownload         BrowserDownloadFunc
+	PrepareBrowserDownloads PrepareBrowserDownloadsFunc
+	Resolve                 func(context.Context, string) (Release, error)
+	Install                 func(context.Context, string, string, Release) error
 }
 type Event func(name, status string, done, total int64)
 
@@ -256,6 +257,32 @@ func (i Installer) updateSelected(ctx context.Context, root string, allowed map[
 		resolve = resolver.Resolve
 	}
 	var failures []error
+	resolvedReleases := map[string]Release{}
+	resolveErrors := map[string]error{}
+	if i.PrepareBrowserDownloads != nil {
+		var archives []BrowserArchive
+		for _, name := range tracker.Installed {
+			if allowed != nil && !allowed[name] || !Supported(name) || tracker.Versions[name].Fingerprint == "" {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			if event != nil {
+				event(name, "Checking for updates", 0, 0)
+			}
+			rel, err := resolve(ctx, name)
+			resolvedReleases[name], resolveErrors[name] = rel, err
+			if err == nil && rel.Fingerprint != "" && rel.Fingerprint != tracker.Versions[name].Fingerprint {
+				archives = append(archives, browserArchives(name, rel)...)
+			}
+		}
+		cleanup, err := i.prepareBrowser(ctx, resolver, archives)
+		if err != nil {
+			return result, err
+		}
+		defer cleanup()
+	}
 	for _, name := range tracker.Installed {
 		if allowed != nil && !allowed[name] {
 			continue
@@ -277,7 +304,11 @@ func (i Installer) updateSelected(ctx context.Context, root string, allowed map[
 		if event != nil {
 			event(name, "Checking for updates", 0, 0)
 		}
-		latest, resolveErr := resolve(ctx, name)
+		latest, resolved := resolvedReleases[name]
+		resolveErr := resolveErrors[name]
+		if !resolved {
+			latest, resolveErr = resolve(ctx, name)
+		}
 		if resolveErr != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
@@ -365,6 +396,32 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 	if resolve == nil {
 		resolve = resolver.Resolve
 	}
+	releases := map[string]Release{}
+	var archives []BrowserArchive
+	if i.PrepareBrowserDownloads != nil {
+		for _, name := range names {
+			if tracker.Has(name) && !legacy && !force {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if event != nil {
+				event(name, "Resolving official release", 0, 0)
+			}
+			rel, err := resolve(ctx, name)
+			if err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			releases[name] = rel
+			archives = append(archives, browserArchives(name, rel)...)
+		}
+		cleanup, err := i.prepareBrowser(ctx, resolver, archives)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+	}
 	for _, name := range names {
 		if e = ctx.Err(); e != nil {
 			return e
@@ -378,7 +435,11 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		if event != nil {
 			event(name, "Resolving official release", 0, 0)
 		}
-		rel, err := resolve(ctx, name)
+		rel, resolved := releases[name]
+		var err error
+		if !resolved {
+			rel, err = resolve(ctx, name)
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}

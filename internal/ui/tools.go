@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
+	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
@@ -66,7 +68,9 @@ func (w *Window) buildToolsPage() fyne.CanvasObject {
 		}
 		sections = append(sections, hubSection(group.title, container.NewGridWithColumns(2, group.buttons...)))
 	}
-	sections = append(sections, hubSection("Application", container.NewGridWithColumns(2, w.updateButton)))
+	openFolder := appwidget.NewButtonWithIcon("Open downgrader folder", theme.FolderOpenIcon(), w.openDowngraderFolder)
+	w.controls = append(w.controls, openFolder)
+	sections = append(sections, hubSection("Application", container.NewGridWithColumns(2, w.updateButton, openFolder)))
 	return w.hubPage(sections...)
 }
 func toolPresentation(label string) (int, string) {
@@ -112,19 +116,7 @@ func (w *Window) toolActions() []toolAction {
 	}
 	actions := []toolAction{
 		action("Download / refresh patch assets", w.downloadPatches),
-		action("Import Patches_v2.1.zip", func() {
-			w.chooseArchive("Import patch archive", []string{".zip"}, func(p string) {
-				target := filepath.Join(w.cache, "Patches")
-				w.run("Importing patch assets", func(ctx context.Context) error { return patch.ImportReleaseAssets(ctx, p, target) }, func(e error) {
-					if e == nil {
-						w.patchDir = target
-						if w.path.Text != "" {
-							w.scan()
-						}
-					}
-				})
-			})
-		}),
+		action("Import Patches_v2.1.zip", w.importSetupPatches),
 		action("Select an existing Patches folder", func() {
 			w.chooseFolder("Select Patches folder", w.patchDir, func(dir string) {
 				w.run("Validating patches", func(context.Context) error { _, e := patch.ValidateReleaseAssets(dir); return e }, func(e error) {
@@ -163,7 +155,7 @@ func (w *Window) toolActions() []toolAction {
 		}),
 		action("Restore downgrade backups", func() {
 			requireGame(func() {
-				w.confirm("Restore originals", "Overwrite current game files with their original backups? Mods remain installed.", func(ok bool) {
+				w.confirmAction("Restore original files", "Restore original files", "Overwrite current game files with their original backups in:\n"+root+"\n\nMods remain installed.", func(ok bool) {
 					if ok {
 						w.run("Restoring backups", func(ctx context.Context) error { return patch.Revert(ctx, root, nil) }, func(error) { w.scan() })
 					}
@@ -172,7 +164,7 @@ func (w *Window) toolActions() []toolAction {
 		}),
 		action("Delete downgrade backups", func() {
 			requireGame(func() {
-				w.confirm("Delete backups", "Permanently delete downgrade originals? Revert will no longer be available. Mod-uninstall snapshots under backups/mods will be kept.", func(ok bool) {
+				w.confirmAction("Delete downgrade backups", "Delete downgrade backups", "Permanently delete downgrade originals in:\n"+root+"\n\nRevert will no longer be available. Mod-uninstall snapshots under backups/mods will be kept.", func(ok bool) {
 					if ok {
 						w.run("Deleting backups", func(ctx context.Context) error {
 							if e := ctx.Err(); e != nil {
@@ -187,7 +179,7 @@ func (w *Window) toolActions() []toolAction {
 		action("Clear saves, settings and gallery", func() {
 			requireGame(func() {
 				p := platform.UserData(root)
-				w.confirm("Delete user data", "Permanently delete saves, settings and gallery from:\n"+p+"?", func(ok bool) {
+				w.confirmAction("Delete saves, settings & gallery", "Delete user data permanently", "Permanently delete saves, settings and gallery from:\n"+p+"?\n\nThis cannot be undone. Copy this folder to a safe location before proceeding.", func(ok bool) {
 					if ok {
 						w.run("Clearing user data", func(ctx context.Context) error {
 							if e := ctx.Err(); e != nil {
@@ -234,4 +226,18 @@ func (w *Window) toolActions() []toolAction {
 		actions = append(actions, action("Steam / Proton launch options", w.launchOptions))
 	}
 	return actions
+}
+
+func (w *Window) openDowngraderFolder() {
+	if err := os.MkdirAll(w.cache, 0700); err != nil {
+		w.error(fmt.Errorf("open downgrader folder: %w", err))
+		return
+	}
+	folder, err := url.Parse(storage.NewFileURI(w.cache).String())
+	if err == nil {
+		err = w.app.OpenURL(folder)
+	}
+	if err != nil {
+		w.error(fmt.Errorf("open downgrader folder: %w", err))
+	}
 }

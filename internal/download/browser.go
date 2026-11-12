@@ -122,6 +122,9 @@ func (w *DownloadWatch) Wait(ctx context.Context, destination, checksum string, 
 			if time.Since(previous.since) < 2*time.Second {
 				continue
 			}
+			if notify != nil {
+				notify("Download detected · checking " + name)
+			}
 			if err := CopyBrowserArchive(ctx, source, destination, checksum); err == nil {
 				return nil
 			} else {

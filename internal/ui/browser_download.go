@@ -125,8 +125,27 @@ func (w *Window) browserModDownload(ctx context.Context, raw, destination, check
 			return err
 		}
 	}
-	w.report("Waiting for "+filename+" in "+directory+" — complete the browser download, or Cancel", 0, 0)
-	if err := watcher.Wait(ctx, destination, checksum, func(message string) { w.report(message, 0, 0) }); err != nil {
+	folders := make(chan string, 1)
+	w.post(func() {
+		if ctx.Err() != nil {
+			return
+		}
+		w.browserOptions = func() { w.browserDownloadOptions(ctx, page, filename, folders) }
+		w.refreshProgressFooter()
+	})
+	defer w.post(func() {
+		w.browserOptions = nil
+		w.browserDetails = ""
+		w.refreshProgressFooter()
+	})
+	if err := waitForBrowserArchive(ctx, watcher, directory, filename, destination, checksum, folders, func(folder, message string) {
+		w.post(func() {
+			w.app.Preferences().SetString("mod-download-directory", folder)
+			w.browserDetails = "Expected file: " + filename + "\nWatching folder: " + folder + "\nFinish the browser download. Only new completed matching archives are accepted. Cancel stops waiting, not the browser download."
+			w.refreshProgressFooter()
+		})
+		w.report(message, 0, 0)
+	}); err != nil {
 		return err
 	}
 	if cache != "" {

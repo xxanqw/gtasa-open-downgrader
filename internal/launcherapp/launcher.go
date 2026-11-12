@@ -57,7 +57,18 @@ func (runtime *Runtime) SinglePlayer(ctx context.Context, arguments ...string) e
 	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("real GTA executable %q is missing", path)
 	}
-	return runtime.run(ctx, runtime.GameDir, path, arguments...)
+	// Track GTA itself, as multiplayer does. Steam/Wine launch commands can
+	// remain alive after the game window closes.
+	before, err := runtime.gameProcessSnapshot()
+	if err != nil {
+		return fmt.Errorf("inspect running GTA processes: %w", err)
+	}
+	if len(before) != 0 {
+		return fmt.Errorf("Grand Theft Auto: San Andreas is already running")
+	}
+	return runtime.runTrackedGame(ctx, before, func() error {
+		return runtime.run(ctx, runtime.GameDir, path, arguments...)
+	}, nil)
 }
 
 func (runtime *Runtime) Multiplayer(ctx context.Context, id multiplayer.ClientID) error {
@@ -371,13 +382,15 @@ func (runtime *Runtime) disableModLoader() (bool, error) {
 
 func (runtime *Runtime) restoreModLoader() error {
 	active, disabled := runtime.modLoaderPaths()
-	if _, err := os.Stat(disabled); errors.Is(err, os.ErrNotExist) {
+	if info, err := os.Lstat(disabled); errors.Is(err, os.ErrNotExist) {
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("inspect disabled Mod Loader: %w", err)
+	} else if !info.Mode().IsRegular() {
+		return fmt.Errorf("disabled Mod Loader is not a regular file: %s", disabled)
 	}
-	if _, err := os.Stat(active); err == nil {
-		return fmt.Errorf("cannot restore Mod Loader because both active and disabled copies exist")
+	if _, err := os.Lstat(active); err == nil {
+		return runtime.preserveDuplicateModLoader(active, disabled)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect Mod Loader: %w", err)
 	}

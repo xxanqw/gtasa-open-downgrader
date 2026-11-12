@@ -1,8 +1,9 @@
 package ui
 
 import (
-	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 	"strings"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 )
 
 func modInfo(name string) string {
@@ -40,17 +41,57 @@ func modInfo(name string) string {
 	}
 	return name
 }
-func (w *Window) showModDetails(name string) {
+func (w *Window) modInstalledVersion(name string) string {
+	if !w.installedMods[name] && !strings.HasPrefix(w.modDetails[name], "Installed") {
+		return ""
+	}
+	if version := w.modTracker.Versions[name].Version; version != "" {
+		return version
+	}
+	if parts := strings.Split(w.modDetails[name], " · "); len(parts) > 1 && parts[1] != "" {
+		return parts[1]
+	}
+	return "Version unknown"
+}
+
+func (w *Window) modDetailText(name string) string {
 	state := w.modDetails[name]
 	if state == "" {
-		state = "Not installed"
+		if w.installedMods[name] {
+			state = "Installed · " + w.modInstalledVersion(name)
+		} else {
+			state = "Not installed"
+		}
 	}
-	requirements := modRequirements(name)
+	parts := []string{state, modInfo(name)}
+	if requirements := modRequirements(name); requirements != "" {
+		parts = append(parts, requirements)
+	}
 	if required := w.modRequiredBy[name]; len(required) > 0 {
-		requirements += "\n\nSelected automatically and locked: required by " + strings.Join(required, ", ") + ". Clear those selections to unlock this row. Automatic prerequisite selection does not request removal or an update. Reinstall review lists its required packages."
+		parts = append(parts, "Selected automatically for "+strings.Join(required, ", ")+". Clear those selections to unlock this requirement.")
 	}
 	if dependents := w.modDependents(name); len(dependents) > 0 {
-		requirements += "\nRequired by: " + strings.Join(dependents, ", ") + ".\nTo remove this package, also select its installed dependents."
+		parts = append(parts, "Required by installed mods: "+strings.Join(dependents, ", ")+". Select these dependents too before removal.")
 	}
-	w.info(name, strings.ReplaceAll(state, " · ", " | ")+"\n\n"+modInfo(name)+"\n\n"+strings.TrimSpace(requirements)+"\n\nClose GTA before changing mods. Installation and removal retain their review/backup safeguards.")
+	for _, source := range mods.Catalog {
+		if source.Name == name {
+			if source.Version != "" && !strings.HasPrefix(state, "Installed") {
+				parts = append(parts, "Catalog version: "+source.Version)
+			}
+			if strings.Contains(source.URL, "sharemods.com/") {
+				parts = append(parts, "Browser download: complete ShareMods confirmation in the download queue. Verified cached archives are reused.")
+			}
+			break
+		}
+	}
+	if name == mods.NadalaoWeapons {
+		parts = append(parts, "Downloads include the weapon icons and the Weapon Icons TXD helper archive.")
+	}
+	if name == mods.AtmosphereHUD || name == mods.HDRadarMap {
+		parts = append(parts, "Shares its download archive with "+map[string]string{mods.AtmosphereHUD: modDisplayName(mods.HDRadarMap), mods.HDRadarMap: modDisplayName(mods.AtmosphereHUD)}[name]+".")
+	}
+	if name == mods.Framerate {
+		parts = append(parts, "Compatibility warning: read the warning beside this row before installing the upstream package.")
+	}
+	return strings.Join(parts, "\n\n")
 }

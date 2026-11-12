@@ -161,7 +161,7 @@ func (w *Window) confirmMTAInstall(environment multiplayer.Environment, runner m
 	if release.Experimental {
 		text += "\n\n" + multiplayer.MTABetaWarning
 	}
-	w.confirm("Install MTA "+release.Version, text, func(ok bool) {
+	w.confirm("Install MTA "+release.Version, text+"\n\nGame folder:\n"+environment.GameDir, func(ok bool) {
 		if ok {
 			w.installMultiplayer(environment, runner, multiplayer.ClientMTA, release.Version)
 		}
@@ -176,7 +176,7 @@ func (w *Window) chooseMTAVersion(environment multiplayer.Environment, version s
 	if version == "1.7" {
 		text += "\n\n" + multiplayer.MTABetaWarning
 	}
-	w.confirm("Use MTA "+version, text, func(ok bool) {
+	w.confirm("Use MTA "+version, text+"\n\nGame folder:\n"+environment.GameDir, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -193,7 +193,7 @@ func (w *Window) removeMTAVersion(environment multiplayer.Environment, runner mu
 		w.error(err)
 		return
 	}
-	w.confirm("Uninstall MTA "+version, "Open only this version's official uninstaller? Other MTA versions, GTA and prepared prefix fonts are retained. Do not choose removal of shared user settings unless you explicitly want that. If this is the active version, the MTA launcher card becomes unavailable until you select another.", func(ok bool) {
+	w.confirm("Uninstall MTA "+version, "Open only this version's official uninstaller? Other MTA versions, GTA and prepared prefix fonts are retained. Do not choose removal of shared user settings unless you explicitly want that. If this is the active version, the MTA launcher card becomes unavailable until you select another.\n\nGame folder:\n"+environment.GameDir, func(ok bool) {
 		if !ok {
 			return
 		}

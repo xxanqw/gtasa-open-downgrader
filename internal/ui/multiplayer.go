@@ -110,14 +110,14 @@ func (w *Window) showMultiplayerInline(root string, launcher entrypoint.Status, 
 	if w.multiplayerBody == nil {
 		return
 	}
-	w.multiplayerBody.Objects = []fyne.CanvasObject{w.multiplayerSections(root, launcher, environment, runner, compatibility, environmentError, clients, func() {
-		w.multiplayerBody.Objects = []fyne.CanvasObject{hubText("Operation started. Completed changes and backups are preserved; refresh after it finishes.")}
-		w.multiplayerBody.Refresh()
-	})}
+	w.multiplayerBody.Objects = []fyne.CanvasObject{w.multiplayerSections(root, launcher, environment, runner, compatibility, environmentError, clients)}
+	w.multiplayerControls = map[*appwidget.Button]bool{}
+	w.rememberMultiplayerControls(w.multiplayerBody)
+	w.refreshMultiplayerControls()
 	w.multiplayerBody.Refresh()
 }
 
-func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client, dismiss func()) fyne.CanvasObject {
+func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, environment multiplayer.Environment, runner multiplayer.Runner, compatibility string, environmentError error, clients []multiplayer.Client) fyne.CanvasObject {
 	launcherAction := "Install"
 	launcherIcon := theme.DownloadIcon()
 	if launcher.State == entrypoint.Installed {
@@ -127,9 +127,11 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		launcherAction = "Reinstall"
 	}
 	launcherButton := appwidget.NewButtonWithIcon(launcherAction, launcherIcon, func() {
-		dismiss()
+		if w.busy || w.promptActive {
+			return
+		}
 		if launcher.State == entrypoint.Installed {
-			w.confirm("Remove Steam launcher", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.", func(ok bool) {
+			w.confirmAction("Remove Steam launcher", "Remove & restore", "Remove the launcher and restore the preserved Steam entrypoint? The real gta_sa.exe will remain unchanged.\n\nGame folder:\n"+root, func(ok bool) {
 				if ok {
 					w.run("Removing Steam launcher", func(ctx context.Context) error {
 						if err := platform.RequireGameClosed(); err != nil {
@@ -155,7 +157,7 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		}, func(error) { w.scan() })
 	})
 
-	launcherState, launcherImportance := "Not installed", widget.DangerImportance
+	launcherState, launcherImportance := "Not installed", widget.MediumImportance
 	if launcher.State == entrypoint.Installed {
 		launcherState, launcherImportance = "Installed", widget.SuccessImportance
 	}
@@ -171,7 +173,6 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		choiceDetail = "Remembered choice is invalid. Reset choice to repair it."
 	}
 	resetChoice := appwidget.NewButton("Reset choice", func() {
-		dismiss()
 		w.run("Resetting launcher choice", func(ctx context.Context) error {
 			return resetLauncherChoice(root, platform.RequireGameClosed)
 		}, func(err error) {
@@ -251,19 +252,21 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		if !supported {
 			detail = reason
 		}
-		state, importance := "Not installed", widget.DangerImportance
+		state, importance := "Not installed", widget.MediumImportance
 		if client.Installed {
 			state, importance = "Installed", widget.SuccessImportance
 		}
 		var actions *fyne.Container
 		if client.Installed {
 			repair := appwidget.NewButtonWithIcon("Repair", theme.ViewRefreshIcon(), func() {
-				dismiss()
-				w.installMultiplayer(environment, runner, client.ID)
+				if !w.busy && !w.promptActive {
+					w.installMultiplayer(environment, runner, client.ID)
+				}
 			})
 			remove := appwidget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
-				dismiss()
-				w.uninstallMultiplayer(environment, runner, client)
+				if !w.busy && !w.promptActive {
+					w.uninstallMultiplayer(environment, runner, client)
+				}
 			})
 			if runner == nil || !supported {
 				repair.Disable()
@@ -274,8 +277,9 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 			actions = container.NewHBox(repair, remove)
 		} else {
 			install := appwidget.NewButtonWithIcon("Install", theme.DownloadIcon(), func() {
-				dismiss()
-				w.installMultiplayer(environment, runner, client.ID)
+				if !w.busy && !w.promptActive {
+					w.installMultiplayer(environment, runner, client.ID)
+				}
 			})
 			install.Importance = widget.HighImportance
 			if runner == nil || !supported {
@@ -285,10 +289,9 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		}
 		if client.ID == multiplayer.ClientMTA {
 			manage := appwidget.NewButton("Manage…", func() {
-				if w.promptActive {
-					dismiss()
+				if !w.busy && !w.promptActive {
+					w.showMTAManager(environment, runner)
 				}
-				w.showMTAManager(environment, runner)
 			})
 			actions = container.NewHBox(manage)
 			if client.Installed {
@@ -320,7 +323,7 @@ func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runne
 	if client.ID == multiplayer.ClientOpenMP {
 		message = "Open the open.mp uninstaller and remove its managed client files? The game and standalone SA-MP installation will remain installed."
 	}
-	w.confirm("Uninstall "+client.Name, message, func(ok bool) {
+	w.confirmAction("Uninstall "+client.Name, "Uninstall "+client.Name, message+"\n\nGame folder:\n"+w.scanPath, func(ok bool) {
 		if !ok {
 			return
 		}

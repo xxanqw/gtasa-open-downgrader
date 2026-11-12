@@ -17,82 +17,6 @@ func compactLabel(text string) *widget.Label {
 	return l
 }
 
-// Short footer labels only; the journal retains the original diagnostics.
-func compactStatusText(text string) string {
-	text = strings.TrimSpace(text)
-	if strings.HasSuffix(text, " failed") {
-		return "Failed | see log"
-	}
-	complete := strings.HasSuffix(text, " complete")
-	operation := strings.TrimSuffix(text, " complete")
-	for _, item := range []struct{ operation, active, done string }{
-		{"Detecting Steam and multiplayer", "Checking Steam…", "Steam checked"},
-		{"Preparing patch assets", "Preparing patches…", "Patches ready"},
-		{"Scanning game files", "Scanning…", "Scan done"},
-		{"Installing mods", "Installing mods…", "Mods installed"},
-		{"Updating installed mods", "Updating mods…", "Mods updated"},
-		{"Downgrading game", "Downgrading…", "Downgrade done"},
-		{"Downloading patch assets", "Downloading patches…", "Patches downloaded"},
-		{"Downloading app update", "Downloading update…", "Update downloaded"},
-		{"Importing patch assets", "Importing patches…", "Patches imported"},
-		{"Validating patches", "Checking patches…", "Patches checked"},
-		{"Restoring backups", "Restoring…", "Backups restored"},
-		{"Deleting backups", "Deleting backups…", "Backups deleted"},
-		{"Clearing user data", "Clearing user data…", "User data cleared"},
-		{"Stopping background work…", "Stopping…", "Stopped"},
-		{"Steam / Proton launch options copied.", "Options copied", "Options copied"},
-		{"Application log exported.", "Log exported", "Log exported"},
-		{"File report copied.", "Report copied", "Report copied"},
-	} {
-		if operation == item.operation {
-			if complete {
-				return item.done
-			}
-			return item.active
-		}
-	}
-	if complete {
-		return "Done"
-	}
-	if strings.HasPrefix(text, "Scan complete: ") {
-		var files int
-		if _, err := fmt.Sscanf(text, "Scan complete: %d manifest files checked.", &files); err == nil {
-			return fmt.Sprintf("Scanned %d files", files)
-		}
-	}
-	if strings.HasPrefix(text, "Cancelled.") {
-		return "Cancelled"
-	}
-	if strings.HasPrefix(text, "Cancelling;") {
-		return "Cancelling…"
-	}
-	if parts := strings.SplitN(text, " · ", 2); len(parts) == 2 && strings.ContainsAny(parts[0], `/\`) {
-		path := strings.TrimRight(parts[0], `/\`)
-		if index := strings.LastIndexAny(path, `/\`); index >= 0 {
-			path = path[index+1:]
-		}
-		text = path + " | " + parts[1]
-	}
-	text = strings.ReplaceAll(text, " · ", " | ")
-	const limit = 24
-	// Keep download percentages visible even when the asset name is long.
-	if index := strings.LastIndex(text, " | "); index >= 0 && strings.HasSuffix(text, "%") {
-		suffix := text[index:]
-		if len([]rune(suffix)) < limit {
-			return shortStatusLabel(text[:index], limit-len([]rune(suffix))) + suffix
-		}
-	}
-	return shortStatusLabel(text, limit)
-}
-
-func shortStatusLabel(text string, limit int) string {
-	runes := []rune(strings.TrimSpace(text))
-	if len(runes) <= limit {
-		return string(runes)
-	}
-	return string(runes[:limit-1]) + "…"
-}
-
 // The file grid uses tighter typography and padding than the surrounding controls.
 // Leave Fyne's scale setting intact for high-DPI displays.
 type fileTableTheme struct{ fyne.Theme }
@@ -100,7 +24,7 @@ type fileTableTheme struct{ fyne.Theme }
 func (t fileTableTheme) Size(name fyne.ThemeSizeName) float32 {
 	switch name {
 	case theme.SizeNameText:
-		return 11
+		return t.Theme.Size(theme.SizeNameText)
 	case theme.SizeNameInnerPadding:
 		return 2
 	}

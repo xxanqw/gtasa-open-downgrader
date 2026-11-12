@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -26,30 +27,31 @@ type launcherActions struct {
 	hasDowngrader bool
 }
 type launcherWindow struct {
-	app             fyne.App
-	window          fyne.Window
-	gameDir         string
-	actions         launcherActions
-	status          *widget.Label
-	buttons         map[string]*appwidget.Button
-	available       map[*appwidget.Button]bool
-	busy            bool
-	closed          bool
-	checkingUpdates bool
-	updateCancel    context.CancelFunc
-	browser         *serverBrowser
-	dispatch        func(func())
-	cards           []*appwidget.ActionCard
-	grid            *fyne.Container
-	settingsPopup   *widget.PopUpMenu
-	settingsMenu    *fyne.Menu
-	details         string
-	modeCards       map[launcherprefs.Choice]*appwidget.ActionCard
-	modeAvailable   map[launcherprefs.Choice]bool
-	activate        map[launcherprefs.Choice]func()
-	remember        *appwidget.Check
-	remembered      launcherprefs.Choice
-	preferenceError error
+	app              fyne.App
+	window           fyne.Window
+	gameDir          string
+	actions          launcherActions
+	status           *widget.Label
+	buttons          map[string]*appwidget.Button
+	available        map[*appwidget.Button]bool
+	busy             bool
+	closed           bool
+	checkingUpdates  bool
+	updateCancel     context.CancelFunc
+	browser          *serverBrowser
+	dispatch         func(func())
+	cards            []*appwidget.ActionCard
+	grid             *fyne.Container
+	settingsPopup    *widget.PopUpMenu
+	settingsMenu     *fyne.Menu
+	details          string
+	modeCards        map[launcherprefs.Choice]*appwidget.ActionCard
+	modeAvailable    map[launcherprefs.Choice]bool
+	activate         map[launcherprefs.Choice]func()
+	remember         *appwidget.Check
+	remembered       launcherprefs.Choice
+	preferenceError  error
+	autoLaunchCancel context.CancelFunc
 }
 
 func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underProton bool, clients []multiplayer.Client, actions launcherActions) *launcherWindow {
@@ -58,7 +60,7 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 	ui.modeAvailable = make(map[launcherprefs.Choice]bool)
 	ui.activate = make(map[launcherprefs.Choice]func())
 	ui.remembered, ui.preferenceError = launcherprefs.Load(gameDir)
-	ui.remember = appwidget.NewCheck("Remember choice", func(checked bool) {
+	ui.remember = appwidget.NewCheck("Launch this mode automatically next time", func(checked bool) {
 		if !checked && !ui.busy {
 			if err := launcherprefs.Reset(gameDir); err != nil {
 				ui.remember.SetChecked(true)
@@ -113,7 +115,7 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 			description = reason
 		} else if !client.Installed {
 			state = "Not installed"
-			importance = widget.DangerImportance
+			importance = widget.MediumImportance
 			description = "Install this client from Multiplayer in the downgrader."
 			if client.ID == multiplayer.ClientMTA && client.Detail != "" {
 				state = "Choose version"
@@ -147,7 +149,7 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 	settings := ui.button("settings", "Settings", true, ui.showSettings)
 	settings.SetIcon(theme.SettingsIcon())
 	top := container.NewHBox(heading, layout.NewSpacer(), settings)
-	var footer fyne.CanvasObject = container.NewBorder(nil, nil, nil, ui.remember, ui.status)
+	var footer fyne.CanvasObject = container.NewVBox(ui.status, ui.remember)
 	if mtaWarning != "" {
 		warning := widget.NewLabel(mtaWarning)
 		warning.Wrapping = fyne.TextWrapWord
@@ -168,6 +170,9 @@ func newLauncherWindow(a fyne.App, w fyne.Window, gameDir, hostOS string, underP
 	w.SetCloseIntercept(ui.requestClose)
 	w.SetOnClosed(func() {
 		ui.closed = true
+		if ui.autoLaunchCancel != nil {
+			ui.autoLaunchCancel()
+		}
 		if ui.updateCancel != nil {
 			ui.updateCancel()
 		}
@@ -219,7 +224,49 @@ func (ui *launcherWindow) startRemembered() {
 		ui.status.SetText("Saved choice unavailable | choose a mode")
 		return
 	}
-	ui.activate[choice]()
+	if ui.autoLaunchCancel != nil || ui.closed || ui.busy {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ui.autoLaunchCancel = cancel
+	modal := appwidget.ShowModal(ui.window, appwidget.ModalOptions{
+		Title:    "Automatically launch " + choice.Name() + "?",
+		Subtitle: "Launching in 5 seconds",
+		Body:     detailLabel("Choose another mode to stay in the launcher this time. Uncheck “Launch this mode automatically next time” to disable automatic launch."),
+		Actions: []appwidget.ModalAction{
+			{Text: "Choose another mode"},
+			{ID: "launch", Text: "Launch now", Importance: widget.HighImportance},
+		},
+		OnClosed: func(result string) {
+			cancel()
+			ui.autoLaunchCancel = nil
+			if result == "launch" && !ui.closed && !ui.busy && ui.modeAvailable[choice] {
+				ui.activate[choice]()
+			}
+		},
+	})
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for remaining := 4; remaining >= 0; remaining-- {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			left := remaining
+			ui.dispatch(func() {
+				if ctx.Err() != nil || ui.closed {
+					return
+				}
+				if left == 0 {
+					modal.Close("launch")
+				} else {
+					modal.SetSubtitle(fmt.Sprintf("Launching in %d seconds", left))
+				}
+			})
+		}
+	}()
 }
 
 func (ui *launcherWindow) showSettings() {
@@ -357,7 +404,10 @@ func launcherCard(name, state string, importance widget.Importance, icon fyne.Ca
 	title := widget.NewLabelWithStyle(name, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	label := widget.NewLabel(state)
 	label.Importance = importance
-	symbol := theme.ConfirmIcon()
+	symbol := theme.InfoIcon()
+	if importance == widget.SuccessImportance {
+		symbol = theme.ConfirmIcon()
+	}
 	if importance == widget.DangerImportance {
 		symbol = theme.CancelIcon()
 	} else if importance == widget.WarningImportance {
