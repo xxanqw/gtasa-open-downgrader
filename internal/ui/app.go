@@ -137,7 +137,10 @@ func Run(gamePath, patchPath string) {
 		}
 	}
 	appwidget.ConfigureDesktopCursors()
-	a := app.NewWithID("me.xxanqw.gtasa-open-downgrader")
+	if err := platform.RegisterDesktopIcon(assets.Icon); err != nil {
+		journal.Record("WARN", "Desktop icon registration: "+err.Error())
+	}
+	a := app.NewWithID(platform.DowngraderAppID)
 	w := newWindow(a, journal)
 	if gamePath != "" {
 		w.path.SetText(gamePath)

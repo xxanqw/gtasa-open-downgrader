@@ -9,7 +9,7 @@ mkdir -p build
 appdir=$(mktemp -d "$PWD/build/AppDir.XXXXXX")
 trap 'rm -rf "$appdir"' EXIT
 [[ -f dist/gta-sa.exe ]] || { echo 'Build dist/gta-sa.exe with scripts/build-launcher.sh first.' >&2; exit 1; }
-mkdir -p "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/libexec" "$appdir/usr/share/licenses/gtasa-open-downgrader"
+mkdir -p "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/256x256/apps" "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/libexec" "$appdir/usr/share/licenses/gtasa-open-downgrader"
 cp "dist/$name" "$appdir/usr/bin/$name"
 cp dist/gta-sa.exe "$appdir/usr/libexec/gta-sa.exe"
 python3 scripts/generate-notices.py --check --package dist/THIRD-PARTY-NOTICES.zip
@@ -17,6 +17,7 @@ cp internal/licenses/NOTICES.txt internal/licenses/manifest.json internal/licens
 # Notices are not a substitute for the pinned static runtime's LGPL source and
 # relinking materials. Verify those separately before publishing an AppImage.
 cp internal/assets/icon.png "$appdir/gtasa-open-downgrader.png"
+cp internal/assets/icon.png "$appdir/usr/share/icons/hicolor/256x256/apps/me.xxanqw.gtasa-open-downgrader.png"
 # xdelta3 needs liblzma when extracted at runtime. Keep graphics drivers and
 # glibc supplied by the host; build on Ubuntu 22.04 for a conservative baseline.
 lzma=$(ldd internal/assets/xdelta3_linux | awk '/liblzma.so/ {print $3}')
@@ -31,6 +32,7 @@ Icon=gtasa-open-downgrader
 Categories=Game;
 StartupWMClass=me.xxanqw.gtasa-open-downgrader
 DESKTOP
+cp "$appdir/me.xxanqw.gtasa-open-downgrader.desktop" "$appdir/usr/share/applications/"
 cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/sh
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
