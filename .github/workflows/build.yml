@@ -233,7 +233,7 @@ jobs:
             dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
           body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
-          generate_release_notes: true
+          generate_release_notes: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) == '' }}
           fail_on_unmatched_files: true
       - name: Remove published build intermediates
         continue-on-error: true
@@ -275,7 +275,7 @@ jobs:
             Install or update through Multiplayer → Steam launcher → Check updates in the downgrader.
             This launcher-only release does not change the latest downgrader release.
           body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
-          generate_release_notes: true
+          generate_release_notes: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) == '' }}
           fail_on_unmatched_files: true
       - name: Remove published build intermediates
         continue-on-error: true
