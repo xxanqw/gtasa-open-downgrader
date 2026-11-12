@@ -8,12 +8,12 @@ A Windows and Linux tool for downgrading GTA San Andreas and installing communit
 
 <table>
   <tr>
-    <td width="50%"><img src="https://ffimg.cc/ed6bb3b4.png" alt="App screenshot 1" width="100%" /></td>
-    <td width="50%"><img src="https://ffimg.cc/98da7d56.png" alt="App screenshot 2" width="100%" /></td>
+    <td width="50%"><a href="docs/screenshots/game.png"><img src="docs/screenshots/game.png" alt="Game file verification showing downgraded files" width="100%" /></a></td>
+    <td width="50%"><a href="docs/screenshots/mods.png"><img src="docs/screenshots/mods.png" alt="Compact mod list with installed versions and expandable details" width="100%" /></a></td>
   </tr>
   <tr>
-    <td width="50%"><img src="https://ffimg.cc/4f902442.png" alt="App screenshot 3" width="100%" /></td>
-    <td width="50%"><img src="https://ffimg.cc/cce81ecd.png" alt="App screenshot 4" width="100%" /></td>
+    <td width="50%"><a href="docs/screenshots/multiplayer.png"><img src="docs/screenshots/multiplayer.png" alt="Multiplayer client management and Steam launcher" width="100%" /></a></td>
+    <td width="50%"><a href="docs/screenshots/about.png"><img src="docs/screenshots/about.png" alt="About screen with project information and licenses" width="100%" /></a></td>
   </tr>
 </table>
 
