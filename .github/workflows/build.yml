@@ -52,10 +52,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Download and validate official Global/German patches
         env:
           PATCH_ARCHIVE_SHA256: bb974902ba4c8e188c38e25009112299b52ef63df5493c41ab6592971947e243
@@ -79,10 +76,7 @@ jobs:
       LAUNCHER_VERSION: ${{ needs.metadata.outputs.launcher_version }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-go
       - name: Install desktop and cross-compilation dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5 mingw-w64 python3
       - name: Check Linux code and patch generator
@@ -132,10 +126,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-go
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -178,10 +169,7 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-go
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64

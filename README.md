@@ -137,6 +137,8 @@ go vet -tags ci ./...
 
 The `ci` tag uses Fyne's headless driver; do not use it for desktop release builds.
 
+Actions caches only Go module downloads. Compiled objects, including embedded offline patch data, stay on the temporary runner. Only default-branch runs save the shared module cache; release tags and pull requests restore it without creating per-release copies.
+
 ## Report a problem
 
 [Open an issue](https://github.com/xxanqw/gtasa-open-downgrader/issues) with your OS, game edition, app version, and the log exported from **Log**. Do not upload copyrighted game files.

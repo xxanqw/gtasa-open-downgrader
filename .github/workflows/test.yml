@@ -10,10 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      - uses: ./.github/actions/setup-go
       - run: sudo apt-get update && sudo apt-get install -y gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
       - run: test -z "$(gofmt -l cmd internal)"
       - run: go test -race ./...

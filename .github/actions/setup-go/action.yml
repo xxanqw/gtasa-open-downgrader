@@ -1,0 +1,30 @@
+name: Set up Go with downloaded modules only
+description: Cache module downloads without retaining compiled objects or embedded patch data.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: false
+    - name: Locate module download cache
+      id: modules
+      shell: bash
+      run: echo "path=$(go env GOMODCACHE)/cache/download" >> "$GITHUB_OUTPUT"
+    - name: Restore downloaded modules
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.modules.outputs.path }}
+        key: go-module-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+    - name: Download modules
+      shell: bash
+      run: go mod download
+    # Only the default branch seeds the cache shared with release tags and PRs.
+    # Save before compilation, and never cache GOCACHE or unpacked build output.
+    - name: Save downloaded modules
+      if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.modules.outputs.path }}
+        key: ${{ steps.restore.outputs.cache-primary-key }}
