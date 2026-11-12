@@ -30,8 +30,10 @@ type interfaceManifest struct {
 	Files     map[string]string `json:"files"`
 }
 
-func isInterfaceMod(name string) bool          { _, ok := interfacePacks[name]; return ok }
-func hasTransactionalTracker(name string) bool { return name == ExtendedFonts || isInterfaceMod(name) }
+func isInterfaceMod(name string) bool { _, ok := interfacePacks[name]; return ok }
+func hasTransactionalTracker(name string) bool {
+	return name == ExtendedFonts || name == "Project 2DFX" || isInterfaceMod(name)
+}
 func interfaceArchivePath(name, member string) string {
 	spec := interfacePacks[name]
 	for from, to := range spec.members {
@@ -45,8 +47,11 @@ func interfaceArchivePath(name, member string) string {
 // Atmosphere's hud.txd is BYTE IDENTICAL to Original HQ Icons. Install it once,
 // owned by that dependency; omit Atmosphere's radar/menu replacements entirely.
 func RequiredMods(name string) []string {
-	if name == AtmosphereHUD {
+	switch name {
+	case AtmosphereHUD:
 		return []string{OriginalHQIcons}
+	case LODVegetation, "Project 2DFX":
+		return []string{OpenLimitAdjuster}
 	}
 	return nil
 }
@@ -374,7 +379,21 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 	}
 	for _, dep := range RequiredMods(name) {
 		if !t.Has(dep) {
-			return fmt.Errorf("install %s first (shared HUD dependency)", dep)
+			return fmt.Errorf("install %s first (required dependency)", dep)
+		}
+		if dep == OpenLimitAdjuster {
+			plugin, err := fsutil.Join(root, "scripts/III.VC.SA.LimitAdjuster.asi")
+			if err != nil {
+				return err
+			}
+			info, err := os.Lstat(plugin)
+			if err != nil {
+				return fmt.Errorf("repair %s dependency first: %w", dep, err)
+			}
+			if !info.Mode().IsRegular() || info.Size() == 0 {
+				return fmt.Errorf("repair %s dependency first: missing regular plugin", dep)
+			}
+			continue
 		}
 		folder, err := fsutil.Join(root, interfacePacks[dep].folder)
 		if err != nil {

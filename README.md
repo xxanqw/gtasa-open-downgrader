@@ -50,7 +50,7 @@ Original files are saved in `backups/` inside the game folder. Use **Recovery** 
 
 ## Mods
 
-The app offers ASI Loader, ModLoader, SilentPatch, Widescreen Fixes, Framerate Vigilante, GInput, SkyGFX, Project 2DFX, and optional interface, font, and translation packages.
+The app offers ASI Loader, ModLoader, SilentPatch, Widescreen Fixes, Windowed Mode, Open Limit Adjuster, LOD Vegetation, Framerate Vigilante, GInput, SkyGFX, Project 2DFX, and optional interface, font, and translation packages.
 
 Select rows in **Mods**, then use **Install** or **Update selected**. Selecting mods reveals **Reinstall**, **Remove**, and **Clear** directly in the header. Required dependencies are selected automatically and stay locked while needed. Expand a row with its chevron to view versions, requirements, download details, caveats, and the official source without leaving the list. The settings gear edits supported INI files. Keyboard users can select with Space or Enter and expand or collapse with the right and left arrows.
 
@@ -120,9 +120,9 @@ To generate patches from your own clean game copies, use [generate_patches.sh](g
 
 Release builds run only on tag pushes, not branch pushes or manual dispatch:
 
-- `v0.3.0-rc.2`: downgrader prerelease; never becomes Latest or an automatic update.
+- `v0.3.0-rc.3`: downgrader prerelease; never becomes Latest or an automatic update.
 - `v0.3.0`: stable downgrader release.
-- `launcher-3`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
+- `launcher-4`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
 
 Downgrader releases contain only Windows executables, Linux AppImages, notices, and checksums. Standalone Linux build inputs and `gta-sa.exe` are not published there; the launcher has its own release channel.
 

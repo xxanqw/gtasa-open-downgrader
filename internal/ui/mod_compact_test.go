@@ -240,3 +240,23 @@ func TestShareModsTooltipIsInformational(t *testing.T) {
 		t.Fatal("tooltip survived navigation")
 	}
 }
+
+func TestModCatalogPlacesWindowedModeAfterWidescreenAndCentersHint(t *testing.T) {
+	w := seedCompactMods(t)
+	index := -1
+	for i, name := range w.modTableNames {
+		if name == "Widescreen Fixes" {
+			index = i
+		}
+	}
+	if index < 0 || index+1 >= len(w.modTableNames) || w.modTableNames[index+1] != mods.WindowedMode {
+		t.Fatal("Windowed Mode is not next to Widescreen Fixes")
+	}
+	row := w.modTable.rows[mods.NadalaoWeapons]
+	hintCenter := row.downloadHint.Position().Y + row.downloadHint.Size().Height/2
+	titleCenter := row.title.Position().Y + row.title.MinSize().Height/2
+	if hintCenter != titleCenter {
+		t.Fatalf("hint center %v differs from title center %v", hintCenter, titleCenter)
+	}
+	captureUX(t, w, "mods-new-packages")
+}

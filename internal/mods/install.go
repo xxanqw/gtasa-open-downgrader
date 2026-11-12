@@ -32,13 +32,23 @@ func layout(mod, name string) string {
 		if strings.HasPrefix(name, "scripts/") {
 			return "modloader/WidescreenFix/" + strings.TrimPrefix(name, "scripts/")
 		}
+	case WindowedMode:
+		switch strings.ToLower(path.Base(name)) {
+		case "iii.vc.sa.windowedmode.asi", "iii.vc.sa.windowedmode.ini", "iii.vc.sa.windowedmode.cfg":
+			return "modloader/WindowedMode/" + path.Base(name)
+		}
+	case OpenLimitAdjuster:
+		switch strings.ToLower(path.Base(name)) {
+		case "iii.vc.sa.limitadjuster.asi", "iii.vc.sa.limitadjuster.ini":
+			return "scripts/" + path.Base(name)
+		}
 	case "SkyGFX":
 		if _, rest, ok := strings.Cut(name, "/"); ok {
 			return "modloader/SkyGFX/" + rest
 		}
 	case "Frontend Mods":
 		return "modloader/FrontendMods/" + name
-	case HDRadarMap, OriginalHQIcons, AtmosphereHUD, NadalaoWeapons:
+	case HDRadarMap, OriginalHQIcons, AtmosphereHUD, NadalaoWeapons, LODVegetation:
 		return interfaceArchivePath(mod, name)
 	case ExtendedFonts:
 		return extendedArchivePath(name)
@@ -56,6 +66,10 @@ func layout(mod, name string) string {
 			return "modloader/GInput/" + name
 		}
 	case "Project 2DFX":
+		// Open Limit Adjuster is a separately managed, early-loaded dependency.
+		if isLimitAdjusterFile(path.Base(name)) {
+			return ""
+		}
 		return "modloader/Project2DFX/" + name
 	case SanLtdRussian:
 		const prefix = "00 - Copy to game folder/"
@@ -91,7 +105,7 @@ func ExtractUpdate(ctx context.Context, root, mod, archive, kind string) error {
 	return extract(ctx, root, mod, archive, kind, true)
 }
 
-func extract(ctx context.Context, root, mod, archive, kind string, update bool) error {
+func extract(ctx context.Context, root, mod, archive, kind string, update bool) (resultErr error) {
 	mod = canonicalModName(mod)
 	if mod == ExtendedFonts {
 		return importExtended(ctx, root, archive, kind, "")
@@ -119,6 +133,17 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 	old := filepath.Join(work, "old")
 	if e = fsutil.Extract(ctx, archive, staged, kind, func(n string) string { return layout(mod, n) }); e != nil {
 		return e
+	}
+	if mod == OpenLimitAdjuster {
+		rollback, err := prepareLimitAdjuster(ctx, root, staged)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if resultErr != nil {
+				resultErr = errors.Join(resultErr, rollback())
+			}
+		}()
 	}
 	var files []string
 	e = filepath.WalkDir(staged, func(p string, d os.DirEntry, e error) error {
@@ -489,6 +514,17 @@ func (i Installer) install(ctx context.Context, r *Resolver, root, name string, 
 	}
 	if name == ExtendedFonts {
 		return i.installExtended(ctx, root, rel, event)
+	}
+	if name == "Project 2DFX" {
+		tracker, err := LoadTracker(root)
+		if err != nil {
+			return err
+		}
+		if !tracker.Has(OpenLimitAdjuster) {
+			if err := i.InstallSelected(ctx, root, []string{OpenLimitAdjuster}, false, event); err != nil {
+				return err
+			}
+		}
 	}
 	if isInterfaceMod(name) {
 		return i.installInterface(ctx, r, root, name, rel, event)

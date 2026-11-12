@@ -20,15 +20,17 @@ import (
 const MaxBytes = 256 * 1024
 
 var scopes = map[string][]string{
-	"ModLoader":         {"modloader/modloader.ini", "modloader/.profiles/default.ini"},
-	"SilentPatch":       {"modloader/SilentPatch", "SilentPatchSA.ini", "scripts/SilentPatchSA.ini"},
-	"Widescreen Fixes":  {"modloader/WidescreenFix", "GTASA.WidescreenFix.ini", "scripts/GTASA.WidescreenFix.ini"},
-	"SkyGFX":            {"modloader/SkyGFX", "skygfx.ini", "scripts/skygfx.ini"},
-	"GInput":            {"modloader/GInput", "GInputSA.ini", "scripts/GInputSA.ini"},
-	"Project 2DFX":      {"modloader/Project2DFX", "SA.Project2DFX.ini", "scripts/SA.Project2DFX.ini"},
-	mods.Framerate:      {"modloader/FramerateVigilante", "FramerateVigilante.ini", "scripts/FramerateVigilante.ini"},
-	mods.ExtendedFonts:  {"modloader/ExtendedLanguageLoader"},
-	mods.NadalaoWeapons: {"modloader/NadalaoWeaponIcons"},
+	"ModLoader":            {"modloader/modloader.ini", "modloader/.profiles/default.ini"},
+	"SilentPatch":          {"modloader/SilentPatch", "SilentPatchSA.ini", "scripts/SilentPatchSA.ini"},
+	"Widescreen Fixes":     {"modloader/WidescreenFix", "GTASA.WidescreenFix.ini", "scripts/GTASA.WidescreenFix.ini"},
+	mods.WindowedMode:      {"modloader/WindowedMode/III.VC.SA.WindowedMode.cfg"},
+	mods.OpenLimitAdjuster: {"scripts/III.VC.SA.LimitAdjuster.ini"},
+	"SkyGFX":               {"modloader/SkyGFX", "skygfx.ini", "scripts/skygfx.ini"},
+	"GInput":               {"modloader/GInput", "GInputSA.ini", "scripts/GInputSA.ini"},
+	"Project 2DFX":         {"modloader/Project2DFX", "SA.Project2DFX.ini", "scripts/SA.Project2DFX.ini"},
+	mods.Framerate:         {"modloader/FramerateVigilante", "FramerateVigilante.ini", "scripts/FramerateVigilante.ini"},
+	mods.ExtendedFonts:     {"modloader/ExtendedLanguageLoader"},
+	mods.NadalaoWeapons:    {"modloader/NadalaoWeaponIcons"},
 }
 
 func resolve(root, rel string) (string, error) {
@@ -94,7 +96,7 @@ func Discover(root, mod string) ([]string, error) {
 			if d.IsDir() {
 				return nil
 			}
-			if !strings.EqualFold(filepath.Ext(p), ".ini") {
+			if !strings.EqualFold(filepath.Ext(p), ".ini") && !(mod == mods.WindowedMode && strings.EqualFold(filepath.Base(p), "III.VC.SA.WindowedMode.cfg")) {
 				return nil
 			}
 			info, e := d.Info()

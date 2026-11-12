@@ -15,6 +15,9 @@ import (
 )
 
 const (
+	WindowedMode       = "Windowed Mode"
+	OpenLimitAdjuster  = "Open Limit Adjuster"
+	LODVegetation      = "LOD Vegetation"
 	Framerate          = "Framerate Vigilante (60fps fix)"
 	HDFonts            = "HD Fonts" // retired tracker/uninstall ID
 	ExtendedFonts      = "Extended Fonts (ELL)"
@@ -37,6 +40,8 @@ var Catalog = []Source{
 	{Name: "ModLoader", Repository: "thelink2012/modloader", Endpoint: "releases/latest", Asset: "modloader.zip"},
 	{Name: "SilentPatch", Repository: "CookiePLMonster/SilentPatch", Endpoint: "releases/latest", Asset: "SilentPatchSA.zip"},
 	{Name: "Widescreen Fixes", Repository: "ThirteenAG/WidescreenFixesPack", Endpoint: "releases/tags/gtasa", Asset: "GTASA.WidescreenFix.zip", DateVersion: true},
+	{Name: WindowedMode, Repository: "ThirteenAG/III.VC.SA.WindowedMode", Endpoint: "releases/latest", Asset: "III.VC.SA.WindowedMode.zip"},
+	{Name: OpenLimitAdjuster, Repository: "GTAmodding/III.VC.SA.LimitAdjuster", Endpoint: "releases/latest", Asset: "III.VC.SA.LimitAdjuster.zip"},
 	{Name: "SkyGFX", Repository: "aap/skygfx", Endpoint: "releases/latest", Prefix: "skygfx_sa_"},
 	{Name: "Frontend Mods", Repository: "ThirteenAG/WidescreenFixesPack", Endpoint: "releases/tags/gtasa", Asset: "GTASA.WidescreenFrontend.zip", DateVersion: true},
 	{Name: ExtendedFonts, Version: "0.1.0 / ELL 0.4.2 Beta", URL: extendedFontsURL},
@@ -46,6 +51,7 @@ var Catalog = []Source{
 	{Name: NadalaoWeapons, Version: "2022-02-16 / helper 1.0", URL: "https://sharemods.com/tysasyrhqebt/nadalao_Weapon_Icons_-_icones_fieis_corrigidos.7z.html", Page: "https://www.mixmods.com.br/2022/02/icones-de-armas-fieis-desenhos-corrigidos/"},
 	{Name: Framerate, Version: "2026-08-16", URL: "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html", Page: "https://www.mixmods.com.br/2022/08/iii-vc-sa-framerate-vigilante/"},
 	{Name: "GInput", Version: "2016-02-09", URL: "https://silent.rockstarvision.com/uploads/GInputSA.zip", Page: "https://silentsblog.com/mods/gta-sa/#ginput"},
+	{Name: LODVegetation, Version: "1.2 / 2021-12-11", URL: "https://sharemods.com/7u9q36epczhn/LOD_Vegetation.7z.html", Page: "https://www.mixmods.com.br/2021/12/lod-vegetation-distant-trees/"},
 	{Name: "Project 2DFX", Repository: "ThirteenAG/III.VC.SA.IV.Project2DFX", Endpoint: "releases/tags/gtasa", Asset: "SA.Project2DFX.zip", DateVersion: true},
 }
 

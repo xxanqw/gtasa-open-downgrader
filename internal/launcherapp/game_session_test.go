@@ -3,11 +3,13 @@ package launcherapp
 import (
 	"context"
 	"errors"
-	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 )
 
 func TestTrackedGameCleanupStillWaitsAndFailsClosed(t *testing.T) {
@@ -97,5 +99,32 @@ func TestSinglePlayerFinishesWhenGameExitsBeforeLaunchCommand(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("singleplayer still waiting for launch command after GTA exited")
+	}
+}
+
+func TestSinglePlayerDistinguishesObservedShutdownFromStartupFailure(t *testing.T) {
+	for _, started := range []bool{true, false} {
+		t.Run(fmt.Sprintf("observed=%t", started), func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, entrypoint.RealGameExecutable), []byte("game"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			shutdown := errors.New("exit status 0xc0000409")
+			runtime := &Runtime{GameDir: root,
+				snapshotGameProcesses: func() (gameProcessSet, error) { return gameProcessSet{}, nil },
+				Execute:               func(context.Context, string, string, ...string) error { return shutdown },
+				waitForGameProcess: func(_ context.Context, _ gameProcessSet, done <-chan struct{}) (bool, error) {
+					<-done
+					return started, nil
+				},
+			}
+			err := runtime.SinglePlayer(context.Background())
+			if started && err != nil {
+				t.Fatalf("observed shutdown reported as launch failure: %v", err)
+			}
+			if !started && !errors.Is(err, shutdown) {
+				t.Fatalf("startup failure hidden: %v", err)
+			}
+		})
 	}
 }

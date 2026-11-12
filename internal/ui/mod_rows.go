@@ -45,6 +45,12 @@ func modPurpose(name string) string {
 		return "Fixes original game bugs"
 	case "Widescreen Fixes":
 		return "Widescreen scaling"
+	case mods.WindowedMode:
+		return "Windowed and borderless display"
+	case mods.OpenLimitAdjuster:
+		return "Expands game engine limits"
+	case mods.LODVegetation:
+		return "Distant trees with low-detail models"
 	case "SkyGFX":
 		return "Console-style graphics"
 	case "Frontend Mods":

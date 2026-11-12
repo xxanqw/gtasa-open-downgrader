@@ -356,7 +356,7 @@ func (r *modWebRowRenderer) Layout(s fyne.Size) {
 	if row.downloadHint.Visible() {
 		titleWidth -= 24
 		nameWidth := fyne.MeasureText(row.title.Text, row.title.Theme().Size(theme.SizeNameText), row.title.TextStyle).Width
-		row.downloadHint.Move(fyne.NewPos(42+min(titleWidth, nameWidth+12)+2, 3))
+		row.downloadHint.Move(fyne.NewPos(42+min(titleWidth, nameWidth+12)+2, (row.title.MinSize().Height-16)/2))
 		row.downloadHint.Resize(fyne.NewSquareSize(16))
 	}
 	row.title.Resize(fyne.NewSize(titleWidth, 23))

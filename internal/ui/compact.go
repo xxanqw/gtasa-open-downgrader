@@ -18,6 +18,12 @@ func modInfo(name string) string {
 		return "Corrects widescreen scaling and proportions."
 	case mods.Framerate:
 		return "Fixes several problems caused by higher frame rates. Not a guarantee of compatibility with every mod."
+	case mods.WindowedMode:
+		return "ThirteenAG's windowed and borderless display plugin for GTA SA v1.0 US. Alt+Enter or Ctrl+Enter switches modes. Settings are created next to the plugin in III.VC.SA.WindowedMode.cfg after the first game launch; updates preserve them."
+	case mods.OpenLimitAdjuster:
+		return "Grows supported engine limits as needed. Installed in scripts so it starts before ModLoader. Shared by Project 2DFX and LOD Vegetation; its bundled copy is not installed twice. Do not combine with another limit adjuster without checking compatibility."
+	case mods.LODVegetation:
+		return "Junior_Djjr's LOD Vegetation v1.2 adds low-detail distant trees. Requires Open Limit Adjuster. Replaces many IPL map files: conflicts with other IPL/map replacements such as Z PC Map, and is already included in Proper Fixes. Keep Project 2DFX's LoadAllBinaryIPLs at 0. SA-MP requires manual IDE setup described on the source page; multiplayer compatibility is not automatic."
 	case "GInput":
 		return "Improved controller support."
 	case "SkyGFX":

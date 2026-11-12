@@ -155,6 +155,10 @@ func uninstallPaths(name string) []string {
 		return []string{"modloader/SilentPatch"}
 	case "Widescreen Fixes":
 		return []string{"modloader/WidescreenFix"}
+	case WindowedMode:
+		return []string{"modloader/WindowedMode"}
+	case OpenLimitAdjuster:
+		return []string{"scripts/III.VC.SA.LimitAdjuster.asi", "scripts/III.VC.SA.LimitAdjuster.ini"}
 	case "SkyGFX":
 		return []string{"modloader/SkyGFX"}
 	case "Frontend Mods":

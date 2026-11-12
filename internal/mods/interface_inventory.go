@@ -2,6 +2,7 @@ package mods
 
 // Pinned archive members: no third-party artwork/binaries are embedded.
 var interfacePacks = map[string]interfaceSpec{
+	LODVegetation: lodVegetationPackage(),
 	OriginalHQIcons: {folder: "modloader/OriginalHQRadarIcons", checksum: "c50caa241cf0773729f790ef72c455589c38f93eff9ae84bbe132fd8646f9623", members: map[string]string{
 		"Readme (or die).txt":                "README-upstream.txt",
 		"SA Original Radar Icons HQ/hud.txd": "models/hud.txd",

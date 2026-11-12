@@ -215,6 +215,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
           pattern: downgrader-*
@@ -242,6 +243,7 @@ jobs:
             dist/gtasa-open-downgrader-windows-offline.exe
             dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
+          body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
 
@@ -251,6 +253,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
           name: steam-launcher
@@ -271,5 +274,6 @@ jobs:
             Standalone Windows/Proton Steam launcher ${{ needs.metadata.outputs.launcher_version }}.
             Install or update through Multiplayer → Steam launcher → Check updates in the downgrader.
             This launcher-only release does not change the latest downgrader release.
+          body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true

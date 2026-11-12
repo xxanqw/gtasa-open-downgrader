@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/inieditor"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 	"strconv"
@@ -42,7 +43,11 @@ func (w *Window) showINISettings(mod string) {
 		return
 	}
 	if len(paths) == 0 {
-		w.info("No INI configuration", "No supported INI files were found for this installed package.")
+		if mod == mods.WindowedMode {
+			w.info("No configuration yet", "Start and close GTA once to create III.VC.SA.WindowedMode.cfg, then open settings again.")
+		} else {
+			w.info("No INI configuration", "No supported INI files were found for this installed package.")
+		}
 		return
 	}
 	key := root + "\x00" + mod
