@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bodgit/sevenzip"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 )
 
 type Mapper func(string) string
@@ -17,7 +18,9 @@ const MaxExtractedSize int64 = 16 << 30
 
 // Extract supports ZIP and 7z, validates even filtered members, rejects links,
 // duplicate destinations and excessive expansion, and never writes partial files.
-func Extract(ctx context.Context, archive, dst, kind string, mapName Mapper) error {
+func Extract(ctx context.Context, archive, dst, kind string, mapName Mapper) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "archive.extract", "archive", archive, "destination", dst, "kind", kind)
+	defer func() { finish(resultErr) }()
 	seen := map[string]bool{}
 	var total int64
 	member := func(name string, mode os.FileMode, size uint64, open func() (io.ReadCloser, error)) error {
@@ -46,8 +49,10 @@ func Extract(ctx context.Context, archive, dst, kind string, mapName Mapper) err
 			clean = mapName(clean)
 		}
 		if clean == "" {
+			applog.Event(ctx, "DEBUG", "archive.member", "source", name, "decision", "filtered")
 			return nil
 		}
+		applog.Event(ctx, "DEBUG", "archive.member", "source", name, "destination", clean, "bytes", size, "decision", "extract")
 		target, err := Join(dst, clean)
 		if err != nil {
 			return err

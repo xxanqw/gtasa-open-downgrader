@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 )
 
@@ -31,6 +32,7 @@ func New() *Client {
 	transport.ResponseHeaderTimeout = 30 * time.Second
 	httpClient := &http.Client{Transport: transport, Jar: jar, Timeout: 30 * time.Minute}
 	httpClient.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+		applog.Event(request.Context(), "DEBUG", "http.redirect", "url", applog.URL(request.URL.String()), "hop", len(via))
 		if len(via) > 0 && via[0].URL.Scheme == "https" && request.URL.Scheme != "https" {
 			return fmt.Errorf("refusing HTTPS downgrade redirect")
 		}
@@ -38,7 +40,9 @@ func New() *Client {
 	}
 	return &Client{HTTP: httpClient, ICloudAPI: ICloudAPI}
 }
-func (c *Client) Request(ctx context.Context, method, raw string, body io.Reader, contentType string) (*http.Response, error) {
+func (c *Client) Request(ctx context.Context, method, raw string, body io.Reader, contentType string) (response *http.Response, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "http.request", "method", method, "url", applog.URL(raw))
+	defer func() { finish(resultErr) }()
 	u, e := url.Parse(raw)
 	if e != nil {
 		return nil, e
@@ -46,7 +50,7 @@ func (c *Client) Request(ctx context.Context, method, raw string, body io.Reader
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return nil, fmt.Errorf("unsupported URL scheme")
 	}
-	req, e := http.NewRequestWithContext(ctx, method, raw, body)
+	req, e := http.NewRequestWithContext(traceRequest(ctx), method, raw, body)
 	if e != nil {
 		return nil, e
 	}
@@ -59,13 +63,20 @@ func (c *Client) Request(ctx context.Context, method, raw string, body io.Reader
 	if e != nil {
 		return nil, e
 	}
+	finalURL := raw
+	if resp.Request != nil {
+		finalURL = resp.Request.URL.String()
+	}
+	applog.Event(ctx, "DEBUG", "http.response", "status", resp.StatusCode, "url", applog.URL(finalURL), "bytes", resp.ContentLength, "protocol", resp.Proto, "request_id", resp.Header.Get("X-Request-ID"), "github_request_id", resp.Header.Get("X-GitHub-Request-Id"), "cf_ray", resp.Header.Get("CF-Ray"), "retry_after", resp.Header.Get("Retry-After"), "rate_remaining", resp.Header.Get("X-RateLimit-Remaining"))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		resp.Body.Close()
 		return nil, fmt.Errorf("%s: HTTP %d", u.Host, resp.StatusCode)
 	}
 	return resp, nil
 }
-func (c *Client) Bytes(ctx context.Context, method, raw string, body io.Reader, contentType string) ([]byte, error) {
+func (c *Client) Bytes(ctx context.Context, method, raw string, body io.Reader, contentType string) (data []byte, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "http.metadata", "url", applog.URL(raw), "method", method)
+	defer func() { finish(resultErr) }()
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	r, e := c.Request(ctx, method, raw, body, contentType)
@@ -74,12 +85,15 @@ func (c *Client) Bytes(ctx context.Context, method, raw string, body io.Reader, 
 	}
 	defer r.Body.Close()
 	b, e := io.ReadAll(io.LimitReader(r.Body, 8<<20+1))
+	applog.Event(ctx, "DEBUG", "http.metadata.bytes", "received", len(b), "expected", r.ContentLength, "error", e)
 	if len(b) > 8<<20 {
 		return nil, fmt.Errorf("metadata response too large")
 	}
 	return b, e
 }
-func (c *Client) JSON(ctx context.Context, raw string, v any) error {
+func (c *Client) JSON(ctx context.Context, raw string, v any) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "http.json", "url", applog.URL(raw))
+	defer func() { finish(resultErr) }()
 	b, e := c.Bytes(ctx, "GET", raw, nil, "")
 	if e != nil {
 		return e
@@ -141,7 +155,9 @@ func (w *counter) Write(b []byte) (int, error) {
 	}
 	return n, e
 }
-func (c *Client) File(ctx context.Context, raw, dst string, progress Progress) error {
+func (c *Client) File(ctx context.Context, raw, dst string, progress Progress) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "download.file", "url", applog.URL(raw), "destination", dst)
+	defer func() { finish(resultErr) }()
 	raw, e := c.Resolve(ctx, raw)
 	if e != nil {
 		return e
@@ -157,6 +173,7 @@ func (c *Client) File(ctx context.Context, raw, dst string, progress Progress) e
 		if e == nil && r.ContentLength >= 0 && count.done != r.ContentLength {
 			e = io.ErrUnexpectedEOF
 		}
+		applog.Event(ctx, "DEBUG", "download.bytes", "received", count.done, "expected", count.total, "error", e)
 		if progress != nil {
 			progress(count.done, count.total)
 		}

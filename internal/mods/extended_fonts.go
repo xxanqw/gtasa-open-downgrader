@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 )
@@ -225,9 +226,11 @@ func importExtended(ctx context.Context, root, archive, kind, version string) er
 // tracked HD Fonts are moved outside autoload locations into a durable backup.
 // No per-file activation, no edits to root GXTs/fonts/preferences/other mods.
 func commitExtended(ctx context.Context, root, staged string, rel Release, version string, inventory map[string]string, closed func() error) error {
-	return commitExtendedTransaction(ctx, root, staged, rel, inventory, closed, func(t Tracker) error { return t.Save(context.Background(), root, version) })
+	return commitExtendedTransaction(ctx, root, staged, rel, inventory, closed, func(t Tracker) error { return t.Save(context.WithoutCancel(ctx), root, version) })
 }
-func commitExtendedTransaction(ctx context.Context, root, staged string, rel Release, inventory map[string]string, closed func() error, save func(Tracker) error) error {
+func commitExtendedTransaction(ctx context.Context, root, staged string, rel Release, inventory map[string]string, closed func() error, save func(Tracker) error) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.commit", "mod", ExtendedFonts, "root", root, "staged", staged, "version", rel.Version)
+	defer func() { finish(resultErr) }()
 	if err := validateExtended(staged, inventory); err != nil {
 		return err
 	}
@@ -283,6 +286,7 @@ func commitExtendedTransaction(ctx context.Context, root, staged string, rel Rel
 	var moves []move
 	active := false
 	rollback := func(cause error) error {
+		applog.Event(ctx, "WARN", "mod.rollback.start", "cause", cause, "backup", backup)
 		var failures []error
 		if active {
 			if e := os.RemoveAll(target); e != nil {
@@ -296,6 +300,7 @@ func commitExtendedTransaction(ctx context.Context, root, staged string, rel Rel
 			}
 		}
 		// Tracker is written atomically only after activation; failure keeps its old data.
+		applog.Event(ctx, "WARN", "mod.rollback.end", "failed_files", len(failures), "originals_retained", len(failures) > 0)
 		if len(failures) > 0 {
 			return fmt.Errorf("%w; rollback incomplete: %v; originals at %s", cause, errors.Join(failures...), backup)
 		}
@@ -329,6 +334,7 @@ func commitExtendedTransaction(ctx context.Context, root, staged string, rel Rel
 		if err = os.Rename(p, dest); err != nil {
 			return rollback(err)
 		}
+		applog.Event(ctx, "DEBUG", "mod.backup.move", "source", p, "destination", dest)
 		moves = append(moves, move{p, dest})
 	}
 	if err = ctx.Err(); err != nil {
@@ -343,6 +349,7 @@ func commitExtendedTransaction(ctx context.Context, root, staged string, rel Rel
 	if err = os.Rename(incoming, target); err != nil {
 		return rollback(err)
 	}
+	applog.Event(ctx, "DEBUG", "mod.activate", "source", incoming, "destination", target)
 	active = true
 	names := []string{}
 	for _, name := range t.Installed {

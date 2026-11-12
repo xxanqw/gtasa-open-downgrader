@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -26,7 +27,7 @@ func (w *Window) buildProgressFooter() {
 	w.progressTrack = container.NewStack(w.progress, w.indeterminate)
 	w.footerActions = container.NewHBox(w.version, w.cancelButton, w.browserButton, w.footerLogButton, w.downgrade, w.outcomeDismiss)
 	line := container.NewBorder(nil, nil, nil, container.NewCenter(w.footerActions), w.status)
-	w.footer = container.NewVBox(line, container.NewThemeOverride(w.progressTrack, progressBarTheme{w.app.Settings().Theme()}))
+	w.footer = container.New(progressFooterLayout{}, line, container.NewThemeOverride(w.progressTrack, progressBarTheme{w.app.Settings().Theme()}))
 	w.refreshProgressFooter()
 }
 
@@ -147,4 +148,19 @@ func errorRecovery(details string) string {
 	default:
 		return "Review the diagnostic details and log before retrying. Completed changes may remain; Recovery restores downgrade backups, not installed mods. Copy these details when reporting a problem."
 	}
+}
+
+// Keep a permanent bottom slot for the progress track. Showing or hiding it
+// must not change the footer height or move the status and action controls.
+type progressFooterLayout struct{}
+
+func (progressFooterLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	line := objects[0].MinSize()
+	return fyne.NewSize(line.Width, line.Height+7)
+}
+func (progressFooterLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	objects[0].Move(fyne.NewPos(0, 0))
+	objects[0].Resize(fyne.NewSize(size.Width, max(0, size.Height-7)))
+	objects[1].Move(fyne.NewPos(0, max(0, size.Height-3)))
+	objects[1].Resize(fyne.NewSize(size.Width, 3))
 }

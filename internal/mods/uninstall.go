@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 )
@@ -21,8 +22,12 @@ type UninstallResult struct {
 // Uninstall moves the known mod location into a dated backup before changing
 // the tracker. This also handles installations made before file inventories
 // existed, without downloading a potentially different release archive.
-func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallResult, error) {
-	var result UninstallResult
+func Uninstall(ctx context.Context, root, name, appVersion string) (result UninstallResult, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.uninstall", "mod", name, "root", root)
+	defer func() {
+		applog.Event(ctx, "DEBUG", "mod.uninstall.summary", "backup", result.BackupDir, "moved", result.Moved)
+		finish(resultErr)
+	}()
 	name = canonicalModName(name)
 	tracker, err := LoadTracker(root)
 	if err != nil {
@@ -94,6 +99,7 @@ func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallRes
 		if err = os.Rename(source, backup); err != nil {
 			return rollback(err)
 		}
+		applog.Event(ctx, "DEBUG", "mod.uninstall.move", "source", source, "backup", backup)
 		moved = append(moved, move{source: source, backup: backup})
 	}
 	if err = ctx.Err(); err != nil {
@@ -110,7 +116,7 @@ func Uninstall(ctx context.Context, root, name, appVersion string) (UninstallRes
 	}
 	tracker.Installed = names
 	delete(tracker.Versions, name)
-	if err = tracker.Save(context.Background(), root, appVersion); err != nil {
+	if err = tracker.Save(context.WithoutCancel(ctx), root, appVersion); err != nil {
 		return rollback(fmt.Errorf("save mod tracker: %w", err))
 	}
 	result.Moved = len(moved)

@@ -119,10 +119,12 @@ type Window struct {
 
 func Run(gamePath, patchPath string) {
 	journal := &applog.Journal{}
+	startDiagnostics(journal, gamePath, patchPath)
+	defer journal.Close()
+	defer journal.Event("INFO", "session.end")
 	previous := log.Writer()
 	log.SetOutput(io.MultiWriter(journal, previous))
 	defer log.SetOutput(previous)
-	journal.Record("INFO", fmt.Sprintf("GTA SA Open Downgrader %s · %s/%s · %s · offline=%t", updater.Version, runtime.GOOS, runtime.GOARCH, runtime.Version(), assets.Offline))
 	// Preserve otherwise fatal runtime panics, including those on other goroutines.
 	if cache, err := os.UserCacheDir(); err == nil {
 		path := filepath.Join(cache, "gtasa-open-downgrader")
@@ -161,6 +163,10 @@ func Run(gamePath, patchPath string) {
 	w.start()
 	w.prepareStartupWindow()
 	w.window.Show()
+	journal.Event("DEBUG", "window.shown", "size", w.window.Canvas().Size(), "scale", w.window.Canvas().Scale())
+	if native, ok := w.window.(driver.NativeWindow); ok {
+		native.RunNative(func(handle any) { journal.Event("DEBUG", "window.backend", "context", fmt.Sprintf("%T", handle)) })
+	}
 	a.Run()
 }
 
@@ -345,7 +351,7 @@ func newWindow(a fyne.App, journal *applog.Journal) *Window {
 func mustURL(raw string) *url.URL { u, _ := url.Parse(raw); return u }
 func (w *Window) error(e error) {
 	if e != nil {
-		w.logs.Record("ERROR", e.Error())
+		w.logs.Record("ERROR", applog.SafeError(e))
 	}
 	if e != nil && !w.closing {
 		w.prompt(promptRequest{kind: promptError, title: "Could not complete the action", text: e.Error()})
@@ -494,15 +500,17 @@ func (w *Window) runOperation(title string, work func(context.Context) error, do
 	w.refreshEnabled()
 	w.cancelButton.Enable()
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx, finish := applog.Begin(w.logs.Context(ctx), "operation", "title", title, "game", w.path.Text, "patches", w.patchDir, "page", w.hubSelected, "generation", w.generation)
 	w.cancel = cancel
 	w.jobs.Go(func(parent context.Context) {
 		stop := context.AfterFunc(parent, cancel)
 		defer stop()
 		err := w.logs.Guard(ctx, work)
+		finish(err)
 		if errors.Is(err, context.Canceled) {
 			w.logs.Record("INFO", title+": cancelled")
 		} else if err != nil {
-			w.logs.Record("ERROR", title+": "+err.Error())
+			w.logs.Record("ERROR", title+": "+applog.SafeError(err))
 		}
 		cancel()
 		w.post(func() {
@@ -1011,6 +1019,7 @@ func (w *Window) setStatus(text string) {
 // same panic reporting boundary as a foreground scan or installation.
 func (w *Window) background(work func(context.Context)) {
 	w.jobs.Go(func(ctx context.Context) {
+		ctx = w.logs.Context(ctx)
 		if err := w.logs.Guard(ctx, func(ctx context.Context) error { work(ctx); return nil }); err != nil {
 			w.post(func() { w.error(err) })
 		}

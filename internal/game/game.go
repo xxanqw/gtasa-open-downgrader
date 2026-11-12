@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 )
@@ -323,8 +324,13 @@ type Scan struct {
 	Rows     []Row
 }
 
-func Inspect(ctx context.Context, root string, m Manifest, progress func(int, int)) (Scan, error) {
-	result := Scan{Version: "Unknown"}
+func Inspect(ctx context.Context, root string, m Manifest, progress func(int, int)) (result Scan, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "game.scan", "root", root, "manifest_version", m.Version, "release", m.ReleaseID, "files", len(m.Files))
+	defer func() {
+		applog.Event(ctx, "DEBUG", "game.scan.summary", "version", result.Version, "readonly", result.ReadOnly, "files_checked", len(result.Rows))
+		finish(resultErr)
+	}()
+	result = Scan{Version: "Unknown"}
 	st, e := os.Stat(root)
 	if e != nil {
 		return result, e
@@ -401,6 +407,7 @@ func Inspect(ctx context.Context, root string, m Manifest, progress func(int, in
 			row.Status = "Original (Needs Patch)"
 			row.NeedsPatch = "Yes"
 		}
+		applog.Event(ctx, "DEBUG", "game.scan.file", "path", f.Path, "resolved_path", p, "current_md5", h, "target_md5", f.TargetHash, "edition", edition, "status", row.Status, "needs_patch", row.NeedsPatch)
 		result.Rows = append(result.Rows, row)
 		if progress != nil {
 			progress(i+1, len(m.Files))

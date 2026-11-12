@@ -201,9 +201,9 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 	if notice := w.multiplayerNotice(runtime.GOOS); notice != nil {
 		sections = append(sections, notice)
 	}
-	clientHeading := container.NewHBox(widget.NewLabelWithStyle("Clients", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+	clientHeading := widget.NewRichText(&widget.TextSegment{Text: "Clients", Style: widget.RichTextStyleStrong})
 	if environmentError == nil && compatibility != "" && compatibility != "Windows" {
-		clientHeading.Add(widget.NewLabel("· " + compatibility))
+		clientHeading.Segments = append(clientHeading.Segments, &widget.TextSegment{Text: " · " + compatibility, Style: widget.RichTextStyleInline})
 	}
 	sections = append(sections, clientHeading)
 	if environmentError != nil {

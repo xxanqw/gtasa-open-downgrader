@@ -9,4 +9,4 @@
 
 Use Multiplayer → Steam launcher → Check updates in the downgrader. Close GTA and the launcher before installing the update.
 
-This is a standalone Windows/Proton launcher release. Its independent update version is 4, and it does not change the latest downgrader release. The GitHub prerelease flag keeps the launcher channel separate; the dedicated launcher updater still accepts launcher-4 as a normal update.
+This is a standalone Windows/Proton launcher release. Its independent update version is 4, and it does not change the latest downgrader release. This is a stable release. Launcher tags use `make_latest: false`, so the repository’s Latest download continues to point to the stable downgrader.

@@ -99,6 +99,11 @@ func (b *codeEditorBody) TappedSecondary(p *fyne.PointEvent) {
 		return
 	}
 	clip := fyne.CurrentApp().Clipboard()
+	if e.ReadOnly {
+		menu := fyne.NewMenu("", fyne.NewMenuItem("Copy", func() { e.TypedShortcut(&fyne.ShortcutCopy{Clipboard: clip}) }), fyne.NewMenuItem("Select all", func() { e.SelectRange(0, len(e.buffer)) }))
+		widget.NewPopUpMenu(menu, c).ShowAtRelativePosition(p.Position, b)
+		return
+	}
 	menu := fyne.NewMenu("", fyne.NewMenuItem("Undo", e.Undo), fyne.NewMenuItem("Redo", e.Redo), fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Cut", func() { e.TypedShortcut(&fyne.ShortcutCut{Clipboard: clip}) }), fyne.NewMenuItem("Copy", func() { e.TypedShortcut(&fyne.ShortcutCopy{Clipboard: clip}) }), fyne.NewMenuItem("Paste", func() { e.TypedShortcut(&fyne.ShortcutPaste{Clipboard: clip}) }), fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Select all", func() { e.SelectRange(0, len(e.buffer)) }))
 	widget.NewPopUpMenu(menu, c).ShowAtRelativePosition(p.Position, b)
 }

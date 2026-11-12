@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/service"
 )
@@ -101,7 +102,14 @@ func Supported(name string) bool {
 	}
 	return false
 }
-func (r *Resolver) Resolve(ctx context.Context, name string) (Release, error) {
+func (r *Resolver) Resolve(ctx context.Context, name string) (resolved Release, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.resolve", "mod", name)
+	defer func() {
+		if resultErr == nil {
+			applog.Event(ctx, "DEBUG", "mod.release", "mod", name, "version", resolved.Version, "fingerprint", resolved.Fingerprint, "sha256", resolved.Checksum, "url", applog.URL(resolved.URL), "kind", resolved.ArchiveType, "browser_required", resolved.FileID != "")
+		}
+		finish(resultErr)
+	}()
 	name = canonicalModName(name)
 	var s Source
 	for _, candidate := range Catalog {
@@ -116,6 +124,7 @@ func (r *Resolver) Resolve(ctx context.Context, name string) (Release, error) {
 	if s.Repository != "" {
 		raw := r.GitHubAPI + "/" + s.Repository + "/" + s.Endpoint
 		release, ok := r.cache[raw]
+		applog.Event(ctx, "DEBUG", "mod.metadata", "url", applog.URL(raw), "cache_hit", ok, "asset", s.Asset, "prefix", s.Prefix)
 		if !ok {
 			if e := r.Client.JSON(ctx, raw, &release); e != nil {
 				return Release{}, e
@@ -264,7 +273,9 @@ func shareDownload(body, id string) (string, error) {
 
 // Download routes protected ShareMods packages through the user's browser when
 // available. Both paths retain the reviewed archive checksum verification.
-func (r *Resolver) Download(ctx context.Context, rel Release, destination, checksum string, progress download.Progress) error {
+func (r *Resolver) Download(ctx context.Context, rel Release, destination, checksum string, progress download.Progress) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.download", "source", applog.URL(rel.URL), "destination", destination, "expected_sha256", checksum, "via_browser", rel.FileID != "" && r.BrowserDownload != nil)
+	defer func() { finish(resultErr) }()
 	if rel.FileID != "" && r.BrowserDownload != nil {
 		if err := r.BrowserDownload(ctx, rel.URL, destination, checksum, progress); err != nil {
 			return err
@@ -279,7 +290,9 @@ func (r *Resolver) Download(ctx context.Context, rel Release, destination, check
 		}
 	}
 	if checksum != "" {
-		return checkSHA(destination, checksum)
+		err := checkSHA(destination, checksum)
+		applog.Event(ctx, "DEBUG", "mod.archive.verify", "expected_sha256", checksum, "matched", err == nil, "error", err)
+		return err
 	}
 	return nil
 }

@@ -11,6 +11,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 )
 
 // Relative rejects paths that are unsafe on either supported platform.
@@ -76,7 +78,14 @@ func (r Reader) Read(p []byte) (int, error) {
 func Copy(ctx context.Context, w io.Writer, r io.Reader) (int64, error) {
 	return io.CopyBuffer(w, Reader{ctx, r}, make([]byte, 256*1024))
 }
-func Hash(ctx context.Context, p string) (string, error) {
+func Hash(ctx context.Context, p string) (digest string, resultErr error) {
+	ctx, finish := applog.Begin(ctx, "file.hash", "path", p, "algorithm", "md5")
+	defer func() {
+		if resultErr == nil {
+			applog.Event(ctx, "DEBUG", "file.digest", "md5", digest)
+		}
+		finish(resultErr)
+	}()
 	f, e := os.Open(p)
 	if e != nil {
 		return "", e
@@ -91,7 +100,9 @@ func Hash(ctx context.Context, p string) (string, error) {
 
 // Write commits a sibling temporary file only when writing and cancellation
 // checks succeed. Rename replaces files on the supported Windows/Unix systems.
-func Write(ctx context.Context, dst string, mode os.FileMode, write func(io.Writer) error) error {
+func Write(ctx context.Context, dst string, mode os.FileMode, write func(io.Writer) error) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "file.write", "destination", dst, "mode", mode.String())
+	defer func() { finish(resultErr) }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -123,7 +134,9 @@ func Write(ctx context.Context, dst string, mode os.FileMode, write func(io.Writ
 	}
 	return os.Rename(tmp, dst)
 }
-func CopyFile(ctx context.Context, src, dst string) error {
+func CopyFile(ctx context.Context, src, dst string) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "file.copy", "source", src, "destination", dst)
+	defer func() { finish(resultErr) }()
 	f, e := os.Open(src)
 	if e != nil {
 		return e
@@ -136,5 +149,6 @@ func CopyFile(ctx context.Context, src, dst string) error {
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("not a regular file: %s", src)
 	}
+	applog.Event(ctx, "DEBUG", "file.copy.size", "bytes", st.Size())
 	return Write(ctx, dst, st.Mode(), func(w io.Writer) error { _, e := Copy(ctx, w, f); return e })
 }

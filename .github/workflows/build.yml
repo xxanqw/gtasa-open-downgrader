@@ -33,7 +33,7 @@ jobs:
           if [[ "$GITHUB_REF_NAME" =~ ^launcher-([1-9][0-9]{0,19})$ ]]; then
             [[ "${BASH_REMATCH[1]}" == "$launcher_version" ]] || { echo 'Launcher tag must match internal/launcherversion/VERSION'; exit 1; }
             echo 'kind=launcher' >> "$GITHUB_OUTPUT"
-            echo 'prerelease=true' >> "$GITHUB_OUTPUT"
+            echo 'prerelease=false' >> "$GITHUB_OUTPUT"
           elif [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
             echo 'kind=downgrader' >> "$GITHUB_OUTPUT"
             if [[ "$GITHUB_REF_NAME" == *-* ]]; then
@@ -112,7 +112,7 @@ jobs:
             dist/gtasa-open-downgrader-linux-offline.AppImage
             dist/THIRD-PARTY-NOTICES.zip
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: error
 
   windows:
@@ -155,7 +155,7 @@ jobs:
             dist/gtasa-open-downgrader-windows-offline.exe
             dist/THIRD-PARTY-NOTICES.zip
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: error
 
   launcher:
@@ -194,7 +194,7 @@ jobs:
             dist/gta-sa.exe
             dist/THIRD-PARTY-NOTICES.zip
             dist/SHA256SUMS
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: error
 
   publish-downgrader:
@@ -202,6 +202,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
@@ -234,12 +235,24 @@ jobs:
           body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+      - name: Remove published build intermediates
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].id' |
+            while read -r artifact_id; do
+              gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$artifact_id"
+            done
 
   publish-launcher:
     needs: [metadata, launcher]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.1
@@ -250,9 +263,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Steam launcher ${{ needs.metadata.outputs.launcher_version }}
-          # GitHub prerelease + explicit make_latest=false isolates this channel.
-          # The first-party launcher updater intentionally accepts launcher-N tags.
-          prerelease: true
+          # Stable launcher releases stay separate from the Latest downgrader.
+          prerelease: false
           make_latest: 'false'
           files: |
             dist/gta-sa.exe
@@ -265,3 +277,14 @@ jobs:
           body_path: ${{ hashFiles(format('docs/releases/{0}.md', github.ref_name)) != '' && format('docs/releases/{0}.md', github.ref_name) || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+      - name: Remove published build intermediates
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].id' |
+            while read -r artifact_id; do
+              gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$artifact_id"
+            done

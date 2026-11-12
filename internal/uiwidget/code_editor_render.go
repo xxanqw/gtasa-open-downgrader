@@ -35,7 +35,11 @@ func (e *CodeEditor) metrics() codeMetrics {
 		e.metricFont = font
 	}
 	m := e.metricCache
+	m.height += max(0, e.LineSpacing)
 	m.gutter = max(float32(48), float32(len(strconv.Itoa(len(e.starts)))+2)*m.cell+8)
+	if e.HideLineNumbers {
+		m.gutter = 0
+	}
 	return m
 }
 
@@ -45,6 +49,7 @@ type codeCluster struct {
 	text       string
 }
 type codeLine struct {
+	ready    bool
 	text     string
 	clusters []codeCluster
 	width    float32
@@ -68,56 +73,99 @@ func (e *CodeEditor) buildLines() {
 		}
 	}
 	e.layouts = make([]codeLine, len(e.starts))
+	if e.ReadOnly {
+		e.renderedRows = make(map[int]struct{})
+	}
 	e.widest = 0
-	var sg segmenter.Segmenter
 	for row, start := range e.starts {
 		runes := e.buffer[start:e.lineEnd(row)]
 		line := codeLine{text: string(runes)}
 		if cached, ok := previous[line.text]; ok {
-			e.layouts[row] = cached
-			e.widest = max(e.widest, cached.width)
-			continue
-		}
-		if e.Highlight != nil {
-			line.tokens = e.Highlight(line.text)
-		}
-		sg.Init(runes)
-		it := sg.GraphemeIterator()
-		x := float32(0)
-		for it.Next() {
-			g := it.Grapheme()
-			text := string(g.Text)
-			width := float32(0)
-			if text == "\t" {
-				stop := float32(max(1, e.TabWidth)) * m.cell
-				count := max(1, int(math.Round(float64((stop-float32(math.Mod(float64(x), float64(stop))))/m.cell))))
-				text = strings.Repeat(" ", count)
-				width = float32(count) * m.cell
-			} else {
-				var cached bool
-				width, cached = e.measurements[text]
-				if !cached {
-					width = fyne.MeasureText(text, m.size, m.style).Width
-					if len(e.measurements) < 1024 && len(text) <= 24 {
-						e.measurements[text] = width
-					}
+			line = cached
+		} else {
+			// ASCII technical logs have exact monospace widths. Keep only their
+			// widths until visible; Unicode retains full grapheme measurement.
+			ascii, columns := e.ReadOnly, 0
+			for _, r := range runes {
+				if r == '\t' {
+					columns += max(1, e.TabWidth) - columns%max(1, e.TabWidth)
+				} else if r >= 32 && r < 127 {
+					columns++
+				} else {
+					ascii = false
+					break
 				}
 			}
-			line.clusters = append(line.clusters, codeCluster{start: g.Offset, end: g.Offset + len(g.Text), x: x, width: width, text: text})
-			x += width
+			if ascii {
+				line.width = float32(columns) * m.cell
+			} else {
+				e.measureLine(&line, runes, m, !e.ReadOnly)
+			}
 		}
-		line.width = x
 		e.layouts[row] = line
-		e.widest = max(e.widest, x)
+		if e.ReadOnly && line.ready {
+			e.renderedRows[row] = struct{}{}
+		}
+		e.widest = max(e.widest, line.width)
 	}
 	e.layoutRevision = e.revision
 	e.layoutSize = m.size
 	e.layoutTabWidth = e.TabWidth
 }
+func (e *CodeEditor) measureLine(line *codeLine, runes []rune, m codeMetrics, geometry bool) {
+	var sg segmenter.Segmenter
+	if geometry && e.Highlight != nil {
+		line.tokens = e.Highlight(line.text)
+	}
+	sg.Init(runes)
+	it := sg.GraphemeIterator()
+	x := float32(0)
+	for it.Next() {
+		g := it.Grapheme()
+		text := string(g.Text)
+		width := float32(0)
+		if text == "\t" {
+			stop := float32(max(1, e.TabWidth)) * m.cell
+			count := max(1, int(math.Round(float64((stop-float32(math.Mod(float64(x), float64(stop))))/m.cell))))
+			text = strings.Repeat(" ", count)
+			width = float32(count) * m.cell
+		} else {
+			var cached bool
+			width, cached = e.measurements[text]
+			if !cached {
+				width = fyne.MeasureText(text, m.size, m.style).Width
+				if len(e.measurements) < 1024 && len(text) <= 24 {
+					e.measurements[text] = width
+				}
+			}
+		}
+		if geometry {
+			line.clusters = append(line.clusters, codeCluster{start: g.Offset, end: g.Offset + len(g.Text), x: x, width: width, text: text})
+		}
+		x += width
+	}
+	line.width = x
+	line.ready = geometry
+}
+
+func (e *CodeEditor) renderedLine(row int) codeLine {
+	line := &e.layouts[row]
+	if !line.ready {
+		e.measureLine(line, e.buffer[e.starts[row]:e.lineEnd(row)], e.metrics(), true)
+	}
+	if e.ReadOnly {
+		if e.renderedRows == nil {
+			e.renderedRows = make(map[int]struct{})
+		}
+		e.renderedRows[row] = struct{}{}
+	}
+	return *line
+}
+
 func (e *CodeEditor) columnX(row, column int) float32 {
 	e.buildLines()
 	row = max(0, min(row, len(e.layouts)-1))
-	line := e.layouts[row]
+	line := e.renderedLine(row)
 	index := sort.Search(len(line.clusters), func(i int) bool { return line.clusters[i].end > column })
 	if index < len(line.clusters) {
 		return line.clusters[index].x
@@ -127,7 +175,7 @@ func (e *CodeEditor) columnX(row, column int) float32 {
 func (e *CodeEditor) columnAt(row int, x float32) int {
 	e.buildLines()
 	row = max(0, min(row, len(e.layouts)-1))
-	line := e.layouts[row]
+	line := e.renderedLine(row)
 	index := sort.Search(len(line.clusters), func(i int) bool { return line.clusters[i].x+line.clusters[i].width/2 >= x })
 	if index < len(line.clusters) {
 		return line.clusters[index].start
@@ -139,7 +187,9 @@ func (e *CodeEditor) pointOffset(p fyne.Position) int {
 	row := max(0, min(int(math.Floor(float64((p.Y-m.pad)/m.height))), len(e.starts)-1))
 	return e.starts[row] + e.columnAt(row, max(0, p.X-m.pad))
 }
-func (e *CodeEditor) ensureCaret() {
+
+// Updating external text changes scroll geometry without moving the caret.
+func (e *CodeEditor) syncScrollGeometry() {
 	if e.scroll == nil {
 		return
 	}
@@ -153,6 +203,12 @@ func (e *CodeEditor) ensureCaret() {
 		e.scrollMinimum = minimum
 		e.scroll.Refresh()
 	}
+}
+func (e *CodeEditor) ensureCaret() {
+	if e.scroll == nil {
+		return
+	}
+	e.syncScrollGeometry()
 	m := e.metrics()
 	e.CursorRow = max(0, min(e.CursorRow, len(e.starts)-1))
 	e.CursorColumn = max(0, min(e.CursorColumn, e.lineEnd(e.CursorRow)-e.starts[e.CursorRow]))
@@ -204,6 +260,9 @@ func (r *codeEditorRenderer) Destroy() {
 }
 func (r *codeEditorRenderer) MinSize() fyne.Size { return fyne.NewSize(320, 160) }
 func (r *codeEditorRenderer) Objects() []fyne.CanvasObject {
+	if r.editor.HideLineNumbers {
+		return []fyne.CanvasObject{r.background, r.editor.scroll, r.border}
+	}
 	return []fyne.CanvasObject{r.background, r.gutter, r.editor.scroll, r.border}
 }
 func (r *codeEditorRenderer) Layout(s fyne.Size) {
@@ -366,6 +425,16 @@ func (r *codeBodyRenderer) Refresh() {
 	e.buildLines()
 	m := e.metrics()
 	first, last := e.viewport()
+	// Scrolling through a long log must not eventually cache every glyph.
+	if e.ReadOnly {
+		for row := range e.renderedRows {
+			if row < first-100 || row >= last+100 {
+				e.layouts[row].clusters, e.layouts[row].tokens = nil, nil
+				e.layouts[row].ready = false
+				delete(e.renderedRows, row)
+			}
+		}
+	}
 	r.pool.begin()
 	start, end := e.selection()
 	foreground := e.Theme().Color(theme.ColorNameForeground, theme.VariantDark)
@@ -379,7 +448,7 @@ func (r *codeBodyRenderer) Refresh() {
 	left, right := e.scroll.Offset.X, e.scroll.Offset.X+e.scroll.Size().Width
 	for row := first; row < last; row++ {
 		y := m.pad + float32(row)*m.height
-		line := e.layouts[row]
+		line := e.renderedLine(row)
 		if row == e.CursorRow && e.Focused {
 			r.pool.rect(color.NRGBA{R: 36, G: 36, B: 36, A: 255}, fyne.NewPos(left, y), fyne.NewSize(e.scroll.Size().Width, m.height))
 		}

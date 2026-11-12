@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 )
 
@@ -87,7 +88,9 @@ func (w *DownloadWatch) files() (map[string]fileStamp, error) {
 	return files, nil
 }
 
-func (w *DownloadWatch) Wait(ctx context.Context, destination, checksum string, notify func(string)) error {
+func (w *DownloadWatch) Wait(ctx context.Context, destination, checksum string, notify func(string)) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "browser.watch", "directory", w.directory, "filename_pattern", w.names.String(), "destination", destination, "expected_sha256", checksum)
+	defer func() { finish(resultErr) }()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -159,7 +162,9 @@ func (w *DownloadWatch) Wait(ctx context.Context, destination, checksum string, 
 
 // CopyBrowserArchive stages a private, verified copy. User downloads are never
 // moved/deleted, and a changing, substituted, or invalid archive is not committed.
-func CopyBrowserArchive(ctx context.Context, source, destination, checksum string) error {
+func CopyBrowserArchive(ctx context.Context, source, destination, checksum string) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "browser.archive", "source", source, "destination", destination, "expected_sha256", checksum)
+	defer func() { finish(resultErr) }()
 	if checksum != "" {
 		digest, err := hex.DecodeString(checksum)
 		if err != nil || len(digest) != sha256.Size {
@@ -219,7 +224,9 @@ func CopyBrowserArchive(ctx context.Context, source, destination, checksum strin
 		if n != opened.Size() || final.Size() != opened.Size() || !final.ModTime().Equal(opened.ModTime()) || !os.SameFile(current, opened) || !current.Mode().IsRegular() {
 			return fmt.Errorf("download changed while copying; wait for completion")
 		}
-		if checksum != "" && !strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), checksum) {
+		actual := hex.EncodeToString(hash.Sum(nil))
+		applog.Event(ctx, "DEBUG", "browser.archive.verify", "bytes", n, "actual_sha256", actual, "expected_sha256", checksum, "matched", checksum == "" || strings.EqualFold(actual, checksum))
+		if checksum != "" && !strings.EqualFold(actual, checksum) {
 			return fmt.Errorf("download does not match the reviewed package checksum")
 		}
 		return nil

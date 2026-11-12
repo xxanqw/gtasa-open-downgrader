@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/download"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
@@ -106,6 +107,8 @@ func ExtractUpdate(ctx context.Context, root, mod, archive, kind string) error {
 }
 
 func extract(ctx context.Context, root, mod, archive, kind string, update bool) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.extract", "mod", mod, "root", root, "archive", archive, "update", update)
+	defer func() { finish(resultErr) }()
 	mod = canonicalModName(mod)
 	if mod == ExtendedFonts {
 		return importExtended(ctx, root, archive, kind, "")
@@ -188,6 +191,7 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 					return err
 				}
 				if !write {
+					applog.Event(ctx, "DEBUG", "mod.file.preserve", "path", rel, "reason", "existing configuration")
 					continue
 				}
 			}
@@ -199,6 +203,7 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 		}
 		writes = append(writes, rel)
 	}
+	applog.Event(ctx, "DEBUG", "mod.files.plan", "mod", mod, "archive_files", len(files), "writes", writes)
 	var applied []string
 	for _, rel := range writes {
 		dst, err := fsutil.Join(root, rel)
@@ -209,13 +214,14 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 			err = fsutil.CopyFile(ctx, filepath.Join(staged, filepath.FromSlash(rel)), dst)
 		}
 		if err != nil {
+			applog.Event(ctx, "WARN", "mod.rollback.start", "cause", err, "files", applied, "originals", old)
 			var rollbackErrors []error
 			for i := len(applied) - 1; i >= 0; i-- {
 				name := applied[i]
 				target, rollback := fsutil.Join(root, name)
 				if rollback == nil {
 					if existed[name] {
-						rollback = fsutil.CopyFile(context.Background(), filepath.Join(old, filepath.FromSlash(name)), target)
+						rollback = fsutil.CopyFile(context.WithoutCancel(ctx), filepath.Join(old, filepath.FromSlash(name)), target)
 					} else {
 						rollback = os.Remove(target)
 						if os.IsNotExist(rollback) {
@@ -227,6 +233,7 @@ func extract(ctx context.Context, root, mod, archive, kind string, update bool) 
 					rollbackErrors = append(rollbackErrors, rollback)
 				}
 			}
+			applog.Event(ctx, "WARN", "mod.rollback.end", "failed_files", len(rollbackErrors), "originals_retained", len(rollbackErrors) > 0)
 			if len(rollbackErrors) > 0 {
 				keep = true
 				return fmt.Errorf("install: %v; rollback incomplete (%v); original files retained at %s", err, errors.Join(rollbackErrors...), old)
@@ -351,6 +358,7 @@ func (i Installer) updateSelected(ctx context.Context, root string, allowed map[
 			}
 			continue
 		}
+		applog.Event(ctx, "DEBUG", "mod.update.compare", "mod", name, "installed", installed.Fingerprint, "available", latest.Fingerprint, "changed", installed.Fingerprint != latest.Fingerprint)
 		if installed.Fingerprint == latest.Fingerprint {
 			result.Current++
 			if event != nil {
@@ -377,7 +385,7 @@ func (i Installer) updateSelected(ctx context.Context, root string, allowed map[
 		}
 		latest.InstalledAt = time.Now().UTC().Format(time.RFC3339)
 		tracker.Versions[name] = latest
-		if err = tracker.Save(context.Background(), root, i.AppVersion); err != nil {
+		if err = tracker.Save(context.WithoutCancel(ctx), root, i.AppVersion); err != nil {
 			return result, fmt.Errorf("record %s update: %w", name, err)
 		}
 		result.Updated++
@@ -395,6 +403,7 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 	}
 	legacy := tracker.Legacy()
 	names := Selection(selected, tracker)
+	applog.Event(ctx, "DEBUG", "mod.selection", "requested", selected, "with_dependencies", names, "force", force, "legacy_tracker", legacy, "installed", tracker.Installed)
 	if e = checkInterfaceSelection(names, tracker); e != nil {
 		return e
 	}
@@ -492,7 +501,7 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		if !legacy {
 			tracker.Schema = 2
 		}
-		if err = tracker.Save(context.Background(), root, i.AppVersion); err != nil {
+		if err = tracker.Save(context.WithoutCancel(ctx), root, i.AppVersion); err != nil {
 			return err
 		}
 		if event != nil {
@@ -503,9 +512,11 @@ func (i Installer) InstallSelected(ctx context.Context, root string, selected []
 		return e
 	}
 	tracker.Schema = 2
-	return tracker.Save(context.Background(), root, i.AppVersion)
+	return tracker.Save(context.WithoutCancel(ctx), root, i.AppVersion)
 }
-func (i Installer) install(ctx context.Context, r *Resolver, root, name string, rel Release, event Event, update bool) error {
+func (i Installer) install(ctx context.Context, r *Resolver, root, name string, rel Release, event Event, update bool) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.install", "mod", name, "version", rel.Version, "fingerprint", rel.Fingerprint, "update", update, "root", root)
+	defer func() { finish(resultErr) }()
 	if err := platform.RequireGameClosed(); err != nil {
 		return err
 	}
@@ -576,5 +587,5 @@ func Import(ctx context.Context, root, name, archive, version string) error {
 	if !tracker.Legacy() {
 		tracker.Schema = 2
 	}
-	return tracker.Save(context.Background(), root, version)
+	return tracker.Save(context.WithoutCancel(ctx), root, version)
 }

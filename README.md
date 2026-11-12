@@ -1,8 +1,30 @@
 # GTA SA Open Downgrader
 
-A Windows and Linux tool for downgrading GTA San Andreas and installing community fixes. Inspired by the original RockstarNexus Downgrader.
+Downgrade GTA San Andreas, install community fixes, and manage multiplayer clients on Windows and Linux.
 
-**Supported game versions:** NewSteam R2 Global and German → v1.0 US (Hoodlum). Detecting another edition does not mean it can be downgraded.
+**Supported:** NewSteam R2 Global and German → v1.0 US (Hoodlum). Other detected editions are not supported downgrade sources.
+
+## Download
+
+**[Get v0.3.0](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest)** · [Release notes](docs/releases/v0.3.0.md) · [Steam launcher v4](https://github.com/xxanqw/gtasa-open-downgrader/releases/tag/launcher-4)
+
+| Platform | Online | Offline |
+| --- | --- | --- |
+| Windows x64 | `gtasa-open-downgrader-windows.exe` | `gtasa-open-downgrader-windows-offline.exe` |
+| Linux x64 | `gtasa-open-downgrader-linux.AppImage` | `gtasa-open-downgrader-linux-offline.AppImage` |
+
+Offline builds include patches. Mods, multiplayer clients, and updates still need internet access.
+
+## Quick start
+
+1. Close GTA and back up customized files and saves.
+2. Choose the game folder and install or import patches if prompted.
+3. Review the downgrade, apply it, and let verification finish.
+4. Open **Mods** or **Multiplayer** to set up your game.
+
+On Linux, make the AppImage executable before opening it. If FUSE is unavailable, launch with `--appimage-extract-and-run`.
+
+Originals are kept in `backups/`. **Recovery** can restore them; cancelling an operation does not undo completed changes. ShareMods downloads require manual confirmation in your browser. Linux multiplayer support is experimental.
 
 ## Screenshots
 
@@ -17,131 +39,16 @@ A Windows and Linux tool for downgrading GTA San Andreas and installing communit
   </tr>
 </table>
 
-## Download
+## Guides
 
-Get the app from the [latest release](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest).
+- [Usage, mods, multiplayer, and recovery](docs/usage.md)
+- [Troubleshooting and sharing logs](docs/troubleshooting.md)
+- [Build from source](docs/development.md)
+- [Publishing releases](docs/releasing.md)
 
-| Platform | Online | Offline |
-| --- | --- | --- |
-| Windows x64 | `gtasa-open-downgrader-windows.exe` | `gtasa-open-downgrader-windows-offline.exe` |
-| Linux x64 | `gtasa-open-downgrader-linux.AppImage` | `gtasa-open-downgrader-linux-offline.AppImage` |
+Found a problem? Choose **Log → I'm creating an issue on GitHub**, or [open an issue](https://github.com/xxanqw/gtasa-open-downgrader/issues).
 
-The online version downloads patches when needed. The offline version includes them. Downloading mods, multiplayer clients, or updates still requires internet access.
-
-On Windows, run the `.exe`. On Linux:
-
-```bash
-chmod +x gtasa-open-downgrader-linux.AppImage
-./gtasa-open-downgrader-linux.AppImage
-```
-
-If FUSE is unavailable, add `--appimage-extract-and-run`. Linux needs working OpenGL and X11 or Wayland; release builds target Ubuntu 22.04 / glibc 2.35 or newer.
-
-## Downgrade your game
-
-Close GTA and back up your saves and customized mod files before starting.
-
-1. Choose your game folder. The app checks the executable to identify the installation; detected Steam installations are checked automatically.
-2. If patch files are missing, choose **Install patches**, or import [Patches_v2.1.zip](https://files.xxanqw.me/s/ARC9NX3rm5) with **Import patch archive** or through **Tools**. Offline builds already include the patches. The game file check starts automatically once the patches are ready.
-3. Choose **Review downgrade**, check the target folder, edition, affected files, and backup location, then confirm.
-4. Let the verification scan finish. **Mods** and **Multiplayer** unlock once the target files are verified.
-
-Original files are saved in `backups/` inside the game folder. Use **Recovery** to restore them. Cancelling stops further work but does not undo completed changes; an interruption warning remains visible after verification. Routine success is reported in the status bar, without a persistent banner. Restoring downgrade backups does not uninstall mods. Permanent user-data deletion in Recovery also deletes the gallery—copy your user-data folder somewhere safe first.
-
-## Mods
-
-The app offers ASI Loader, ModLoader, SilentPatch, Widescreen Fixes, Windowed Mode, Open Limit Adjuster, LOD Vegetation, Framerate Vigilante, GInput, SkyGFX, Project 2DFX, and optional interface, font, and translation packages.
-
-Select rows in **Mods**, then use **Install** or **Update selected**. Selecting mods reveals **Reinstall**, **Remove**, and **Clear** directly in the header. Required dependencies are selected automatically and stay locked while needed. Expand a row with its chevron to view versions, requirements, download details, caveats, and the official source without leaving the list. The settings gear edits supported INI files. Keyboard users can select with Space or Enter and expand or collapse with the right and left arrows.
-
-Mod removals are backed up under `backups/mods/`. Reinstallation can overwrite customized settings.
-
-ShareMods downloads use one queue for the selected mods, including required helpers. Choose **Open remaining pages**, finish the ShareMods download steps in your browser, and save to the watched folder. Archives can finish in any order; shared packages are downloaded once. The app detects completed matching archives, checks reviewed package checksums where available, and starts installation automatically when all required archives are ready. Verified packages are cached for reuse, and your browser downloads are kept. Each row offers **Open page** and **Use existing archive…** for retrying or selecting an archive you already have. You can change the watched folder from the queue; start new downloads after changing folders. Cancel stops waiting, not the browser downloads. **Tools → Import mod archive** remains available for individual imports.
-
-## Multiplayer and Steam Deck
-
-Use **Multiplayer** to manage SA-MP, open.mp, MTA, and the optional Steam launcher. The launcher adds a mode chooser to Steam while keeping the real game executable intact. Use **Check updates** to download a verified launcher release, or **Remove & restore** to undo its installation. Close GTA and the launcher before updating. The launcher's **Settings** menu also offers an update check; installation is handled by the downgrader. **Launch this mode automatically next time** saves your mode. Future launches show a five-second countdown with **Choose another mode** as the safe default; choose it for a one-time bypass, or uncheck automatic launch to disable it.
-
-On native Windows, installers that require administrator access open a UAC approval prompt; the downgrader itself stays unelevated. Finish or close an elevated installer before cancellation can complete.
-
-On Linux and Steam Deck, clients use the game's detected Steam Proton installation and prefix. Follow the launch options and setup instructions shown in the app. open.mp uses a built-in server browser under Proton.
-
-**Linux multiplayer support is experimental.** Server and anti-cheat compatibility is not guaranteed. MTA 1.6 is the default; MTA 1.7 is an opt-in development build. Keep their installation folders separate.
-
-## Build from source
-
-Requires **Go 1.25+**, an **amd64** target, and a C compiler for Fyne's CGO desktop driver. Run commands from the repository root. Shell build scripts also require Python 3 to validate third-party notices.
-
-### Linux
-
-On Ubuntu/Debian:
-
-```bash
-sudo apt-get install gcc pkg-config libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev liblzma5 python3
-go mod download
-go run ./cmd/downgrader
-```
-
-Build the online binary:
-
-```bash
-./scripts/build.sh online
-```
-
-### Windows
-
-Install Go and MSYS2's MinGW-w64 GCC toolchain. Put `gcc` and `windres` on `PATH`, then run in PowerShell:
-
-```powershell
-$env:CGO_ENABLED = "1"
-$env:CC = "gcc"
-$env:WINDRES = "windres"
-go mod download
-go run ./cmd/downgrader
-.\scripts\build.ps1 online
-```
-
-Build outputs go to `dist/`. Windows builds also produce the Steam launcher, `gta-sa.exe`. For Linux-to-Windows cross-builds and AppImage packaging, see the [release workflow](.github/workflows/build.yml) and [launcher build script](scripts/build-launcher.sh).
-
-### Offline builds
-
-Download and validate the patch assets, then build:
-
-```bash
-go run ./cmd/patch-assets
-./scripts/build.sh offline
-```
-
-On Windows, use `.\scripts\build.ps1 offline` for the second command. To import a local patch ZIP instead, run `go run ./cmd/patch-assets -archive "/path/to/Patches.zip"`. Allow several GiB of free disk space.
-
-To generate patches from your own clean game copies, use [generate_patches.sh](generate_patches.sh) or [generate_patches.ps1](generate_patches.ps1). Do not commit game files or generated patches.
-
-### Release channels
-
-Release builds run only on tag pushes, not branch pushes or manual dispatch:
-
-- `v0.3.0-rc.3`: downgrader prerelease; never becomes Latest or an automatic update.
-- `v0.3.0`: stable downgrader release.
-- `launcher-4`: launcher-only release, using the independent integer version in `internal/launcherversion/VERSION`. These releases never become the repository's Latest release.
-
-Downgrader releases contain only Windows executables, Linux AppImages, notices, and checksums. Standalone Linux build inputs and `gta-sa.exe` are not published there; the launcher has its own release channel.
-
-Launcher update checks use only `launcher-N` releases; downgrader checks use only stable `vX.Y.Z` releases. `LAUNCHER_VERSION` controls launcher stamping independently of the downgrader's `VERSION`.
-
-### Checks
-
-```bash
-go test -tags ci -race ./...
-go vet -tags ci ./...
-```
-
-The `ci` tag uses Fyne's headless driver; do not use it for desktop release builds.
-
-Actions caches only Go module downloads. Compiled objects, including embedded offline patch data, stay on the temporary runner. Only default-branch runs save the shared module cache; release tags and pull requests restore it without creating per-release copies.
-
-## Report a problem
-
-[Open an issue](https://github.com/xxanqw/gtasa-open-downgrader/issues) with your OS, game edition, app version, and the log exported from **Log**. Do not upload copyrighted game files.
+The previous Python release is preserved on the [`v0.2.3` branch](https://github.com/xxanqw/gtasa-open-downgrader/tree/v0.2.3).
 
 ## License
 

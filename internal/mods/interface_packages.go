@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 )
@@ -363,7 +364,9 @@ func preflightInterface(root, name string) error {
 
 // Replace one owned directory, with durable outside-autoload backup and atomic
 // tracker write. Hooks exist only for deterministic cancellation/I/O fault tests.
-func commitInterface(ctx context.Context, root, name, staged string, rel Release, version string, closed func() error, save func(Tracker) error) error {
+func commitInterface(ctx context.Context, root, name, staged string, rel Release, version string, closed func() error, save func(Tracker) error) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "mod.commit", "mod", name, "root", root, "staged", staged, "version", rel.Version)
+	defer func() { finish(resultErr) }()
 	if err := validateInterfaceFolder(staged, name); err != nil {
 		return err
 	}
@@ -452,6 +455,7 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 	previous := filepath.Join(backup, "previous")
 	moved, active := false, false
 	rollback := func(cause error) error {
+		applog.Event(ctx, "WARN", "mod.rollback.start", "cause", cause, "backup", backup)
 		var failures []error
 		if active {
 			if e := os.RemoveAll(target); e != nil {
@@ -463,6 +467,7 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 				failures = append(failures, e)
 			}
 		}
+		applog.Event(ctx, "WARN", "mod.rollback.end", "failed_files", len(failures), "originals_retained", len(failures) > 0)
 		if len(failures) > 0 {
 			return fmt.Errorf("%w; rollback incomplete %v; originals at %s", cause, errors.Join(failures...), backup)
 		}
@@ -479,6 +484,7 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 		if err = os.Rename(target, previous); err != nil {
 			return rollback(err)
 		}
+		applog.Event(ctx, "DEBUG", "mod.backup.move", "source", target, "destination", previous)
 		moved = true
 	} else if !os.IsNotExist(err) {
 		return rollback(err)
@@ -495,6 +501,7 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 	if err = os.Rename(incoming, target); err != nil {
 		return rollback(err)
 	}
+	applog.Event(ctx, "DEBUG", "mod.activate", "source", incoming, "destination", target)
 	active = true
 	if !t.Has(name) {
 		t.Installed = append(t.Installed, name)
@@ -511,7 +518,7 @@ func commitInterface(ctx context.Context, root, name, staged string, rel Release
 		return rollback(err)
 	}
 	if save == nil {
-		save = func(t Tracker) error { return t.Save(context.Background(), root, version) }
+		save = func(t Tracker) error { return t.Save(context.WithoutCancel(ctx), root, version) }
 	}
 	if err = save(t); err != nil {
 		return rollback(err)

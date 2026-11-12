@@ -13,7 +13,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
-	modpkg "github.com/xxanqw/gtasa-open-downgrader/internal/mods"
 	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
@@ -92,18 +91,7 @@ func (w *Window) buildHub() fyne.CanvasObject {
 	w.multiplayerBody = container.NewVBox(hubText("Scan a game to view multiplayer options."))
 	multiplayerPage := w.hubPage(w.multiplayerBody)
 
-	restore := appwidget.NewButtonWithIcon("Restore original files", theme.HistoryIcon(), func() { w.runHubTool("Restore downgrade backups") })
-	deleteBackups := appwidget.NewButton("Delete backups", func() { w.runHubTool("Delete downgrade backups") })
-	clearData := appwidget.NewButton("Delete saves, settings & gallery…", func() { w.runHubTool("Clear saves, settings and gallery") })
-	w.recoveryActions = []fyne.Disableable{restore, deleteBackups, clearData}
-	w.legacyRussianRemove = appwidget.NewButton("Remove legacy SanLtd Russian", func() { w.uninstallMod(modpkg.SanLtdRussian) })
-	w.legacyRussianSection = hubSection("Retired translation", hubText("SanLtd Russian is no longer offered. ELL includes Russian. Existing files are left untouched unless you remove them here."), w.legacyRussianRemove)
-	w.legacyRussianSection.Hide()
-	recovery := w.hubPage(
-		hubSection("Downgrade backups", w.hubBackups, container.NewHBox(restore, deleteBackups)),
-		hubSection("Danger zone: permanent deletion", hubText("Deleting saves, settings and gallery cannot be undone. Copy your user-data folder to a safe location first."), container.NewHBox(clearData)),
-		w.legacyRussianSection,
-	)
+	recovery := w.buildRecoveryPage()
 	tools := w.buildToolsPage()
 	about := w.buildAboutPage()
 
@@ -373,9 +361,9 @@ func (w *Window) refreshHub() {
 		}
 	}
 	if !ready {
-		w.hubBackups.SetText("Scan a game to check for backups.")
+		w.hubBackups.SetText("Choose and scan a game folder to see recovery options.")
 	} else if backups {
-		w.hubBackups.SetText("Original files are stored under backups/ in this game folder. Restore does not remove installed mods.")
+		w.hubBackups.SetText("Original-file backups are available in this game folder.")
 	} else {
 		w.hubBackups.SetText("No downgrade backups found in this game folder.")
 	}

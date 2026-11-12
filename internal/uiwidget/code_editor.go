@@ -33,6 +33,9 @@ type CodeEditor struct {
 	Highlight                    func(string) []CodeToken
 	MaxBytes, MaxLines, TabWidth int
 	FontSize                     float32
+	LineSpacing                  float32
+	HideLineNumbers              bool
+	ReadOnly                     bool
 	Overwrite                    bool
 	Focused                      bool
 	caretVisible                 bool
@@ -62,6 +65,7 @@ type CodeEditor struct {
 	metricFont                   fyne.Resource
 	scrollMinimum                fyne.Size
 	measurements                 map[string]float32
+	renderedRows                 map[int]struct{}
 	layouts                      []codeLine
 	widest                       float32
 	pointerHandled, dragging     bool
@@ -152,7 +156,7 @@ func (e *CodeEditor) MoveCursor(offset int, extend bool) {
 	e.keepX = false
 	e.moved()
 }
-func (e *CodeEditor) AcceptsTab() bool { return true }
+func (e *CodeEditor) AcceptsTab() bool { return !e.ReadOnly }
 func (e *CodeEditor) FocusGained() {
 	e.Focused = true
 	e.shift = false
@@ -237,7 +241,7 @@ func (e *CodeEditor) reject(message string) {
 	}
 }
 func (e *CodeEditor) replace(start, end int, text string, typing bool) bool {
-	if e.Disabled() {
+	if e.Disabled() || e.ReadOnly {
 		return false
 	}
 	text = strings.ReplaceAll(text, "\r\n", "\n")
@@ -299,10 +303,10 @@ func (e *CodeEditor) apply(start, end int, text []rune) {
 	e.reindex()
 	e.revision++
 }
-func (e *CodeEditor) CanUndo() bool { return !e.Disabled() && len(e.history) > 0 }
-func (e *CodeEditor) CanRedo() bool { return !e.Disabled() && len(e.redo) > 0 }
+func (e *CodeEditor) CanUndo() bool { return !e.Disabled() && !e.ReadOnly && len(e.history) > 0 }
+func (e *CodeEditor) CanRedo() bool { return !e.Disabled() && !e.ReadOnly && len(e.redo) > 0 }
 func (e *CodeEditor) Undo() {
-	if e.Disabled() || len(e.history) == 0 {
+	if e.Disabled() || e.ReadOnly || len(e.history) == 0 {
 		return
 	}
 	a := e.history[len(e.history)-1]
@@ -317,7 +321,7 @@ func (e *CodeEditor) Undo() {
 	e.changed()
 }
 func (e *CodeEditor) Redo() {
-	if e.Disabled() || len(e.redo) == 0 {
+	if e.Disabled() || e.ReadOnly || len(e.redo) == 0 {
 		return
 	}
 	a := e.redo[len(e.redo)-1]
@@ -548,7 +552,7 @@ func (e *CodeEditor) TypedShortcut(s fyne.Shortcut) {
 			sh.Clipboard.SetContent(e.SelectedText())
 		}
 	case *fyne.ShortcutCut:
-		if !e.Disabled() && sh.Clipboard != nil && e.SelectedText() != "" {
+		if !e.Disabled() && !e.ReadOnly && sh.Clipboard != nil && e.SelectedText() != "" {
 			sh.Clipboard.SetContent(e.SelectedText())
 			e.InsertText("")
 		}

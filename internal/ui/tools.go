@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"net/url"
@@ -42,63 +41,80 @@ func (w *Window) launchOptions() {
 	}})
 }
 func (w *Window) buildToolsPage() fyne.CanvasObject {
-	groups := []struct {
-		title   string
-		buttons []fyne.CanvasObject
-	}{{title: "Patch assets"}, {title: "Game adjustments & mods"}, {title: "System integration"}}
+	buttons := map[string]*appwidget.Button{}
 	for _, action := range w.toolActions() {
-		// Recovery owns destructive backup and user-data operations.
 		switch action.label {
 		case "Restore downgrade backups", "Delete downgrade backups", "Clear saves, settings and gallery":
 			continue
 		}
-		group, label := toolPresentation(action.label)
 		name := action.label
+		label := toolLabel(name)
 		button := appwidget.NewButton(label, func() { w.runHubTool(name) })
+		buttons[name] = button
 		w.controls = append(w.controls, button)
 		if toolNeedsDowngrade(name) {
 			w.postDowngradeActions = append(w.postDowngradeActions, button)
 		}
-		groups[group].buttons = append(groups[group].buttons, button)
 	}
-	sections := make([]fyne.CanvasObject, 0, len(groups)*2)
-	for _, group := range groups {
-		if len(group.buttons) == 0 {
-			continue
-		}
-		sections = append(sections, hubSection(group.title, container.NewGridWithColumns(2, group.buttons...)))
+	buttons["Download / refresh patch assets"].SetText("Download")
+	buttons["Download / refresh patch assets"].AccessibleLabel = "Download or update patch files"
+	buttons["Import Patches_v2.1.zip"].SetText("Import ZIP…")
+	buttons["Import Patches_v2.1.zip"].AccessibleLabel = "Import patch archive"
+	buttons["Select an existing Patches folder"].SetText("Use folder…")
+	buttons["Select an existing Patches folder"].AccessibleLabel = "Select an existing patch folder"
+	sections := []fyne.CanvasObject{
+		utilityHeading("Tools"),
+		utilitySection("Game & packages",
+			utilityRow("Patch files", "Download the current patches, import a ZIP, or use an existing folder.", buttons["Download / refresh patch assets"], buttons["Import Patches_v2.1.zip"], buttons["Select an existing Patches folder"]),
+			utilityRow("4GB memory support", "Allow the game executable to use more memory. Original files are backed up.", buttons["Apply 4GB / Large Address Aware flag"]),
+			utilityRow("Mod archive", "Install a matching official ZIP or 7z package from your computer.", buttons["Import mod archive (ZIP / 7z)"])),
 	}
-	openFolder := appwidget.NewButtonWithIcon("Open downgrader folder", theme.FolderOpenIcon(), w.openDowngraderFolder)
+	var system []fyne.CanvasObject
+	if button := buttons["Steam / Proton launch options"]; button != nil {
+		system = append(system, utilityRow("Steam / Proton", "Copy the launch options needed by the game's ASI loader.", button))
+	}
+	if button := buttons["Repair installation path in Registry"]; button != nil {
+		system = append(system, utilityRow("Registry path", "Point Windows to the selected GTA installation.", button))
+	}
+	if button := buttons["Create desktop shortcut"]; button != nil {
+		system = append(system, utilityRow("Desktop shortcut", "Create a shortcut for the selected GTA installation.", button))
+	}
+
+	openFolder := appwidget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), w.openDowngraderFolder)
+	openFolder.AccessibleLabel = "Open downgrader folder"
 	w.controls = append(w.controls, openFolder)
-	sections = append(sections, hubSection("Application", container.NewGridWithColumns(2, w.updateButton, openFolder)))
+	system = append(system,
+		utilityRow("App updates", "Check for a newer stable downgrader release.", w.updateButton),
+		utilityRow("Downgrader folder", "Open the cache containing downloaded patches and mod packages.", openFolder))
+	sections = append(sections, utilitySection("Application & system", system...))
 	return w.hubPage(sections...)
 }
-func toolPresentation(label string) (int, string) {
+func toolLabel(label string) string {
 	switch label {
 	case "Download / refresh patch assets":
-		return 0, "Download / update patches"
+		return "Download / update patches"
 	case "Import Patches_v2.1.zip":
-		return 0, "Import Patches_v2.1.zip"
+		return "Import Patches_v2.1.zip"
 	case "Select an existing Patches folder":
-		return 0, "Select patches folder"
+		return "Select patches folder"
 	case "Apply 4GB / Large Address Aware flag":
-		return 1, "Apply 4GB patch"
+		return "Apply 4GB patch"
 	case "Restore downgrade backups":
-		return 1, "Restore original files"
+		return "Restore original files"
 	case "Delete downgrade backups":
-		return 1, "Delete backups"
+		return "Delete backups"
 	case "Clear saves, settings and gallery":
-		return 1, "Clear saves & settings"
+		return "Clear saves & settings"
 	case "Import mod archive (ZIP / 7z)":
-		return 1, "Import mod archive"
+		return "Import mod archive"
 	case "Repair installation path in Registry":
-		return 2, "Repair Registry path"
+		return "Repair Registry path"
 	case "Create desktop shortcut":
-		return 2, "Create desktop shortcut"
+		return "Create desktop shortcut"
 	case "Steam / Proton launch options":
-		return 2, "Steam launch options"
+		return "Steam launch options"
 	default:
-		return 2, label
+		return label
 	}
 }
 func (w *Window) toolActions() []toolAction {

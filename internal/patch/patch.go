@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/xxanqw/gtasa-open-downgrader/internal/applog"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/entrypoint"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/game"
@@ -22,10 +23,13 @@ type Progress func(index int, status, message string)
 type Result struct{ Succeeded, Failed int }
 type Runner func(context.Context, string, ...string) error
 
-func Run(ctx context.Context, bin string, args ...string) error {
+func Run(ctx context.Context, bin string, args ...string) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "patch.command", "executable", bin, "args", args)
+	defer func() { finish(resultErr) }()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	platform.HideConsole(cmd)
 	out, e := cmd.CombinedOutput()
+	applog.Event(ctx, "DEBUG", "patch.command.output", "output", string(out), "error", e)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -90,7 +94,9 @@ func (e Engine) Apply(ctx context.Context, root, assets string, m game.Manifest,
 	}
 	return result, errors.Join(failures...)
 }
-func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File) error {
+func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "patch.file", "path", f.Path, "action", f.Action, "target_md5", f.TargetHash)
+	defer func() { finish(resultErr) }()
 	src, err := game.Source(root, f.Path)
 	if err != nil {
 		return err
@@ -105,7 +111,9 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 	} else if !entrypoint.MetadataPresent(root) {
 		targets = append(targets, game.OtherEXE(filepath.Base(src)))
 	}
+	applog.Event(ctx, "DEBUG", "patch.source", "path", src, "md5", h, "expected_md5", f.SourceHash, "delta", f.PatchAsset(h), "targets", targets)
 	if h == f.TargetHash || game.IsEXE(f.Path) && h == game.LAAHash {
+		applog.Event(ctx, "DEBUG", "patch.skip", "reason", "already at target")
 		// Already downgraded: create only a missing executable alias.
 		if len(targets) == 2 {
 			dst, err := fsutil.Join(root, targets[1])
@@ -157,6 +165,7 @@ func (e Engine) applyFile(ctx context.Context, root, assets string, f game.File)
 	if err != nil {
 		return err
 	}
+	applog.Event(ctx, "DEBUG", "patch.verify", "actual_md5", actual, "expected_md5", f.TargetHash, "matched", actual == f.TargetHash)
 	if actual != f.TargetHash {
 		return fmt.Errorf("output hash mismatch: got %s, expected %s", actual, f.TargetHash)
 	}
@@ -204,7 +213,9 @@ func readIndex(root string) (map[string]original, error) {
 	}
 	return m, nil
 }
-func Backup(ctx context.Context, root, rel string) error {
+func Backup(ctx context.Context, root, rel string) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "backup.file", "root", root, "path", rel)
+	defer func() { finish(resultErr) }()
 	src, e := fsutil.Join(root, rel)
 	if e != nil {
 		return e
@@ -218,6 +229,7 @@ func Backup(ctx context.Context, root, rel string) error {
 		return e
 	}
 	if _, ok := m[rel]; ok {
+		applog.Event(ctx, "DEBUG", "backup.skip", "reason", "already indexed")
 		return nil
 	}
 	existed := false
@@ -236,6 +248,7 @@ func Backup(ctx context.Context, root, rel string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	applog.Event(ctx, "DEBUG", "backup.record", "destination", dst, "original_existed", existed)
 	m[rel] = original{existed}
 	data, e := json.MarshalIndent(m, "", "  ")
 	if e != nil {
@@ -247,7 +260,9 @@ func Backup(ctx context.Context, root, rel string) error {
 	}
 	return fsutil.Write(ctx, idx, 0644, func(w io.Writer) error { _, e := w.Write(data); return e })
 }
-func Revert(ctx context.Context, root string, progress func(int, int)) error {
+func Revert(ctx context.Context, root string, progress func(int, int)) (resultErr error) {
+	ctx, finish := applog.Begin(ctx, "backup.restore", "root", root)
+	defer func() { finish(resultErr) }()
 	backup, e := fsutil.Join(root, "backups")
 	if e != nil {
 		return e
@@ -310,6 +325,7 @@ func Revert(ctx context.Context, root string, progress func(int, int)) error {
 		if e != nil {
 			return e
 		}
+		applog.Event(ctx, "DEBUG", "backup.restore.file", "path", rel, "original_existed", m[rel].Existed)
 		if m[rel].Existed {
 			src, e := fsutil.Join(backup, rel)
 			if e != nil {

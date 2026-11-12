@@ -114,3 +114,22 @@ func TestCaptureUnifiedProgressAcrossViews(t *testing.T) {
 	w.setStatus("Waiting for a completed ShareMods archive")
 	captureUX(t, w, "progress-unknown")
 }
+
+func TestProgressVisibilityDoesNotMoveFooter(t *testing.T) {
+	w := newTestWindow(t)
+	w.window.Resize(fyne.NewSize(940, 640))
+	w.setStatus("Ready")
+	w.refreshEnabled()
+	position := w.app.Driver().AbsolutePositionForObject(w.status)
+	height := w.footer.Size().Height
+	for _, busy := range []bool{true, false, true, false} {
+		w.busy = busy
+		w.refreshProgressFooter()
+		if got := w.app.Driver().AbsolutePositionForObject(w.status); got != position {
+			t.Fatalf("progress visibility moved footer status: %v -> %v", position, got)
+		}
+		if got := w.footer.Size().Height; got != height {
+			t.Fatalf("progress visibility changed footer height: %v -> %v", height, got)
+		}
+	}
+}
