@@ -8,6 +8,9 @@ case "$variant" in online) name=gtasa-open-downgrader-linux;; offline) name=gtas
 mkdir -p build
 appdir=$(mktemp -d "$PWD/build/AppDir.XXXXXX")
 trap 'rm -rf "$appdir"' EXIT
+# mktemp creates mode 0700; SquashFS makes the directory root-owned, so
+# direct mounts such as Firejail need it searchable by every user.
+chmod 0755 "$appdir"
 [[ -f dist/gta-sa.exe ]] || { echo 'Build dist/gta-sa.exe with scripts/build-launcher.sh first.' >&2; exit 1; }
 mkdir -p "$appdir/usr/share/applications" "$appdir/usr/share/icons/hicolor/256x256/apps" "$appdir/usr/bin" "$appdir/usr/lib" "$appdir/usr/libexec" "$appdir/usr/share/licenses/gtasa-open-downgrader"
 cp "dist/$name" "$appdir/usr/bin/$name"
