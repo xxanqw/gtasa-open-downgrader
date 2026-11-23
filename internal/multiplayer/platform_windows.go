@@ -3,9 +3,11 @@
 package multiplayer
 
 import (
-	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 	"os"
 	"path/filepath"
+	"sync"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 )
 
 func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
@@ -24,4 +26,11 @@ func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
 		return environment, DirectRunner{GameDir: gameDir}, "Wine", nil
 	}
 	return environment, DirectRunner{}, "Native Windows", nil
+}
+
+var openMPPortableMu sync.Mutex
+
+func lockOpenMPPortable(string) (func(), error) {
+	openMPPortableMu.Lock()
+	return openMPPortableMu.Unlock, nil
 }
