@@ -3,10 +3,14 @@ package ui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"runtime"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/multiplayer"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
@@ -32,101 +36,86 @@ func (w *Window) showMTAManager(environment multiplayer.Environment, runner mult
 		installed := multiplayer.DetectMTAInstallations(environment)
 		active := multiplayer.SelectedMTAClient(environment)
 		_, choiceErr := multiplayer.LoadMTAChoice(environment.GameDir)
-		body := container.NewVBox()
-		summary := "No active client — install or choose a version."
-		importance := widget.MediumImportance
-		if active.Installed {
-			summary = "Active: MTA " + active.Version
-			if active.Version == "custom" {
-				summary = "Active: configured MTA"
-			}
-			if active.Version == "1.7" {
-				summary += " · Development / untested"
-				importance = widget.WarningImportance
-			}
-		} else if choiceErr != nil {
-			summary = "Version selection needs attention — choose an installed client."
-			importance = widget.WarningImportance
-		} else if active.Version != "" {
-			summary = "Selected MTA " + active.Version + " is unavailable or unverified — choose another version."
-			importance = widget.WarningImportance
+		var versions []mtaVersionOption
+		selectedVersion := active.Version
+		if !active.Installed && len(installed) > 0 {
+			selectedVersion = installed[0].Version
 		}
-		status := appwidget.ModalText(summary)
-		status.Importance = importance
-		body.Add(status)
-		body.Add(widget.NewSeparator())
+		selected := 0
 		var modal *appwidget.Modal
 		action := func(f func()) { after = f; modal.Close("") }
-		addRow := func(version, channel string, release *multiplayer.MTARelease) {
-			_, present := multiplayer.FindMTAInstallation(installed, version)
-			name := "MTA " + version
-			if version == "custom" {
-				name = "Configured MTA"
+		button := func(text, label string, importance widget.Importance, disabled bool, run func()) appwidget.ModalAction {
+			return appwidget.ModalAction{
+				Text: text, AccessibleLabel: label, Importance: importance, Disabled: disabled, KeepOpen: true,
+				Run: func(*appwidget.Modal) { action(run) },
 			}
-			state := "Not installed"
-			isActive := active.Installed && active.Version == version
-			if present {
-				state = "Installed"
-			}
-			if isActive {
-				state = "Active"
-			}
-			title := widget.NewLabelWithStyle(name+" · "+state, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			title.Wrapping = fyne.TextWrapWord
-			caption := appwidget.ModalText(channel)
-			caption.Importance = widget.LowImportance
-			if release != nil && release.Experimental {
-				caption.Importance = widget.WarningImportance
-			}
-			buttons := container.NewHBox()
-			if !present && release != nil {
-				r := *release
-				install := appwidget.NewButton("Install", func() { action(func() { w.confirmMTAInstall(environment, runner, r, false) }) })
-				install.AccessibleLabel = "Install " + name
-				if runner == nil || !canChange {
-					install.Disable()
-				}
-				buttons.Add(install)
-			}
-			if present {
-				use := appwidget.NewButton("Use "+version, func() { action(func() { w.chooseMTAVersion(environment, version) }) })
-				use.AccessibleLabel = "Use " + name + " in the Steam launcher"
-				if isActive || !canChange {
-					use.Disable()
-				}
-				buttons.Add(use)
-				if release != nil {
-					r := *release
-					reinstall := appwidget.NewButton("Reinstall…", func() { action(func() { w.confirmMTAInstall(environment, runner, r, true) }) })
-					reinstall.AccessibleLabel = "Reinstall " + name
-					if runner == nil || !canChange {
-						reinstall.Disable()
-					}
-					buttons.Add(reinstall)
-				}
-				uninstall := appwidget.NewButton("Uninstall…", func() { action(func() { w.removeMTAVersion(environment, runner, version) }) })
-				uninstall.AccessibleLabel = "Uninstall " + name
-				if runner == nil || !canChange {
-					uninstall.Disable()
-				}
-				buttons.Add(uninstall)
-			}
-			body.Add(container.NewBorder(nil, nil, nil, container.NewCenter(buttons), container.NewVBox(title, caption)))
-			body.Add(widget.NewSeparator())
 		}
-		for _, entry := range multiplayer.MTAReleases {
-			release := entry
-			addRow(release.Version, release.Channel, &release)
+		addVersion := func(version string, release *multiplayer.MTARelease) {
+			client, present := multiplayer.FindMTAInstallation(installed, version)
+			isActive := active.Installed && active.Version == version
+			name := mtaVersionName(version)
+			channel := "Existing installation"
+			if release != nil {
+				channel = release.Channel
+				if release.Experimental {
+					channel = "Development"
+				}
+			}
+			if version == selectedVersion {
+				selected = len(versions)
+			}
+
+			available := []appwidget.ModalAction{{Text: "Close"}}
+			cannotRun := runner == nil || !canChange
+			if !present && release != nil {
+				available = append(available, button("Install "+version+"…", "Install "+name, widget.HighImportance, cannotRun, func() {
+					w.confirmMTAInstall(environment, runner, *release, false)
+				}))
+			}
+			if present {
+				if release != nil {
+					available = append(available, button("Reinstall…", "Reinstall "+name, widget.LowImportance, cannotRun, func() {
+						w.confirmMTAInstall(environment, runner, *release, true)
+					}))
+				}
+				available = append(available, button("Uninstall…", "Uninstall "+name, widget.LowImportance, cannotRun, func() {
+					w.removeMTAVersion(environment, runner, version)
+				}))
+				if !isActive {
+					available = append(available, button("Use in Steam…", "Use "+name+" in the Steam launcher", widget.HighImportance, !canChange, func() {
+						w.chooseMTAVersion(environment, version)
+					}))
+				}
+			}
+			versions = append(versions, mtaVersionOption{
+				name: name, channel: channel,
+				detail:  mtaVersionDetails(name, client, isActive, release),
+				actions: available,
+			})
+		}
+		for _, release := range multiplayer.MTAReleases {
+			addVersion(release.Version, &release)
 		}
 		for _, version := range []string{"1.5", "custom"} {
 			if _, ok := multiplayer.FindMTAInstallation(installed, version); ok {
-				addRow(version, "Existing installation", nil)
+				addVersion(version, nil)
 			}
 		}
+		picker := mtaVersionPicker(versions)
+		picker.Select(selected)
+		detail := container.NewStack(versions[selected].detail)
+		// Reserve the list's full height when the modal measures its body.
+		reserved := canvas.NewRectangle(color.Transparent)
+		padding := w.app.Settings().Theme().Size(theme.SizeNamePadding)
+		listSize := picker.MinSize()
+		reserved.SetMinSize(fyne.NewSize(max(156, listSize.Width), float32(len(versions))*(listSize.Height+padding)-padding))
+		rail := newFramedPanel(container.NewStack(reserved, picker))
+		body := container.NewBorder(nil, nil, rail, nil, detail)
 		var recovery fyne.CanvasObject
 		if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
 			if active.Installed && active.Version == "1.6" {
 				serial := appwidget.NewButton("Serial validation…", func() { action(func() { w.showMTAValidation(environment) }) })
+				serial.Importance = widget.LowImportance
 				if runner == nil || !canChange {
 					serial.Disable()
 				}
@@ -139,9 +128,114 @@ func (w *Window) showMTAManager(environment multiplayer.Environment, runner mult
 				})
 			}
 		}
-		modal = appwidget.ShowModal(w.window, appwidget.ModalOptions{Title: "MTA manager", Body: container.NewVScroll(body), Size: fyne.NewSize(700, 340), Extra: recovery, OnClosed: func(string) { done("", false) }})
+		modal = appwidget.ShowModal(w.window, appwidget.ModalOptions{
+			Title:    "Manage MTA",
+			Summary:  mtaManagerSummary(active, len(installed) > 0, choiceErr),
+			Body:     container.NewVScroll(body),
+			Size:     fyne.NewSize(630, 0),
+			Actions:  versions[selected].actions,
+			Extra:    recovery,
+			OnClosed: func(string) { done("", false) },
+		})
+		picker.OnSelected = func(index widget.ListItemID) {
+			version := versions[index]
+			detail.Objects[0] = version.detail
+			detail.Refresh()
+			modal.SetActions(version.actions...)
+		}
 		return func() { modal.Close("") }
 	}})
+}
+
+type mtaVersionOption struct {
+	name, channel string
+	detail        fyne.CanvasObject
+	actions       []appwidget.ModalAction
+}
+
+type mtaVersionList struct{ widget.List }
+
+func (list *mtaVersionList) TypedKey(key *fyne.KeyEvent) {
+	if appwidget.ModalEscape(list, key) {
+		return
+	}
+	if key.Name == fyne.KeyReturn || key.Name == fyne.KeyEnter {
+		key = &fyne.KeyEvent{Name: fyne.KeySpace}
+	}
+	list.List.TypedKey(key)
+}
+
+func mtaVersionPicker(versions []mtaVersionOption) *mtaVersionList {
+	list := &mtaVersionList{}
+	list.Length = func() int { return len(versions) }
+	list.CreateItem = func() fyne.CanvasObject {
+		name := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		channel := widget.NewLabel("")
+		channel.SizeName = theme.SizeNameCaptionText
+		return container.New(layout.NewCustomPaddedVBoxLayout(0), name, channel)
+	}
+	list.UpdateItem = func(index widget.ListItemID, row fyne.CanvasObject) {
+		labels := row.(*fyne.Container).Objects
+		labels[0].(*widget.Label).SetText(versions[index].name)
+		labels[1].(*widget.Label).SetText(versions[index].channel)
+	}
+	list.ExtendBaseWidget(list)
+	return list
+}
+
+func mtaVersionName(version string) string {
+	if version == "custom" {
+		return "Configured MTA"
+	}
+	return "MTA " + version
+}
+
+func mtaManagerSummary(active multiplayer.Client, hasInstallations bool, choiceErr error) fyne.CanvasObject {
+	switch {
+	case active.Installed && active.Version == "1.7":
+		return appwidget.ModalNotice("The Steam launcher uses MTA 1.7, a development build.", widget.WarningImportance)
+	case active.Installed:
+		return appwidget.ModalNotice("The Steam launcher uses "+mtaVersionName(active.Version)+".", widget.MediumImportance)
+	case choiceErr != nil:
+		return appwidget.ModalNotice("The Steam launcher’s MTA selection is invalid. Choose an installed version.", widget.WarningImportance)
+	case active.Version != "":
+		return appwidget.ModalNotice("The selected "+mtaVersionName(active.Version)+" is unavailable or unverified. Choose another installed version.", widget.WarningImportance)
+	case hasInstallations:
+		return appwidget.ModalNotice("Choose an installed version to enable MTA in the Steam launcher.", widget.MediumImportance)
+	default:
+		return appwidget.ModalNotice("Install a version to enable MTA in the Steam launcher.", widget.MediumImportance)
+	}
+}
+
+func mtaVersionDetails(name string, client multiplayer.Client, active bool, release *multiplayer.MTARelease) fyne.CanvasObject {
+	title := widget.NewLabelWithStyle(name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title.SizeName = theme.SizeNameSubHeadingText
+	title.Wrapping = fyne.TextWrapWord
+	status := widget.NewLabel("Not installed")
+	status.Importance = widget.LowImportance
+	if active {
+		status.SetText("Active in Steam")
+		status.Importance = widget.SuccessImportance
+	} else if client.Installed {
+		status.SetText("Installed")
+		status.Importance = widget.MediumImportance
+	}
+	header := container.NewBorder(nil, nil, nil, container.NewCenter(status), title)
+	details := container.New(layout.NewCustomPaddedVBoxLayout(0), header)
+	if release != nil && release.Experimental {
+		channel := widget.NewLabel(release.Channel)
+		channel.Importance = widget.WarningImportance
+		details.Add(channel)
+	}
+	if client.Installed {
+		location := widget.NewLabel("Install folder")
+		location.Importance = widget.LowImportance
+		path := appwidget.ModalText(client.WorkingDir)
+		path.Wrapping = fyne.TextWrapBreak
+		folder := container.New(layout.NewCustomPaddedVBoxLayout(0), location, path)
+		details.Add(container.New(layout.NewCustomPaddedLayout(4, 0, 0, 0), folder))
+	}
+	return container.New(layout.NewCustomPaddedLayout(0, 6, 12, 4), details)
 }
 func (w *Window) mtaManagerGuard(environment multiplayer.Environment) error {
 	if !w.modTableReady() || w.scanPath != environment.GameDir {
@@ -154,9 +248,9 @@ func (w *Window) confirmMTAInstall(environment multiplayer.Environment, runner m
 		w.error(err)
 		return
 	}
-	text := "Install MTA " + release.Version + " (" + release.Channel + ", " + release.Build + ")?\n\nUses the original, SHA-256-checked installer. Keep each version in its own folder; the saved launcher choice stays unchanged."
+	text := "Install MTA " + release.Version + " (" + release.Channel + ")?\n\nDownloads the current official installer and verifies its publisher signature and signed SHA-256. Keep each version in its own folder."
 	if reinstall {
-		text += "\n\nReinstall may replace a newer build with this catalog build. Review the official installer's settings-preservation prompts."
+		text += "\n\nReview the official installer's prompts about keeping your settings."
 	}
 	if release.Experimental {
 		text += "\n\n" + multiplayer.MTABetaWarning

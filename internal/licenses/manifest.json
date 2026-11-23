@@ -19,6 +19,10 @@
         "version": "v0.0.1"
       },
       {
+        "path": "github.com/ProtonMail/go-crypto",
+        "version": "v1.0.0"
+      },
+      {
         "path": "github.com/andybalholm/brotli",
         "version": "v1.2.2"
       },
@@ -41,6 +45,10 @@
       {
         "path": "github.com/clipperhouse/uax29/v2",
         "version": "v2.2.0"
+      },
+      {
+        "path": "github.com/cloudflare/circl",
+        "version": "v1.3.8"
       },
       {
         "path": "github.com/fsnotify/fsnotify",
@@ -75,8 +83,16 @@
         "version": "v5.2.2"
       },
       {
+        "path": "github.com/google/uuid",
+        "version": "v1.6.0"
+      },
+      {
         "path": "github.com/hashicorp/golang-lru/v2",
         "version": "v2.0.7"
+      },
+      {
+        "path": "github.com/howeyc/gopass",
+        "version": "v0.0.0-20210920133722-c8aef6fb66ef"
       },
       {
         "path": "github.com/jeandeaual/go-locale",
@@ -115,8 +131,20 @@
         "version": "v0.4.2"
       },
       {
+        "path": "github.com/sassoftware/relic/v8",
+        "version": "v8.2.0"
+      },
+      {
         "path": "github.com/spf13/afero",
         "version": "v1.15.0"
+      },
+      {
+        "path": "github.com/spf13/cobra",
+        "version": "v1.8.1"
+      },
+      {
+        "path": "github.com/spf13/pflag",
+        "version": "v1.0.5"
       },
       {
         "path": "github.com/srwiley/oksvg",
@@ -139,8 +167,16 @@
         "version": "v1.8.2"
       },
       {
+        "path": "github.com/zalando/go-keyring",
+        "version": "v0.2.6"
+      },
+      {
         "path": "go4.org",
         "version": "v0.0.0-20260112195520-a5071408f32f"
+      },
+      {
+        "path": "golang.org/x/crypto",
+        "version": "v0.46.0"
       },
       {
         "path": "golang.org/x/image",
@@ -159,8 +195,16 @@
         "version": "v0.47.0"
       },
       {
+        "path": "golang.org/x/term",
+        "version": "v0.38.0"
+      },
+      {
         "path": "golang.org/x/text",
         "version": "v0.40.0"
+      },
+      {
+        "path": "software.sslmate.com/src/go-pkcs12",
+        "version": "v0.5.0"
       }
     ],
     "windows": [
@@ -179,6 +223,10 @@
       {
         "path": "github.com/FyshOS/fancyfs",
         "version": "v0.0.1"
+      },
+      {
+        "path": "github.com/ProtonMail/go-crypto",
+        "version": "v1.0.0"
       },
       {
         "path": "github.com/andybalholm/brotli",
@@ -203,6 +251,14 @@
       {
         "path": "github.com/clipperhouse/uax29/v2",
         "version": "v2.2.0"
+      },
+      {
+        "path": "github.com/cloudflare/circl",
+        "version": "v1.3.8"
+      },
+      {
+        "path": "github.com/danieljoos/wincred",
+        "version": "v1.2.2"
       },
       {
         "path": "github.com/fsnotify/fsnotify",
@@ -237,8 +293,20 @@
         "version": "v5.2.2"
       },
       {
+        "path": "github.com/google/uuid",
+        "version": "v1.6.0"
+      },
+      {
         "path": "github.com/hashicorp/golang-lru/v2",
         "version": "v2.0.7"
+      },
+      {
+        "path": "github.com/howeyc/gopass",
+        "version": "v0.0.0-20210920133722-c8aef6fb66ef"
+      },
+      {
+        "path": "github.com/inconshreveable/mousetrap",
+        "version": "v1.1.0"
       },
       {
         "path": "github.com/jeandeaual/go-locale",
@@ -273,8 +341,20 @@
         "version": "v4.1.27"
       },
       {
+        "path": "github.com/sassoftware/relic/v8",
+        "version": "v8.2.0"
+      },
+      {
         "path": "github.com/spf13/afero",
         "version": "v1.15.0"
+      },
+      {
+        "path": "github.com/spf13/cobra",
+        "version": "v1.8.1"
+      },
+      {
+        "path": "github.com/spf13/pflag",
+        "version": "v1.0.5"
       },
       {
         "path": "github.com/srwiley/oksvg",
@@ -297,8 +377,16 @@
         "version": "v1.8.2"
       },
       {
+        "path": "github.com/zalando/go-keyring",
+        "version": "v0.2.6"
+      },
+      {
         "path": "go4.org",
         "version": "v0.0.0-20260112195520-a5071408f32f"
+      },
+      {
+        "path": "golang.org/x/crypto",
+        "version": "v0.46.0"
       },
       {
         "path": "golang.org/x/image",
@@ -317,8 +405,16 @@
         "version": "v0.47.0"
       },
       {
+        "path": "golang.org/x/term",
+        "version": "v0.38.0"
+      },
+      {
         "path": "golang.org/x/text",
         "version": "v0.40.0"
+      },
+      {
+        "path": "software.sslmate.com/src/go-pkcs12",
+        "version": "v0.5.0"
       }
     ],
     "launcher": [
@@ -549,6 +645,21 @@
       "sha256": "6df86a72d288d232476070e4534f35fcec1dd830ad303d76c7f577e271a369d2"
     },
     {
+      "title": "github.com/ProtonMail/go-crypto v1.0.0 — AUTHORS",
+      "source": "github.com/ProtonMail/go-crypto@v1.0.0/AUTHORS",
+      "sha256": "5aa3167c44245f0b12b27195d85c6a8c8e067cfdd511059daa4d7b3c5b232129"
+    },
+    {
+      "title": "github.com/ProtonMail/go-crypto v1.0.0 — LICENSE",
+      "source": "github.com/ProtonMail/go-crypto@v1.0.0/LICENSE",
+      "sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067"
+    },
+    {
+      "title": "github.com/ProtonMail/go-crypto v1.0.0 — PATENTS",
+      "source": "github.com/ProtonMail/go-crypto@v1.0.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
       "title": "github.com/andybalholm/brotli v1.2.2 — LICENSE",
       "source": "github.com/andybalholm/brotli@v1.2.2/LICENSE",
       "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
@@ -582,6 +693,16 @@
       "title": "github.com/clipperhouse/uax29/v2 v2.2.0 — LICENSE",
       "source": "github.com/clipperhouse/uax29/v2@v2.2.0/LICENSE",
       "sha256": "07e9e3daaccc707c9b7d535ed1405a65d37919fdd42197fe55e68820e974688c"
+    },
+    {
+      "title": "github.com/cloudflare/circl v1.3.8 — LICENSE",
+      "source": "github.com/cloudflare/circl@v1.3.8/LICENSE",
+      "sha256": "b0da1764fe4d13d610b695536fc3f2ebc362482d053a1cd258e36975bc6b97a7"
+    },
+    {
+      "title": "github.com/danieljoos/wincred v1.2.2 — LICENSE",
+      "source": "github.com/danieljoos/wincred@v1.2.2/LICENSE",
+      "sha256": "1702a813fa31858c0d6c7788216fa3dd202472265716998024654c252fc7bb41"
     },
     {
       "title": "github.com/fsnotify/fsnotify v1.9.0 — LICENSE",
@@ -644,6 +765,11 @@
       "sha256": "e4646a82a976369d7ae8f6ed5c11d35dc0af18433a8ccc24c85b459ad8b95128"
     },
     {
+      "title": "github.com/google/uuid v1.6.0 — LICENSE",
+      "source": "github.com/google/uuid@v1.6.0/LICENSE",
+      "sha256": "0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d"
+    },
+    {
       "title": "github.com/hashicorp/golang-lru/v2 v2.0.7 — LICENSE",
       "source": "github.com/hashicorp/golang-lru/v2@v2.0.7/LICENSE",
       "sha256": "6c7088eb877b5d7e6e0e9d27e822ea25fcda2e83f9eba59bb5f1418a656796e0"
@@ -652,6 +778,16 @@
       "title": "github.com/hashicorp/golang-lru/v2 v2.0.7 — simplelru/LICENSE_list",
       "source": "github.com/hashicorp/golang-lru/v2@v2.0.7/simplelru/LICENSE_list",
       "sha256": "6d462371baa8649492b06f51f154dba9b25d2ac9548369b8b4fdbbbb85f2f75d"
+    },
+    {
+      "title": "github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef — LICENSE.txt",
+      "source": "github.com/howeyc/gopass@v0.0.0-20210920133722-c8aef6fb66ef/LICENSE.txt",
+      "sha256": "f06d8d6fe9e7dca9cd1c6385eab60b67c34f59a7871ee794553904b0d5cfcd2c"
+    },
+    {
+      "title": "github.com/inconshreveable/mousetrap v1.1.0 — LICENSE",
+      "source": "github.com/inconshreveable/mousetrap@v1.1.0/LICENSE",
+      "sha256": "4819582701f150b28a563a6cd8ed0bf5a754e3c67b90ad38d78ba4131bf77795"
     },
     {
       "title": "github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade — LICENSE",
@@ -709,9 +845,24 @@
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
+      "title": "github.com/sassoftware/relic/v8 v8.2.0 — LICENSE",
+      "source": "github.com/sassoftware/relic/v8@v8.2.0/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
       "title": "github.com/spf13/afero v1.15.0 — LICENSE.txt",
       "source": "github.com/spf13/afero@v1.15.0/LICENSE.txt",
       "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283"
+    },
+    {
+      "title": "github.com/spf13/cobra v1.8.1 — LICENSE.txt",
+      "source": "github.com/spf13/cobra@v1.8.1/LICENSE.txt",
+      "sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283"
+    },
+    {
+      "title": "github.com/spf13/pflag v1.0.5 — LICENSE",
+      "source": "github.com/spf13/pflag@v1.0.5/LICENSE",
+      "sha256": "b8514c577c1c4b46cee454d5a882b15fa411e72c5bd7f801f241591789fce61a"
     },
     {
       "title": "github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c — LICENSE",
@@ -739,6 +890,11 @@
       "sha256": "c1d6f653c38c80294dc7994647ba0dcc508ce64a86996303c804efa2f7982bff"
     },
     {
+      "title": "github.com/zalando/go-keyring v0.2.6 — LICENSE",
+      "source": "github.com/zalando/go-keyring@v0.2.6/LICENSE",
+      "sha256": "14bc00f1a298eb6af250216b9e60027a4386c8a84fa2c7ddc2b5c10908e06d0d"
+    },
+    {
       "title": "go4.org v0.0.0-20260112195520-a5071408f32f — AUTHORS",
       "source": "go4.org@v0.0.0-20260112195520-a5071408f32f/AUTHORS",
       "sha256": "c63f99c63839b2821456c6f675ca638fa55c2f87486a336afa76b3105c89962c"
@@ -747,6 +903,16 @@
       "title": "go4.org v0.0.0-20260112195520-a5071408f32f — LICENSE",
       "source": "go4.org@v0.0.0-20260112195520-a5071408f32f/LICENSE",
       "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+    },
+    {
+      "title": "golang.org/x/crypto v0.46.0 — LICENSE",
+      "source": "golang.org/x/crypto@v0.46.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/crypto v0.46.0 — PATENTS",
+      "source": "golang.org/x/crypto@v0.46.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
     },
     {
       "title": "golang.org/x/image v0.44.0 — LICENSE",
@@ -789,6 +955,16 @@
       "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
     },
     {
+      "title": "golang.org/x/term v0.38.0 — LICENSE",
+      "source": "golang.org/x/term@v0.38.0/LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "title": "golang.org/x/term v0.38.0 — PATENTS",
+      "source": "golang.org/x/term@v0.38.0/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
       "title": "golang.org/x/text v0.40.0 — LICENSE",
       "source": "golang.org/x/text@v0.40.0/LICENSE",
       "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
@@ -797,6 +973,11 @@
       "title": "golang.org/x/text v0.40.0 — PATENTS",
       "source": "golang.org/x/text@v0.40.0/PATENTS",
       "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc"
+    },
+    {
+      "title": "software.sslmate.com/src/go-pkcs12 v0.5.0 — LICENSE",
+      "source": "software.sslmate.com/src/go-pkcs12@v0.5.0/LICENSE",
+      "sha256": "05c9cf1167d0584c9192f73a550a2089547e8366114da257f51279ec6a3fc568"
     },
     {
       "title": "AppImage-libfuse-3.15.0-GPL2.txt",
@@ -870,5 +1051,5 @@
     }
   ],
   "mpl_source_sha256": "95a073fdf09822e1a5f065753e7f063c6dc27ef53f1beb31f1f37c891c6a9235",
-  "notices_sha256": "d986d844a89ede9ac6f4fbbdc17c44baeff006960ed79531a817cb3a70e60181"
+  "notices_sha256": "006eb6598981eca823623c8c207a39fa0b3206bc020c5372230b87df471cb062"
 }

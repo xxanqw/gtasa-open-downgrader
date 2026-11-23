@@ -1,13 +1,11 @@
 package ui
 
 import (
-	"net/url"
 	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -40,11 +38,8 @@ func (w *Window) buildAboutPage() fyne.CanvasObject {
 	splash.ScaleMode = canvas.ImageScaleSmooth
 	splash.SetMinSize(fyne.NewSize(256, 144))
 
-	licenses := &aboutHyperlink{}
-	licenses.Text = "Licenses"
-	licenses.TextStyle.Underline = true
+	licenses := appwidget.NewLink("Licenses", nil)
 	licenses.OnTapped = w.showAboutLicenses
-	licenses.ExtendBaseWidget(licenses)
 	links := container.NewVBox(splash,
 		aboutLink("GitHub repository", "https://github.com/xxanqw/gtasa-open-downgrader"),
 		aboutLink("Developer on GitHub", "https://github.com/xxanqw"),
@@ -111,24 +106,6 @@ func (w *Window) showAboutLicenses() {
 
 func aboutLicenses() string { return legal.Text }
 
-// Fyne's standard hyperlink draws a second underline on hover. Keep its
-// accessible tap and keyboard handling, but use only the static text underline.
-type aboutHyperlink struct{ widget.Hyperlink }
-
-func plainLink(text, address string) *aboutHyperlink {
-	parsed, _ := url.Parse(address) // fixed, valid application links
-	link := &aboutHyperlink{}
-	link.Text, link.URL = text, parsed
-	link.ExtendBaseWidget(link)
-	return link
-}
-
 func aboutLink(text, address string) fyne.CanvasObject {
-	link := plainLink(text, address)
-	link.TextStyle.Underline = true
-	return container.NewHBox(link)
+	return container.NewHBox(appwidget.NewLink(text, mustURL(address)))
 }
-
-func (*aboutHyperlink) MouseIn(*desktop.MouseEvent)    {} // no hover-only underline
-func (*aboutHyperlink) MouseMoved(*desktop.MouseEvent) {} // or on pointer movement
-func (*aboutHyperlink) Cursor() desktop.Cursor         { return desktop.PointerCursor }

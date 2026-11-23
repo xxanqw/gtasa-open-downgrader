@@ -361,9 +361,10 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		return
 	}
 	var mtaRelease *multiplayer.MTARelease
+	var verifiedMTA mtainstall.VerifiedInstaller
 	if id == multiplayer.ClientMTA {
 		if len(versions) != 1 {
-			w.error(fmt.Errorf("choose one reviewed MTA version"))
+			w.error(fmt.Errorf("choose one MTA version"))
 			return
 		}
 		release, found := multiplayer.FindMTARelease(versions[0])
@@ -372,7 +373,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			return
 		}
 		mtaRelease = &release
-		installer = release.Installer
+		installer.Name = "MTA " + release.Version
 		if err := w.mtaManagerGuard(environment); err != nil {
 			w.error(err)
 			return
@@ -403,7 +404,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 				return err
 			}
 			if mtaRelease != nil {
-				if err := multiplayer.ValidateMTAInstaller(ctx, path, *mtaRelease); err != nil {
+				if err := verifiedMTA.Validate(ctx); err != nil {
 					return err
 				}
 			}
@@ -457,14 +458,16 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		run(path)
 	}
 	if mtaRelease != nil {
-		var destination string
-		w.run("Downloading reviewed MTA "+mtaRelease.Version, func(ctx context.Context) error {
+		title := "Downloading MTA " + mtaRelease.Version
+		w.run(title, func(ctx context.Context) error {
 			var err error
-			destination, err = mtainstall.Ensure(ctx, w.client.HTTP, w.cache, *mtaRelease, func(done, total int64) { w.report("Downloading MTA "+mtaRelease.Version, done, total) })
+			verifiedMTA, err = mtainstall.Download(ctx, w.client.HTTP, w.cache, mtaRelease.Version, func(done, total int64) {
+				w.report(title, done, total)
+			})
 			return err
 		}, func(err error) {
 			if err == nil {
-				start(destination)
+				start(verifiedMTA.Path())
 			}
 		})
 		return
