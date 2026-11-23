@@ -14,11 +14,12 @@ import (
 // ModalAction is explicit: Return never silently confirms a destructive action.
 // An empty ID is cancellation. Actions may keep a guide open for async work.
 type ModalAction struct {
-	ID, Text   string
-	Importance widget.Importance
-	KeepOpen   bool
-	Disabled   bool
-	Run        func(*Modal)
+	ID, Text        string
+	AccessibleLabel string
+	Importance      widget.Importance
+	KeepOpen        bool
+	Disabled        bool
+	Run             func(*Modal)
 }
 type ModalOptions struct {
 	Title, Subtitle string
@@ -168,6 +169,7 @@ func (m *Modal) actionBar() fyne.CanvasObject {
 				action.Run(m)
 			}
 		})
+		button.AccessibleLabel = action.AccessibleLabel
 		button.Importance = action.Importance
 		if action.Disabled {
 			button.Disable()

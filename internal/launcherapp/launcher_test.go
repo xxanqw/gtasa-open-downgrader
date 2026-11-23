@@ -204,11 +204,7 @@ func TestMTATemporarilyDisablesAndRestoresModLoader(t *testing.T) {
 func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("STEAM_COMPAT_DATA_PATH", filepath.Join(root, "prefix"))
-	clientDir := filepath.Join(root, "clients")
-	client := filepath.Join(clientDir, "omp-launcher.exe")
 	for name, contents := range map[string]string{
-		"clients/omp-launcher.exe":                                          "launcher",
-		multiplayer.ConfigPath:                                              `{"schema_version":1,"clients":{"openmp":{"executable":"clients/omp-launcher.exe"}}}`,
 		"modloader.asi":                                                     "loader",
 		"modloader/.downgrader":                                             `{"schema_version":2,"installed_mods":["ASI Loader","ModLoader","SilentPatch"]}`,
 		"modloader/SilentPatch/SilentPatchSA.asi":                           "silent patch",
@@ -236,9 +232,11 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 	localAppData := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", localAppData)
 	t.Setenv("LOCALAPPDATA", localAppData)
+	clientDir := filepath.Join(localAppData, "mp.open.launcher", "gtasa-downgrader")
+	client := filepath.Join(clientDir, "omp-launcher.exe")
 	support := filepath.Join(localAppData, "mp.open.launcher", "omp", "omp-client.dll")
-	managed := filepath.Join(localAppData, "mp.open.launcher", "samp", "0.3.7-R5", "samp.dll")
-	for path, contents := range map[string]string{support: "MZclient", managed: "MZmanaged"} {
+	managed := filepath.Join(clientDir, "samp", "0.3.7-R5", "samp.dll")
+	for path, contents := range map[string]string{client: "MZlauncher", support: "MZclient", managed: "MZmanaged"} {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -246,7 +244,7 @@ func TestOpenMPUsesCommandLineConnection(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sharedRoot := filepath.Join(localAppData, "mp.open.launcher", "samp", "shared")
+	sharedRoot := filepath.Join(clientDir, "samp", "shared")
 	for _, relative := range multiplayer.OpenMPSharedFiles {
 		path := filepath.Join(sharedRoot, filepath.FromSlash(relative))
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

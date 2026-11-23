@@ -219,8 +219,10 @@ func (w *Window) multiplayerSections(root string, launcher entrypoint.Status, en
 		detail := ""
 		if client.ID == multiplayer.ClientOpenMP && client.Installed && runtime.GOOS == "linux" {
 			path, err := multiplayer.OpenMPClientPath(environment)
-			if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment) != nil {
-				detail = "Managed SA-MP client files are incomplete"
+			if err != nil || multiplayer.ValidateOpenMPClient(path) != nil || multiplayer.ValidateOpenMPSAMPInstallation(environment, client) != nil {
+				detail = "Repair to restore missing or damaged open.mp client files."
+			} else if client.Portable && multiplayer.ValidateInstaller(client.Executable) != nil {
+				detail = "Repair to restore the open.mp portable launcher."
 			}
 		}
 		if client.ID == multiplayer.ClientMTA {
@@ -320,7 +322,9 @@ func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runne
 		}
 	}
 	message := "Open the " + client.Name + " uninstaller and remove this client? The game and other multiplayer clients will remain installed."
-	if client.ID == multiplayer.ClientOpenMP {
+	if client.Portable {
+		message = "Remove the portable open.mp launcher and its managed client files?"
+	} else if client.ID == multiplayer.ClientOpenMP {
 		message = "Open the open.mp uninstaller and remove its managed client files? The game and standalone SA-MP installation will remain installed."
 	}
 	w.confirmAction("Uninstall "+client.Name, "Uninstall "+client.Name, message+"\n\nGame folder:\n"+w.scanPath, func(ok bool) {
@@ -329,7 +333,7 @@ func (w *Window) uninstallMultiplayer(environment multiplayer.Environment, runne
 		}
 		var result multiplayer.UninstallResult
 		w.run("Uninstalling "+client.Name, func(ctx context.Context) error {
-			if client.ID == multiplayer.ClientMTA {
+			if client.ID == multiplayer.ClientMTA || client.Portable {
 				if err := platform.RequireGameClosed(); err != nil {
 					return err
 				}
@@ -355,15 +359,20 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		w.error(fmt.Errorf("%s", reason))
 		return
 	}
+	if id == multiplayer.ClientOpenMP && runtime.GOOS == "linux" {
+		w.installOpenMPPortable(environment)
+		return
+	}
 	installer, ok := multiplayer.Installers[id]
 	if !ok {
 		w.error(fmt.Errorf("unsupported multiplayer client %q", id))
 		return
 	}
 	var mtaRelease *multiplayer.MTARelease
+	var verifiedMTA mtainstall.VerifiedInstaller
 	if id == multiplayer.ClientMTA {
 		if len(versions) != 1 {
-			w.error(fmt.Errorf("choose one reviewed MTA version"))
+			w.error(fmt.Errorf("choose one MTA version"))
 			return
 		}
 		release, found := multiplayer.FindMTARelease(versions[0])
@@ -372,7 +381,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			return
 		}
 		mtaRelease = &release
-		installer = release.Installer
+		installer.Name = "MTA " + release.Version
 		if err := w.mtaManagerGuard(environment); err != nil {
 			w.error(err)
 			return
@@ -403,7 +412,7 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 				return err
 			}
 			if mtaRelease != nil {
-				if err := multiplayer.ValidateMTAInstaller(ctx, path, *mtaRelease); err != nil {
+				if err := verifiedMTA.Validate(ctx); err != nil {
 					return err
 				}
 			}
@@ -414,31 +423,6 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 				}
 			} else if err := multiplayer.InstallerResult(id, environment, runErr); err != nil {
 				return err
-			}
-			if id == multiplayer.ClientOpenMP && runtime.GOOS == "linux" {
-				destination, err := multiplayer.OpenMPClientPath(environment)
-				if err != nil {
-					return err
-				}
-				if err := w.client.File(ctx, multiplayer.OpenMPClientURL, destination, func(done, total int64) {
-					w.report("Adding open.mp Linux support", done, total)
-				}); err != nil {
-					return fmt.Errorf("download open.mp command-line client: %w", err)
-				}
-				if err := multiplayer.ValidateOpenMPClient(destination); err != nil {
-					_ = os.Remove(destination)
-					return err
-				}
-				archive := filepath.Join(w.cache, "multiplayer", "samp_clients.7z")
-				if err := w.client.File(ctx, multiplayer.OpenMPSAMPArchiveURL, archive, func(done, total int64) {
-					w.report("Downloading open.mp SA-MP clients", done, total)
-				}); err != nil {
-					return fmt.Errorf("download open.mp managed SA-MP clients: %w", err)
-				}
-				if err := multiplayer.InstallOpenMPSAMPArchive(ctx, archive, environment); err != nil {
-					_ = os.Remove(archive)
-					return err
-				}
 			}
 			return nil
 		}, func(error) {
@@ -457,14 +441,16 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 		run(path)
 	}
 	if mtaRelease != nil {
-		var destination string
-		w.run("Downloading reviewed MTA "+mtaRelease.Version, func(ctx context.Context) error {
+		title := "Downloading MTA " + mtaRelease.Version
+		w.run(title, func(ctx context.Context) error {
 			var err error
-			destination, err = mtainstall.Ensure(ctx, w.client.HTTP, w.cache, *mtaRelease, func(done, total int64) { w.report("Downloading MTA "+mtaRelease.Version, done, total) })
+			verifiedMTA, err = mtainstall.Download(ctx, w.client.HTTP, w.cache, mtaRelease.Version, func(done, total int64) {
+				w.report(title, done, total)
+			})
 			return err
 		}, func(err error) {
 			if err == nil {
-				start(destination)
+				start(verifiedMTA.Path())
 			}
 		})
 		return
@@ -497,6 +483,38 @@ func (w *Window) installMultiplayer(environment multiplayer.Environment, runner 
 			start(destination)
 		}
 	})
+}
+
+func (w *Window) installOpenMPPortable(environment multiplayer.Environment) {
+	if environment.LocalAppData == "" {
+		w.error(fmt.Errorf("the GTA Proton prefix is unavailable"))
+		return
+	}
+	w.run("Installing open.mp for Proton", func(ctx context.Context) error {
+		work, err := os.MkdirTemp("", "gtasa-openmp-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(work)
+		launcher := filepath.Join(work, "omp-launcher.exe")
+		plugin := filepath.Join(work, "omp-client.dll")
+		archive := filepath.Join(work, "samp_clients.7z")
+		for _, asset := range []struct{ name, url, path string }{
+			{"open.mp portable launcher", multiplayer.OpenMPPortableURL, launcher},
+			{"open.mp command-line client", multiplayer.OpenMPClientURL, plugin},
+			{"open.mp SA-MP clients", multiplayer.OpenMPSAMPArchiveURL, archive},
+		} {
+			if err := w.client.File(ctx, asset.url, asset.path, func(done, total int64) {
+				w.report("Downloading "+asset.name, done, total)
+			}); err != nil {
+				return fmt.Errorf("download %s: %w", asset.name, err)
+			}
+		}
+		if err := platform.RequireGameClosed(); err != nil {
+			return err
+		}
+		return multiplayer.InstallOpenMPPortable(ctx, environment, launcher, plugin, archive)
+	}, func(error) { w.scan() })
 }
 
 func (w *Window) showSAMPInstallerGuide(environment multiplayer.Environment, start func()) {

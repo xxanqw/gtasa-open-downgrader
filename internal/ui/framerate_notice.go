@@ -3,6 +3,7 @@ package ui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	appwidget "github.com/xxanqw/gtasa-open-downgrader/internal/uiwidget"
 )
 
 const framerateGymPR = "https://github.com/GTAmodding/FramerateVigilante/pull/30"
@@ -21,8 +22,8 @@ The downgrader installs the upstream package; it does not apply these PRs or bui
 
 func framerateNoticeBody() fyne.CanvasObject {
 	return container.NewVBox(promptText(framerateNotice),
-		container.NewHBox(plainLink("PR #30 — Gym exit loop", framerateGymPR)),
-		container.NewHBox(plainLink("PR #34 — Swimming crash patch address", framerateSwimPR)))
+		container.NewHBox(appwidget.NewLink("PR #30 — Gym exit loop", mustURL(framerateGymPR))),
+		container.NewHBox(appwidget.NewLink("PR #34 — Swimming crash patch address", mustURL(framerateSwimPR))))
 }
 
 func (w *Window) showFramerateNotice() {
