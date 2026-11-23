@@ -6,7 +6,7 @@ Downgrade GTA San Andreas, install community fixes, and manage multiplayer clien
 
 ## Download
 
-**[Get v0.3.0](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest)** · [Release notes](docs/releases/v0.3.0.md) · [Steam launcher v4](https://github.com/xxanqw/gtasa-open-downgrader/releases/tag/launcher-4)
+**[Get v0.3.1](https://github.com/xxanqw/gtasa-open-downgrader/releases/latest)** · [Release notes](docs/releases/v0.3.1.md) · [Steam launcher v5](https://github.com/xxanqw/gtasa-open-downgrader/releases/tag/launcher-5)
 
 | Platform | Online | Offline |
 | --- | --- | --- |

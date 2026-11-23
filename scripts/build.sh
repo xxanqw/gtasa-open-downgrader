@@ -16,7 +16,7 @@ if [[ "$variant" == offline ]]; then
   tags+=,offline
   name+=-offline
 fi
-flags="-s -w -X github.com/xxanqw/gtasa-open-downgrader/internal/updater.Version=${VERSION:-v0.3.0}"
+flags="-s -w -X github.com/xxanqw/gtasa-open-downgrader/internal/updater.Version=${VERSION:-v0.3.1}"
 if [[ "$system" == windows ]]; then
 	name+=.exe
 	flags+=' -H=windowsgui'
