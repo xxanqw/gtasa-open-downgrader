@@ -4,10 +4,12 @@ package multiplayer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/xxanqw/gtasa-open-downgrader/internal/platform"
 	"github.com/xxanqw/gtasa-open-downgrader/internal/steam"
@@ -36,6 +38,7 @@ func PlatformEnvironment(gameDir string) (Environment, Runner, string, error) {
 		PrefixDriveC:      driveC,
 		LocalAppData:      filepath.Join(driveC, "users", "steamuser", "AppData", "Local"),
 		CompatibilityTool: strings.Join([]string{steamContext.ToolDisplayName, steamContext.ToolName, filepath.Base(steamContext.ToolRoot)}, " | "),
+		OpenMPProton:      true,
 	}
 	prepare := func(ctx context.Context, id ClientID, environment Environment) error {
 		if id == ClientMTA {
@@ -68,4 +71,22 @@ func sameDirectory(left, right string) bool {
 	leftAbs, _ := filepath.Abs(left)
 	rightAbs, _ := filepath.Abs(right)
 	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+}
+
+func lockOpenMPPortable(localAppData string) (func(), error) {
+	if err := os.MkdirAll(localAppData, 0700); err != nil {
+		return nil, err
+	}
+	dir, err := os.Open(localAppData)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(dir.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = dir.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("an open.mp install or uninstall is already in progress")
+		}
+		return nil, fmt.Errorf("lock open.mp installation: %w", err)
+	}
+	return func() { _ = dir.Close() }, nil
 }

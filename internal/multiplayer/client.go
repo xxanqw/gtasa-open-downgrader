@@ -5,13 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/xxanqw/gtasa-open-downgrader/internal/fsutil"
+	"github.com/xxanqw/gtasa-open-downgrader/internal/winedrive"
 )
 
 type ClientID string
@@ -40,6 +42,7 @@ type Client struct {
 	WorkingDir string
 	Detail     string
 	Version    string
+	Portable   bool
 }
 
 type Environment struct {
@@ -48,6 +51,7 @@ type Environment struct {
 	PrefixDriveC      string
 	LocalAppData      string
 	CompatibilityTool string
+	OpenMPProton      bool
 }
 
 func (connection OpenMPConnection) Arguments(gameDir string) ([]string, error) {
@@ -90,7 +94,7 @@ func OpenMPClientPath(environment Environment) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "omp", "omp-client.dll"), nil
+	return fsutil.Join(filepath.Dir(root), "mp.open.launcher/omp/omp-client.dll")
 }
 
 func ValidateOpenMPClient(path string) error {
@@ -168,6 +172,15 @@ func detect(environment Environment, registry map[ClientID][]string) []Client {
 				candidates = append(candidates, path)
 			}
 		case ClientOpenMP:
+			if environment.OpenMPProton {
+				if portable, err := openMPPortablePath(environment); err == nil && regular(portable) {
+					clients[i].Installed = true
+					clients[i].Executable = portable
+					clients[i].WorkingDir = filepath.Dir(portable)
+					clients[i].Portable = true
+					continue
+				}
+			}
 			candidates = append(candidates, filepath.Join(environment.GameDir, "omp-launcher.exe"))
 			candidates = append(candidates, prefixCandidates(environment.PrefixDriveC, []string{
 				`Program Files (x86)/Open Multiplayer Launcher/omp-launcher.exe`,

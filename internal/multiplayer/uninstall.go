@@ -38,12 +38,22 @@ func UninstallerPath(client Client, environment Environment) (string, error) {
 // Uninstall runs the client's own uninstaller. For open.mp it also removes the
 // managed command-line client data added by the Linux integration.
 func Uninstall(ctx context.Context, id ClientID, environment Environment, runner Runner) (UninstallResult, error) {
-	if runner == nil {
-		return UninstallResult{}, fmt.Errorf("uninstaller execution is unavailable")
+	if id == ClientOpenMP && environment.OpenMPProton {
+		unlock, err := lockOpenMPPortable(environment.LocalAppData)
+		if err != nil {
+			return UninstallResult{}, err
+		}
+		defer unlock()
 	}
 	client, ok := Find(Detect(environment), id)
 	if !ok || !client.Installed {
 		return UninstallResult{}, fmt.Errorf("%s is not installed", clientName(id))
+	}
+	if id == ClientOpenMP && client.Portable {
+		return UninstallResult{}, uninstallOpenMPPortable(ctx, environment)
+	}
+	if runner == nil {
+		return UninstallResult{}, fmt.Errorf("uninstaller execution is unavailable")
 	}
 	if id == ClientMTA {
 		return UninstallResult{}, UninstallMTA(ctx, client.Version, environment, runner)

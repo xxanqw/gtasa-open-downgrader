@@ -133,6 +133,80 @@ func TestOpenMPUninstallRemovesManagedData(t *testing.T) {
 	}
 }
 
+func TestOpenMPPortableDetectionAndUninstall(t *testing.T) {
+	for _, withLegacy := range []bool{false, true} {
+		name := "fresh"
+		if withLegacy {
+			name = "with legacy installation"
+		}
+		t.Run(name, func(t *testing.T) {
+			environment := Environment{GameDir: t.TempDir(), LocalAppData: t.TempDir(), OpenMPProton: true}
+			launcher := filepath.Join(environment.LocalAppData, "mp.open.launcher", "gtasa-downgrader", "omp-launcher.exe")
+			managedSAMP := filepath.Join(filepath.Dir(launcher), "samp", "0.3.7-R5", "samp.dll")
+			plugin := filepath.Join(environment.LocalAppData, "mp.open.launcher", "omp", "omp-client.dll")
+			settings := filepath.Join(environment.LocalAppData, "mp.open.launcher", "settings.json")
+			for _, path := range []string{launcher, managedSAMP, plugin, settings} {
+				file(t, path)
+			}
+			legacy := filepath.Join(environment.GameDir, "omp-launcher.exe")
+			if withLegacy {
+				file(t, legacy)
+			}
+			standaloneSAMP := filepath.Join(environment.GameDir, "samp.dll")
+			file(t, standaloneSAMP)
+
+			client, _ := Find(Detect(environment), ClientOpenMP)
+			if !client.Installed || !client.Portable || client.Executable != launcher {
+				t.Fatalf("expected the portable launcher, got %+v", client)
+			}
+			sampRoot, err := OpenMPSAMPRoot(environment, client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if path, err := OpenMPSAMPPath(sampRoot, ""); err != nil || path != managedSAMP {
+				t.Fatalf("managed SA-MP path = %q, %v", path, err)
+			}
+			native := environment
+			native.OpenMPProton = false
+			client, _ = Find(Detect(native), ClientOpenMP)
+			if client.Portable || client.Installed != withLegacy {
+				t.Fatalf("unexpected native detection: %+v", client)
+			}
+			if _, err := Uninstall(context.Background(), ClientOpenMP, environment, nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Dir(launcher)); !os.IsNotExist(err) {
+				t.Fatalf("portable files remain after uninstall: %v", err)
+			}
+			if _, err := os.Stat(plugin); (withLegacy && err != nil) || (!withLegacy && !os.IsNotExist(err)) {
+				t.Fatalf("unexpected shared plugin state: %v", err)
+			}
+			for _, path := range []string{settings, standaloneSAMP} {
+				if _, err := os.Stat(path); err != nil {
+					t.Fatalf("uninstall removed %s: %v", path, err)
+				}
+			}
+			client, _ = Find(Detect(environment), ClientOpenMP)
+			if client.Portable || client.Installed != withLegacy {
+				t.Fatalf("unexpected detection after uninstall: %+v", client)
+			}
+		})
+	}
+}
+
+func TestOpenMPPortableInstallRejectsUnverifiedLauncher(t *testing.T) {
+	environment := Environment{GameDir: t.TempDir(), LocalAppData: t.TempDir(), OpenMPProton: true}
+	launcher := filepath.Join(t.TempDir(), "omp-launcher.exe")
+	file(t, launcher)
+	err := InstallOpenMPPortable(context.Background(), environment, launcher, "", "")
+	if err == nil || !strings.Contains(err.Error(), "portable launcher: SHA-256") {
+		t.Fatalf("unexpected validation result: %v", err)
+	}
+	if entries, err := os.ReadDir(environment.LocalAppData); err != nil || len(entries) != 0 {
+		t.Fatalf("install changed the Proton prefix after rejecting the launcher: %v, %v", entries, err)
+	}
+}
+
 func TestMTAPlatformSupport(t *testing.T) {
 	if supported, _ := LaunchSupport(ClientMTA, "linux", false); !supported {
 		t.Fatal("MTA must remain available on the Linux host")
@@ -262,24 +336,25 @@ func TestOpenMPClientPathUsesEnvironmentLocalAppData(t *testing.T) {
 func TestOpenMPManagedClientInventory(t *testing.T) {
 	localAppData := t.TempDir()
 	environment := Environment{LocalAppData: localAppData}
+	client := Client{ID: ClientOpenMP}
+	sampRoot, err := OpenMPSAMPRoot(environment, client)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, version := range OpenMPSAMPVersions {
-		path, err := OpenMPSAMPPath(environment, version.ID)
+		path, err := OpenMPSAMPPath(sampRoot, version.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		file(t, path)
 	}
-	root, err := OpenMPDataPath(environment)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, relative := range OpenMPSharedFiles {
-		file(t, filepath.Join(root, "samp", "shared", filepath.FromSlash(relative)))
+		file(t, filepath.Join(sampRoot, "shared", filepath.FromSlash(relative)))
 	}
-	if err := ValidateOpenMPSAMPInstallation(environment); err != nil {
+	if err := ValidateOpenMPSAMPInstallation(environment, client); err != nil {
 		t.Fatal(err)
 	}
-	defaultPath, err := OpenMPSAMPPath(environment, "")
+	defaultPath, err := OpenMPSAMPPath(sampRoot, "")
 	if err != nil || !strings.Contains(filepath.ToSlash(defaultPath), "/0.3.7-R5/samp.dll") {
 		t.Fatalf("default managed client = %q, %v", defaultPath, err)
 	}

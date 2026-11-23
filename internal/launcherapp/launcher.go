@@ -43,7 +43,11 @@ func RunningUnderProton() bool {
 }
 
 func (runtime *Runtime) Clients() []multiplayer.Client {
-	return multiplayer.Detect(multiplayer.Environment{GameDir: runtime.GameDir})
+	return multiplayer.Detect(runtime.clientEnvironment())
+}
+
+func (runtime *Runtime) clientEnvironment() multiplayer.Environment {
+	return multiplayer.Environment{GameDir: runtime.GameDir, OpenMPProton: RunningUnderProton()}
 }
 
 func (runtime *Runtime) SinglePlayer(ctx context.Context, arguments ...string) error {
@@ -83,32 +87,38 @@ func (runtime *Runtime) OpenMP(ctx context.Context, connection multiplayer.OpenM
 	if err != nil {
 		return err
 	}
-	clientPath, err := multiplayer.OpenMPClientPath(multiplayer.Environment{})
+	environment := runtime.clientEnvironment()
+	clientPath, err := multiplayer.OpenMPClientPath(environment)
 	if err != nil {
 		return err
 	}
 	if err := multiplayer.ValidateOpenMPClient(clientPath); err != nil {
 		return fmt.Errorf("%w; reinstall open.mp from the downgrader to repair its managed clients", err)
 	}
-	managedSAMP, err := multiplayer.OpenMPSAMPPath(multiplayer.Environment{}, connection.ClientVersion)
-	if err != nil {
-		return err
-	}
-	if err := multiplayer.ValidateInstaller(managedSAMP); err != nil {
-		return fmt.Errorf("open.mp managed SA-MP client is missing or invalid; reinstall open.mp from the downgrader")
-	}
-	client, ok := multiplayer.Find(runtime.Clients(), multiplayer.ClientOpenMP)
+	client, ok := multiplayer.Find(multiplayer.Detect(environment), multiplayer.ClientOpenMP)
 	if !ok || !client.Installed {
 		return fmt.Errorf("open.mp is not installed")
 	}
 	if err := multiplayer.ValidateExecutable(client); err != nil {
 		return err
 	}
-	dataRoot, err := multiplayer.OpenMPDataPath(multiplayer.Environment{})
+	if client.Portable {
+		if err := multiplayer.ValidateInstaller(client.Executable); err != nil {
+			return fmt.Errorf("open.mp portable launcher is invalid; reinstall open.mp from the downgrader: %w", err)
+		}
+	}
+	sampRoot, err := multiplayer.OpenMPSAMPRoot(environment, client)
 	if err != nil {
 		return err
 	}
-	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(dataRoot, "samp", "shared")); err != nil {
+	managedSAMP, err := multiplayer.OpenMPSAMPPath(sampRoot, connection.ClientVersion)
+	if err != nil {
+		return err
+	}
+	if err := multiplayer.ValidateInstaller(managedSAMP); err != nil {
+		return fmt.Errorf("open.mp managed SA-MP client is missing or invalid; reinstall open.mp from the downgrader")
+	}
+	if err := runtime.installOpenMPSharedFiles(ctx, filepath.Join(sampRoot, "shared")); err != nil {
 		return err
 	}
 	// Keep Mod Loader and all other installed bundles enabled. Only Widescreen

@@ -3,8 +3,8 @@ package multiplayer
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -12,6 +12,10 @@ import (
 )
 
 const (
+	OpenMPPortableURL        = "https://github.com/openmultiplayer/launcher/releases/download/v1.7.0/omp-launcher.exe"
+	openMPPortableSHA256     = "8a877b1062972bb28302f3354dbf4428779d593f56014e35928062becf430daa"
+	openMPPortableDirectory  = "mp.open.launcher/gtasa-downgrader"
+	openMPPortableExecutable = "omp-launcher.exe"
 	OpenMPSAMPArchiveURL     = "https://assets.open.mp/samp_clients.7z"
 	OpenMPSAMPArchiveSHA256  = "0f9d3b9729788aec3e01e44fd904d4b1cf339866e400f992addea7cec046d1c2"
 	DefaultOpenMPSAMPVersion = "037R5"
@@ -66,24 +70,39 @@ func OpenMPDataPath(environment Environment) (string, error) {
 	return filepath.Join(root, "mp.open.launcher"), nil
 }
 
-func OpenMPSAMPPath(environment Environment, versionID string) (string, error) {
-	root, err := OpenMPDataPath(environment)
-	if err != nil {
-		return "", err
-	}
+func OpenMPSAMPPath(root, versionID string) (string, error) {
 	version, ok := FindOpenMPSAMPVersion(versionID)
 	if ok {
-		return filepath.Join(root, "samp", filepath.FromSlash(version.Path)), nil
+		return filepath.Join(root, filepath.FromSlash(version.Path)), nil
 	}
 	return "", fmt.Errorf("unsupported open.mp SA-MP client version %q", versionID)
 }
 
-func ValidateOpenMPSAMPInstallation(environment Environment) error {
-	root, err := OpenMPDataPath(environment)
+func ValidateOpenMPSAMPInstallation(environment Environment, client Client) error {
+	root, err := OpenMPSAMPRoot(environment, client)
 	if err != nil {
 		return err
 	}
-	return validateOpenMPSAMPRoot(filepath.Join(root, "samp"))
+	return validateOpenMPSAMPRoot(root)
+}
+
+func OpenMPSAMPRoot(environment Environment, client Client) (string, error) {
+	if client.Portable {
+		return fsutil.Join(client.WorkingDir, "samp")
+	}
+	root, err := OpenMPDataPath(environment)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "samp"), nil
+}
+
+func openMPPortablePath(environment Environment) (string, error) {
+	root, err := OpenMPDataPath(environment)
+	if err != nil {
+		return "", err
+	}
+	return fsutil.Join(filepath.Dir(root), openMPPortableDirectory+"/"+openMPPortableExecutable)
 }
 
 func validateOpenMPSAMPRoot(root string) error {
@@ -102,74 +121,126 @@ func validateOpenMPSAMPRoot(root string) error {
 	return nil
 }
 
-func InstallOpenMPSAMPArchive(ctx context.Context, archive string, environment Environment) error {
-	digest, err := fileSHA256(ctx, archive)
-	if err != nil {
+// InstallOpenMPPortable publishes the launcher and SA-MP files together. The
+// open.mp CLI reads its plugin from a fixed path under Local AppData.
+func InstallOpenMPPortable(ctx context.Context, environment Environment, launcher, plugin, archive string) error {
+	if environment.LocalAppData == "" {
+		return fmt.Errorf("the GTA Proton prefix is unavailable")
+	}
+	if err := verifyOpenMPAsset(ctx, launcher, openMPPortableSHA256); err != nil {
+		return fmt.Errorf("validate open.mp portable launcher: %w", err)
+	}
+	if err := ValidateOpenMPClient(plugin); err != nil {
+		return err
+	}
+	if err := verifyOpenMPAsset(ctx, archive, OpenMPSAMPArchiveSHA256); err != nil {
 		return fmt.Errorf("validate open.mp SA-MP archive: %w", err)
 	}
-	if digest != OpenMPSAMPArchiveSHA256 {
-		return fmt.Errorf("open.mp SA-MP archive checksum does not match the supported release")
-	}
-	dataRoot, err := OpenMPDataPath(environment)
+	unlock, err := lockOpenMPPortable(environment.LocalAppData)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dataRoot, 0700); err != nil {
+	defer unlock()
+	return installOpenMPPortable(ctx, environment, launcher, plugin, archive)
+}
+
+func installOpenMPPortable(ctx context.Context, environment Environment, launcher, plugin, archive string) error {
+	executable, err := openMPPortablePath(environment)
+	if err != nil {
+		return err
+	}
+	target := filepath.Dir(executable)
+	parent := filepath.Dir(target)
+	if err := os.MkdirAll(parent, 0700); err != nil {
 		return fmt.Errorf("prepare open.mp data directory: %w", err)
 	}
-	staged, err := os.MkdirTemp(dataRoot, ".samp-staged-")
+	work, err := os.MkdirTemp(parent, ".openmp-staged-")
 	if err != nil {
-		return fmt.Errorf("stage open.mp SA-MP clients: %w", err)
+		return fmt.Errorf("stage open.mp portable installation: %w", err)
 	}
-	defer os.RemoveAll(staged)
-	if err := fsutil.Extract(ctx, archive, staged, "7z", nil); err != nil {
+	backup := filepath.Join(work, "previous")
+	keepBackup := false
+	defer func() {
+		if !keepBackup {
+			_ = os.RemoveAll(work)
+		}
+	}()
+	staged := filepath.Join(work, "portable")
+	samp := filepath.Join(staged, "samp")
+	if err := fsutil.Extract(ctx, archive, samp, "7z", nil); err != nil {
 		return fmt.Errorf("extract open.mp SA-MP clients: %w", err)
 	}
-	if err := validateOpenMPSAMPRoot(staged); err != nil {
+	if err := validateOpenMPSAMPRoot(samp); err != nil {
 		return err
 	}
-	target := filepath.Join(dataRoot, "samp")
-	backup := filepath.Join(dataRoot, ".samp-backup")
-	_ = os.RemoveAll(backup)
-	if _, err := os.Stat(target); err == nil {
-		if err := os.Rename(target, backup); err != nil {
-			return fmt.Errorf("preserve existing open.mp SA-MP clients: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
+	if err := fsutil.CopyFile(ctx, launcher, filepath.Join(staged, openMPPortableExecutable)); err != nil {
+		return fmt.Errorf("stage open.mp portable launcher: %w", err)
+	}
+	destination, err := OpenMPClientPath(environment)
+	if err != nil {
 		return err
+	}
+	if err := fsutil.CopyFile(ctx, plugin, destination); err != nil {
+		return fmt.Errorf("install open.mp command-line client: %w", err)
+	}
+	hadPrevious := true
+	if err := os.Rename(target, backup); err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("preserve existing open.mp portable installation: %w", err)
+		}
+		hadPrevious = false
 	}
 	if err := os.Rename(staged, target); err != nil {
-		_ = os.Rename(backup, target)
-		return fmt.Errorf("install open.mp SA-MP clients: %w", err)
+		installErr := fmt.Errorf("install open.mp portable launcher: %w", err)
+		if hadPrevious {
+			if restoreErr := os.Rename(backup, target); restoreErr != nil {
+				keepBackup = true
+				return errors.Join(installErr, fmt.Errorf("restore previous open.mp installation from %s: %w", backup, restoreErr))
+			}
+		}
+		return installErr
 	}
-	_ = os.RemoveAll(backup)
 	return nil
 }
 
-func fileSHA256(ctx context.Context, path string) (string, error) {
+func uninstallOpenMPPortable(ctx context.Context, environment Environment) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	executable, err := openMPPortablePath(environment)
+	if err != nil {
+		return err
+	}
+	environment.OpenMPProton = false
+	legacy, _ := Find(Detect(environment), ClientOpenMP)
+	// An older installation can still use the plugin at this shared path.
+	if !legacy.Installed {
+		plugin, err := OpenMPClientPath(environment)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(plugin); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove open.mp command-line client: %w", err)
+		}
+	}
+	if err := os.RemoveAll(filepath.Dir(executable)); err != nil {
+		return fmt.Errorf("remove open.mp portable installation: %w", err)
+	}
+	return nil
+}
+
+func verifyOpenMPAsset(ctx context.Context, path, expected string) error {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer file.Close()
 	hash := sha256.New()
-	buffer := make([]byte, 128*1024)
-	for {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		n, readErr := file.Read(buffer)
-		if n > 0 {
-			if _, err := hash.Write(buffer[:n]); err != nil {
-				return "", err
-			}
-		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			return "", readErr
-		}
+	if _, err := fsutil.Copy(ctx, hash, file); err != nil {
+		return err
 	}
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+	if fmt.Sprintf("%x", hash.Sum(nil)) != expected {
+		return fmt.Errorf("SHA-256 checksum does not match the supported release")
+	}
+	return nil
 }
