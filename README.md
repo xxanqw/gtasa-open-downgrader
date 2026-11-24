@@ -50,6 +50,16 @@ Found a problem? Choose **Log → I'm creating an issue on GitHub**, or [open an
 
 The previous Python release is preserved on the [`v0.2.3` branch](https://github.com/xxanqw/gtasa-open-downgrader/tree/v0.2.3).
 
+## Used by the community
+
+Independent community projects that use GTA SA Open Downgrader to prepare the game or build on its patches. Check them out and support their developers!
+
+- [SACore](https://github.com/KeinNameVorhanden/gta-san-andreas-mods) — a modding framework and quality-of-life mod collection that uses the downgrader's patches in its own setup tools.
+- [GTA San AnSkateas](https://github.com/ryglizzy/GTA-San-AnSkateas) — a project bringing Skate 3-style skateboarding to San Andreas, using the downgrader in its setup guide.
+- [SABounce](https://github.com/wakeupdanny-dev/SABounce) — a music-reactive mod that uses the downgrader to prepare the game and recommends it in its installation guide.
+
+Using GTA SA Open Downgrader in your own project? Feel free to open a pull request to add it to this list.
+
 ## License
 
 Original code is licensed under [MIT](LICENSE). Third-party components retain their own terms; see [notices and source availability](internal/licenses/NOTICES.txt) and [distribution qualifications](internal/licenses/scope.txt), also available through **About → Licenses**.
